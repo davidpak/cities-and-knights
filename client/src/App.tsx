@@ -3,7 +3,11 @@ import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
-const socket = io('http://54.71.248.111:3001'); // Replace with your EC2 IP if needed
+// const socket = io('http://54.71.248.111:3001');
+const socket = io('https://cities-and-knights-production.up.railway.app', {
+  transports: ['websocket'],
+});
+
 
 type Roll = {
   dice1: number;

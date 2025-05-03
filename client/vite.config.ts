@@ -6,6 +6,9 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',  // Makes Vite available to other devices
     port: 5173,       // Default Vite port
+  },
+  define: {
+    'process.env': {},
   }
 })
 

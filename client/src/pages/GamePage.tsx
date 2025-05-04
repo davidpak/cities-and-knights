@@ -9,8 +9,6 @@ const GamePage: React.FC = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
   const [roll, setRoll] = useState<{ dice1: number; dice2: number } | null>(null);
   const [players, setPlayers] = useState<{ socketId: string; nickname: string }[]>([]);
-  const [nickname, setNickname] = useState('');
-  const [editingNickname, setEditingNickname] = useState(false);
   const [userSocketId, setUserSocketId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,7 +35,6 @@ const GamePage: React.FC = () => {
         const currentUser = playersWithNicknames.find((p) => p.socketId === socket.id);
         if (currentUser) {
             setUserSocketId(currentUser.socketId);
-            setNickname(currentUser.nickname);
         }
     };
 
@@ -74,11 +71,7 @@ const GamePage: React.FC = () => {
       <DiceRoller roll={roll} />
       <PlayerList
         players={players}
-        currentUserId={userSocketId}
-        editingNickname={editingNickname}
-        setEditingNickname={setEditingNickname}
-        nickname={nickname}
-        setNickname={setNickname}
+        userSocketId={userSocketId}
       />
     </div>
   );

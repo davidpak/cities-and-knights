@@ -1,5 +1,5 @@
 // components/PlayerList.tsx
-import React, { useRef } from 'react';
+import React, { useState } from 'react';
 import { FaPencilAlt } from 'react-icons/fa';
 import socket from '../socket';
 
@@ -10,28 +10,18 @@ type Player = {
 
 type Props = {
   players: Player[];
-  currentUserId: string | null;
-  editingNickname: boolean;
-  setEditingNickname: (val: boolean) => void;
-  nickname: string;
-  setNickname: (val: string) => void;
+  userSocketId: string | null;
 };
 
-const PlayerList: React.FC<Props> = ({
-  players,
-  currentUserId,
-  editingNickname,
-  setEditingNickname,
-  nickname,
-  setNickname,
-}) => {
-  const editableRef = useRef<HTMLSpanElement>(null);
+const PlayerList: React.FC<Props> = ({ players, userSocketId }) => {
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nickname, setNickname] = useState('');
 
-  const handleBlur = () => {
+  const handleSave = () => {
     if (nickname.trim()) {
-      socket.emit('updateNickname', nickname);
+      socket.emit('updateNickname', nickname.trim());
+      setEditingNickname(false);
     }
-    setEditingNickname(false);
   };
 
   return (
@@ -39,37 +29,33 @@ const PlayerList: React.FC<Props> = ({
       <h3>Players in Room:</h3>
       <ul>
         {players.map((player) => (
-          <ul key={player.socketId}>
-            {player.socketId === currentUserId ? (
-              <>
-                <span
-                  contentEditable={editingNickname}
-                  suppressContentEditableWarning={true}
-                  onInput={(e) => setNickname((e.target as HTMLElement).innerText)}
-                  onBlur={handleBlur}
-                  ref={editableRef}
-                  style={{
-                    borderBottom: editingNickname ? '1px dashed gray' : 'none',
-                    paddingRight: '5px',
+          <ul key={player.socketId} style={{ marginBottom: '8px' }}>
+            {player.socketId === userSocketId ? (
+              editingNickname ? (
+                <input
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  onBlur={handleSave}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSave();
                   }}
-                >
-                  {nickname}
-                </span>
-                {!editingNickname && (
+                  autoFocus
+                  style={{ fontSize: '16px' }}
+                />
+              ) : (
+                <>
+                  {player.nickname}
                   <FaPencilAlt
-                    style={{ cursor: 'pointer', marginLeft: '8px' }}
                     onClick={() => {
-                      setNickname(player.nickname);
+                      setNickname(player.nickname); // preload the current name
                       setEditingNickname(true);
-                      setTimeout(() => {
-                        editableRef.current?.focus();
-                      }, 0);
                     }}
+                    style={{ cursor: 'pointer', marginLeft: '10px' }}
                   />
-                )}
-              </>
+                </>
+              )
             ) : (
-              <span>{player.nickname}</span>
+              player.nickname
             )}
           </ul>
         ))}

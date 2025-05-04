@@ -27,6 +27,6 @@ app.get('/', (req, res) => {
 setupSocket(io);
 
 const port = process.env.PORT || 3001;
-server.listen(port, '0.0.0.0', () => {
-  console.log(`Server listening on port ${port}`);
+server.listen(3001, '0.0.0.0', () => {
+  console.log(`Server listening on port ${3001}`);
 });

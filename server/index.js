@@ -1,8 +1,8 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const rootRouter = require('./routes/root');
-const roomRoutes = require('./routes/roomRoutes');
+const rootRouter = require('./routes/root.js');
+const roomRoutes = require('./routes/roomRoutes.js');
 const setupSocket = require('./socket');
 
 const app = express();
@@ -23,6 +23,6 @@ app.use('/', rootRouter);
 setupSocket(io);
 
 const port = process.env.PORT || 3001;
-server.listen(port, '0.0.0.0', () => {
-  console.log(`Server running on http://0.0.0.0:${port}`);
+server.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
 });

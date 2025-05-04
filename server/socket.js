@@ -1,5 +1,5 @@
 const { rollDice } = require('./controllers/gameController');
-const { joinRoom, createRoom } = require('./controllers/roomController');
+const { joinRoom, createRoom, getPlayersInRoom, handleDisconnect } = require('./controllers/roomController');
 
 const { gameState, activeRooms } = require('./gameState');
 
@@ -7,12 +7,13 @@ function setupSocket(io) {
   io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
 
-    socket.on('createRoom', createRoom(socket));
-    socket.on('joinRoom', joinRoom(socket));
+    socket.on('createRoom', createRoom(socket, io));
+    socket.on('joinRoom', joinRoom(socket, io));
     socket.on('rollDice', rollDice(io, socket));
+    socket.on('getPlayersInRoom', getPlayersInRoom(socket));
 
     socket.on('disconnect', () => {
-      console.log(`Client disconnected: ${socket.id}`);
+        handleDisconnect(socket, io)
     });
   });
 }

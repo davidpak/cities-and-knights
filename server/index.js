@@ -17,7 +17,11 @@ const io = new Server(server, {
 app.use('/api/v1', roomRoutes);
 
 // Routes
-app.use('/', rootRouter);
+// app.use('/', rootRouter);
+app.get('/', (req, res) => {
+    res.send('Server is running!');
+  });
+  
 
 // Socket.io logic
 setupSocket(io);

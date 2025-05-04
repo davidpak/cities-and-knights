@@ -3,10 +3,18 @@ import { useParams } from 'react-router-dom';
 import socket from '../socket';
 import DiceRoller from '../components/DiceRoller';
 import '../App.css';
+import PlayerList from '../components/PlayersList';
 
 const GamePage: React.FC = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
   const [roll, setRoll] = useState<{ dice1: number; dice2: number } | null>(null);
+  const [players, setPlayers] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (roomCode) {
+      socket.emit('getPlayersInRoom', roomCode);
+    }
+  }, [roomCode]);
 
   useEffect(() => {
     console.log('Joined room:', roomCode);
@@ -21,12 +29,18 @@ const GamePage: React.FC = () => {
       setRoll(newRoll);
     };
 
+    const handlePlayerList = (playerIds: string[]) => {
+        setPlayers(playerIds);
+      }
+
     socket.on('gameState', handleGameState);
     socket.on('diceRolled', handleDiceRolled);
+    socket.on('playerList', handlePlayerList);
 
     return () => {
       socket.off('gameState', handleGameState);
       socket.off('diceRolled', handleDiceRolled);
+      socket.off('playerList', handlePlayerList);
     };
   }, []);
 
@@ -36,14 +50,21 @@ const GamePage: React.FC = () => {
     }
   };
 
+
   return (
     <div className="app">
       <h1>🎲 Cities & Knights Dice Roller</h1>
+      {roomCode && (
+      <p style={{ fontSize: '18px', marginBottom: '10px' }}>
+        Room Code: <strong>{roomCode}</strong>
+      </p>
+    )}
       <button onClick={handleRoll} style={{ fontSize: '24px', padding: '10px 20px' }}>
         Roll Dice
       </button>
 
       <DiceRoller roll={roll} />
+      <PlayerList players={players} />
     </div>
   );
 };

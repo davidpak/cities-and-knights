@@ -1,5 +1,10 @@
 const { rollDice } = require('./controllers/gameController');
-const { joinRoom, createRoom, getPlayersInRoom, handleDisconnect } = require('./controllers/roomController');
+const { joinRoom,
+        createRoom, 
+        getPlayersInRoom, 
+        handleDisconnect,
+        updateNickname
+       } = require('./controllers/roomController');
 
 const { gameState, activeRooms } = require('./gameState');
 
@@ -11,6 +16,7 @@ function setupSocket(io) {
     socket.on('joinRoom', joinRoom(socket, io));
     socket.on('rollDice', rollDice(io, socket));
     socket.on('getPlayersInRoom', getPlayersInRoom(socket));
+    socket.on('updateNickname', updateNickname(socket, io));
 
     socket.on('disconnect', () => {
         handleDisconnect(socket, io)

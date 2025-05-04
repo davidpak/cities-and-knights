@@ -8,7 +8,10 @@ import PlayerList from '../components/PlayersList';
 const GamePage: React.FC = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
   const [roll, setRoll] = useState<{ dice1: number; dice2: number } | null>(null);
-  const [players, setPlayers] = useState<string[]>([]);
+  const [players, setPlayers] = useState<{ socketId: string; nickname: string }[]>([]);
+  const [nickname, setNickname] = useState('');
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [userSocketId, setUserSocketId] = useState<string | null>(null);
 
   useEffect(() => {
     if (roomCode) {
@@ -29,9 +32,14 @@ const GamePage: React.FC = () => {
       setRoll(newRoll);
     };
 
-    const handlePlayerList = (playerIds: string[]) => {
-        setPlayers(playerIds);
-      }
+    const handlePlayerList = (playersWithNicknames: any[]) => {
+        setPlayers(playersWithNicknames);
+        const currentUser = playersWithNicknames.find((p) => p.socketId === socket.id);
+        if (currentUser) {
+            setUserSocketId(currentUser.socketId);
+            setNickname(currentUser.nickname);
+        }
+    };
 
     socket.on('gameState', handleGameState);
     socket.on('diceRolled', handleDiceRolled);
@@ -64,7 +72,14 @@ const GamePage: React.FC = () => {
       </button>
 
       <DiceRoller roll={roll} />
-      <PlayerList players={players} />
+      <PlayerList
+        players={players}
+        currentUserId={userSocketId}
+        editingNickname={editingNickname}
+        setEditingNickname={setEditingNickname}
+        nickname={nickname}
+        setNickname={setNickname}
+      />
     </div>
   );
 };

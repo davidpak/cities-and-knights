@@ -4,6 +4,7 @@ import socket from '../socket';
 import DiceRoller from '../components/DiceRoller';
 import '../App.css';
 import PlayerList from '../components/PlayersList';
+import { useNavigate } from 'react-router-dom';
 
 const GamePage: React.FC = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -11,10 +12,23 @@ const GamePage: React.FC = () => {
   const [players, setPlayers] = useState<{ socketId: string; nickname: string }[]>([]);
   const [userSocketId, setUserSocketId] = useState<string | null>(null);
 
+  const navigate = useNavigate();
+
   useEffect(() => {
     if (roomCode) {
       socket.emit('getPlayersInRoom', roomCode);
     }
+  }, [roomCode]);
+
+  useEffect(() => {
+    const handleGameStarted = () => {
+        navigate(`/gameboard/${roomCode}`);
+    };
+
+    socket.on('gameStarted', handleGameStarted);
+    return () => {
+        socket.off('gameStarted', handleGameStarted);
+    };
   }, [roomCode]);
 
   useEffect(() => {

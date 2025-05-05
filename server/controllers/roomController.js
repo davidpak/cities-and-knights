@@ -7,7 +7,12 @@ function createRoom(socket, io) {
   return (roomCode) => {
     activeRooms.add(roomCode);
     gameState[roomCode] = { lastRoll: null };
-    playersInRoom[roomCode] = [{ socketId: socket.id, nickname: socket.id }];
+    playersInRoom[roomCode] = [{ 
+        socketId: socket.id,
+        nickname: socket.id,
+        isReady: false,
+        isHost: true,
+    }];
 
     socket.join(roomCode);
     socket.emit('roomJoined', roomCode);
@@ -28,7 +33,12 @@ function joinRoom(socket, io) {
     if (!playersInRoom[roomCode]) {
       playersInRoom[roomCode] = [];
     }
-    playersInRoom[roomCode].push({ socketId: socket.id, nickname: socket.id });
+    playersInRoom[roomCode].push({ 
+        socketId: socket.id,
+        nickname: socket.id,
+        isReady: false,
+        isHost: false,
+      });
 
     socket.emit('roomJoined', roomCode);
     socket.emit('gameState', gameState[roomCode]);
@@ -62,14 +72,49 @@ function updateNickname(socket, io) {
   }
 
 function handleDisconnect(socket, io) {
-  for (const [roomCode, players] of Object.entries(playersInRoom)) {
-    const index = players.indexOf(socket.id);
-    if (index !== -1) {
-      players.splice(index, 1);
-      io.to(roomCode).emit('playerList', players);
-      console.log(`Client ${socket.id} left room ${roomCode}`);
+    for (const [roomCode, players] of Object.entries(playersInRoom)) {
+      const index = players.findIndex(p => p.socketId === socket.id);
+      if (index !== -1) {
+        players.splice(index, 1);
+        io.to(roomCode).emit('playerList', players);
+        console.log(`Client ${socket.id} left room ${roomCode}`);
+      }
+
+      if (players.length === 0) {
+        delete playersInRoom[roomCode];
+        delete gameState[roomCode];
+        activeRooms.delete(roomCode);
     }
-  }
+    } 
+}
+
+function toggleReady(socket, io) {
+    return (roomCode) => {
+        const players = playersInRoom[roomCode];
+        if (!players) return;
+
+        const player = players.find(p => p.socketId === socket.id);
+        if (player) {
+            player.isReady = !player.isReady;
+            console.log(`Player ${player.nickname} toggled ready.`)
+            io.to(roomCode).emit('playerList', players);
+        }
+    }; 
+}
+
+function startGame(socket, io) {
+    return (roomCode) => {
+        const players = playersInRoom[roomCode];
+        if (!players) return;
+
+        const host = players.find(p => p.isHost);
+        const allReady = players.every(p => p.isReady);
+
+        if (host?.socketId === socket.id && allReady) {
+            console.log(`${host.nickname} has started the game for room: ${roomCode}`);
+            io.to(roomCode).emit('gameStarted', roomCode);
+        }
+    };
 }
 
 
@@ -78,5 +123,7 @@ module.exports = {
   joinRoom,
   handleDisconnect,
   getPlayersInRoom,
-  updateNickname
+  updateNickname,
+  toggleReady,
+  startGame
 };

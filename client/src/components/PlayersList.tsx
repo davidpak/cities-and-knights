@@ -1,11 +1,13 @@
 // components/PlayerList.tsx
 import React, { useState } from 'react';
-import { FaPencilAlt } from 'react-icons/fa';
+import { FaPencilAlt, FaCrown } from 'react-icons/fa';
 import socket from '../socket';
 
 type Player = {
   socketId: string;
   nickname: string;
+  isReady?: boolean;
+  isHost?: boolean;
 };
 
 type Props = {
@@ -17,6 +19,22 @@ const PlayerList: React.FC<Props> = ({ players, userSocketId }) => {
   const [editingNickname, setEditingNickname] = useState(false);
   const [nickname, setNickname] = useState('');
 
+  const currentPlayer = players.find(p => p.socketId === userSocketId);
+  const roomCode = window.location.pathname.split('/').pop();
+  const isHost = currentPlayer?.isHost;
+
+  const handleToggleReady = () => {
+    if (roomCode) {
+      socket.emit('toggleReady', roomCode);
+    }
+  };
+
+  const handleStartGame = () => {
+    if (roomCode) {
+      socket.emit('gameStarted', roomCode);
+    }
+  };
+
   const handleSave = () => {
     if (nickname.trim()) {
       socket.emit('updateNickname', nickname.trim());
@@ -24,12 +42,15 @@ const PlayerList: React.FC<Props> = ({ players, userSocketId }) => {
     }
   };
 
+  const allReady = players.every(p => p.isReady);
+
   return (
     <div style={{ marginTop: '20px' }}>
       <h3>Players in Room:</h3>
-      <ul>
+      <ul style={{ listStyleType: 'none', paddingLeft: 0 }}>
         {players.map((player) => (
-          <ul key={player.socketId} style={{ marginBottom: '8px' }}>
+          <li key={player.socketId} style={{ marginBottom: '8px' }}>
+            {player.isHost && <FaCrown style={{ color: 'gold', marginRight: '6px' }} />}
             {player.socketId === userSocketId ? (
               editingNickname ? (
                 <input
@@ -47,7 +68,7 @@ const PlayerList: React.FC<Props> = ({ players, userSocketId }) => {
                   {player.nickname}
                   <FaPencilAlt
                     onClick={() => {
-                      setNickname(player.nickname); // preload the current name
+                      setNickname(player.nickname);
                       setEditingNickname(true);
                     }}
                     style={{ cursor: 'pointer', marginLeft: '10px' }}
@@ -55,11 +76,33 @@ const PlayerList: React.FC<Props> = ({ players, userSocketId }) => {
                 </>
               )
             ) : (
-              player.nickname
+              <>
+                {player.nickname}{' '}
+              </>
             )}
-          </ul>
+            <span style={{ marginLeft: '10px', fontSize: '14px', color: player.isReady ? 'green' : 'red' }}>
+              {player.isReady ? '✅ Ready' : '❌ Not Ready'}
+            </span>
+          </li>
         ))}
       </ul>
+
+      <div style={{ marginTop: '16px' }}>
+        {userSocketId && (
+          <button onClick={handleToggleReady} style={{ marginRight: '10px' }}>
+            {currentPlayer?.isReady ? 'Unready' : 'Ready Up'}
+          </button>
+        )}
+        {isHost && (
+          <button
+            onClick={handleStartGame}
+            disabled={!allReady}
+            style={{ backgroundColor: allReady ? '#4CAF50' : 'gray', color: 'white' }}
+          >
+            Start Game
+          </button>
+        )}
+      </div>
     </div>
   );
 };

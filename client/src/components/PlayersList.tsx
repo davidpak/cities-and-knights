@@ -1,4 +1,3 @@
-// components/PlayerList.tsx
 import React, { useState } from 'react';
 import { FaPencilAlt, FaCrown } from 'react-icons/fa';
 import socket from '../socket';

@@ -103,11 +103,93 @@
     text-shadow: 1px 1px 3px black;
     z-index: 5;
   }
+
+  .hex-number.token-2 {
+    background-image: url('../assets/2-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+
+  .hex-number.token-3 {
+    background-image: url('../assets/3-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+
+  .hex-number.token-4 {
+    background-image: url('../assets/4-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+
+  .hex-number.token-5 {
+    background-image: url('../assets/5-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+
+  .hex-number.token-6 {
+    background-image: url('../assets/6-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+  
+  
+  .hex-number.token-8 {
+    background-image: url('../assets/8-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+
+  .hex-number.token-9 {
+    background-image: url('../assets/9-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+  
+  .hex-number.token-10 {
+    background-image: url('../assets/10-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+
+  .hex-number.token-11 {
+    background-image: url('../assets/11-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
+
+  .hex-number.token-12 {
+    background-image: url('../assets/12-token.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 60px;
+    height: 60px;
+  }
   
   
   .hex-mountain {
     background-image: url('../assets/hex-mountain.jpg');
   }
+
   .hex-pasture {
     background-image: url('../assets/hex-pasture.jpg');
   }

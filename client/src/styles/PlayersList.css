@@ -1,0 +1,69 @@
+.player-box {
+    background-color: rgba(255, 255, 255, 0.08);
+    padding: 8px;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    gap: 5px;
+  }
+  
+  .highlight .player-box {
+    background-color: rgba(255, 255, 255, 0.2);
+    font-weight: bold;
+  }
+  
+  .crown-icon {
+    color: gold;
+    margin-right: 4px;
+  }
+  
+  .edit-icon {
+    cursor: pointer;
+    margin-left: 8px;
+  }
+  
+  .ready-status {
+    font-size: 12px;
+  }
+  
+  .ready-status.ready {
+    color: #4CAF50;
+  }
+  
+  .ready-status.not-ready {
+    color: #f44336;
+  }
+  
+  .player-controls {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: center;
+  }
+  
+  .player-controls button {
+    padding: 6px 10px;
+    border: none;
+    border-radius: 5px;
+    background-color: #555;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  
+  .player-controls button:hover {
+    background-color: #777;
+  }
+  
+  .start-button {
+    background-color: #4CAF50;
+    color: white;
+  }
+  
+  .start-button:disabled {
+    background-color: gray;
+    cursor: not-allowed;
+  }

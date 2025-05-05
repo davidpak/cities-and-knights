@@ -1,21 +1,73 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import CatanBoard from '../components/CatanBoard';
+import DiceRoller from '../components/DiceRoller';
+import PlayerList from '../components/PlayersList';
+import socket from '../socket';
 import '../App.css';
+import '../styles/GameBoardPage.css';
+import GamePlayerList from '../components/GamePlayerList';
 
 const GameBoardPage: React.FC = () => {
-     const { roomCode } = useParams<{ roomCode: string}>();
+  const { roomCode } = useParams<{ roomCode: string }>();
+  const [roll, setRoll] = useState<{ dice1: number; dice2: number } | null>(null);
+  const [players, setPlayers] = useState<{ socketId: string; nickname: string }[]>([]);
+  const [userSocketId, setUserSocketId] = useState<string | null>(null);
 
-     useEffect(() => {
-        console.log('Entered GameBoard for room: ', roomCode);
-     }, [roomCode]);
+  useEffect(() => {
+    console.log('Entered GameBoard for room:', roomCode);
 
-     return (
-        <div>
-            <h1 style={{ textAlign: 'center', marginTop: '20px', position: 'relative', top: '-100px',  }}>Game Board</h1>
-            <CatanBoard />
-        </div>
-     )
-}
+    socket.emit('getPlayersInRoom', roomCode);
+
+    const handleGameState = (state: any) => {
+      setRoll(state.lastRoll);
+    };
+
+    const handleDiceRolled = (newRoll: any) => {
+      setRoll(newRoll);
+    };
+
+    const handlePlayerList = (playersWithNicknames: any[]) => {
+      setPlayers(playersWithNicknames);
+      const currentUser = playersWithNicknames.find(p => p.socketId === socket.id);
+      if (currentUser) {
+        setUserSocketId(currentUser.socketId);
+      }
+    };
+
+    socket.on('gameState', handleGameState);
+    socket.on('diceRolled', handleDiceRolled);
+    socket.on('playerList', handlePlayerList);
+
+    return () => {
+      socket.off('gameState', handleGameState);
+      socket.off('diceRolled', handleDiceRolled);
+      socket.off('playerList', handlePlayerList);
+    };
+  }, [roomCode]);
+
+  const handleRoll = () => {
+    if (roomCode) {
+      socket.emit('rollDice', roomCode);
+    }
+  };
+
+  return (
+    <div className="gameboard-container">
+      <header className="gameboard-header">Game Board</header>
+
+      <div className="playerlist-wrapper">
+        <GamePlayerList players={players} userSocketId={userSocketId} />
+      </div>
+
+      <CatanBoard />
+
+      <div className="dice-ui-container">
+        <button onClick={handleRoll}>Roll Dice</button>
+        <DiceRoller roll={roll} />
+      </div>
+    </div>
+  );
+};
 
 export default GameBoardPage;

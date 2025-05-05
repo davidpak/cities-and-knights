@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import CatanBoard from '../components/CatanBoard';
 import DiceRoller from '../components/DiceRoller';
-import PlayerList from '../components/PlayersList';
 import socket from '../socket';
 import '../App.css';
 import '../styles/GameBoardPage.css';

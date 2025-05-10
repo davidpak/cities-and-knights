@@ -12,14 +12,17 @@ const GameBoardPage: React.FC = () => {
   const [roll, setRoll] = useState<{ dice1: number; dice2: number } | null>(null);
   const [players, setPlayers] = useState<{ socketId: string; nickname: string }[]>([]);
   const [userSocketId, setUserSocketId] = useState<string | null>(null);
+  const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('Entered GameBoard for room:', roomCode);
 
     socket.emit('getPlayersInRoom', roomCode);
+    socket.emit('renderRoom', roomCode);
 
     const handleGameState = (state: any) => {
       setRoll(state.lastRoll);
+      setActivePlayerId(state.turnOrder?.[state.activePlayerIndex] || null);
     };
 
     const handleDiceRolled = (newRoll: any) => {
@@ -45,6 +48,8 @@ const GameBoardPage: React.FC = () => {
     };
   }, [roomCode]);
 
+  const isUserTurn = userSocketId && userSocketId === activePlayerId;
+
   const handleRoll = () => {
     if (roomCode) {
       socket.emit('rollDice', roomCode);
@@ -62,6 +67,9 @@ const GameBoardPage: React.FC = () => {
       <CatanBoard />
 
       <div className="dice-ui-container">
+        <p style={{ marginBottom: '10px' }}>
+          {isUserTurn ? "🎯 Your turn!" : "⏳ Waiting for other players..."}
+        </p>
         <button onClick={handleRoll}>Roll Dice</button>
         <DiceRoller roll={roll} />
       </div>

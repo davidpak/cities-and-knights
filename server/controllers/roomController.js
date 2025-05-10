@@ -28,11 +28,23 @@ function joinRoom(socket, io) {
       return;
     }
 
-    socket.join(roomCode);
-
     if (!playersInRoom[roomCode]) {
       playersInRoom[roomCode] = [];
     }
+
+    if (gameState[roomCode]?.hasStarted) {
+      socket.emit('errorMessage', "Game has already started. You cannot join now");
+      return;
+    }
+
+    if (playersInRoom[roomCode].length >= 4) {
+      socket.emit('errorMessage', 'Room is full. Maximum of 4 players is allowed.');
+      return;
+    }
+
+    
+    socket.join(roomCode);
+
     playersInRoom[roomCode].push({ 
         socketId: socket.id,
         nickname: socket.id,
@@ -78,6 +90,7 @@ function handleDisconnect(socket, io) {
         players.splice(index, 1);
         io.to(roomCode).emit('playerList', players);
         console.log(`Client ${socket.id} left room ${roomCode}`);
+        console.log(`There are ${players.length} players in room ${roomCode}`);
       }
 
       if (players.length === 0) {
@@ -107,14 +120,42 @@ function startGame(socket, io) {
         const players = playersInRoom[roomCode];
         if (!players) return;
 
+        const playerColors = ['red', 'blue', 'green', 'white'];
+        const shuffledPlayers = [...playersInRoom[roomCode]].sort(() => Math.random() - 0.5);
+
+        const turnOrder = shuffledPlayers.map(p => p.socketId);
+
+        gameState[roomCode] = {
+          ...(gameState[roomCode] || {}),
+          hasStarted: true,
+          turnOrder,
+          activePlayerIndex: 0,
+          playerColors: {},
+        };
+
+        shuffledPlayers.forEach((player, index) => {
+          gameState[roomCode].playerColors[player.socketId] = playerColors[index];
+        });    
+
+        const state = gameState[roomCode];
+
         const host = players.find(p => p.isHost);
         const allReady = players.every(p => p.isReady);
 
         if (host?.socketId === socket.id && allReady) {
             console.log(`${host.nickname} has started the game for room: ${roomCode}`);
             io.to(roomCode).emit('gameStarted', roomCode);
+            io.to(roomCode).emit('gameState', state);
         }
     };
+}
+
+function renderRoom(io) {
+  return (roomCode) => {
+    if (!activeRooms.has(roomCode)) return;
+    const state = gameState[roomCode];
+    io.to(roomCode).emit('gameState', state);
+  }
 }
 
 
@@ -125,5 +166,6 @@ module.exports = {
   getPlayersInRoom,
   updateNickname,
   toggleReady,
-  startGame
+  startGame,
+  renderRoom
 };

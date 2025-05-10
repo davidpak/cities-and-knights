@@ -1,0 +1,26 @@
+.hex-tile {
+    position: relative;
+    width: 100px;
+    height: 86px;
+    background-color: #ccc;
+    clip-path: polygon(
+      50% 0%, 93% 25%, 93% 75%, 
+      50% 100%, 7% 75%, 7% 25%
+    );
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 4px;
+    cursor: pointer;
+  }
+  
+  .tile-content {
+    text-align: center;
+  }
+  
+  .tile-number {
+    font-size: 16px;
+    font-weight: bold;
+  }
+  
+  

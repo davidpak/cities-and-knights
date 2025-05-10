@@ -1,5 +1,6 @@
 import React from 'react';
 import '../styles/HexBoard.css';
+import HexVertices from './HexVertices';
 
 interface HexTileProps {
   type: string;
@@ -17,6 +18,9 @@ const HexTile: React.FC<HexTileProps> = ({ type, number }) => {
       {number && (
         <div className={`hex-number ${tokenClass}`} />
       )}
+      <div className="hexVertices">
+        <HexVertices onClickVertex={(index) => console.log(`Clicked vertex ${index} on ${type}`)} />
+      </div>
     </div>
   );
 };

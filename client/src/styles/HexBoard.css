@@ -1,207 +1,134 @@
 .hexagon {
-    display: inline-block;
-    position: relative;
-    width: 180px; 
-    height: 103.92px;
-    margin: 51.96px 0;
-    background-image: url(http://csshexagon.com/img/meow.jpg);
-    background-size: auto 196.2991px;
-    background-position: center;
-    border-left: solid 5px #333333;
-    border-right: solid 5px #333333;
-  }
-  
-  .hexTop,
-  .hexBottom {
-    position: absolute;
-    z-index: 1;
-    width: 127.28px;
-    height: 127.28px;
-    overflow: hidden;
-    -webkit-transform: scaleY(0.5774) rotate(-45deg);
-    -ms-transform: scaleY(0.5774) rotate(-45deg);
-    transform: scaleY(0.5774) rotate(-45deg);
-    background: inherit;
-    left: 21.36px;
-  }
-  
-  /*counter transform the bg image on the caps*/
-  .hexTop:after,
-  .hexBottom:after {
-    content: "";
-    position: absolute;
-    width: 170.0000px;
-    height: 98.14954576223639px;
-    -webkit-transform:  rotate(45deg) scaleY(1.7321) translateY(-49.0748px);
-    -ms-transform:      rotate(45deg) scaleY(1.7321) translateY(-49.0748px);
-    transform:          rotate(45deg) scaleY(1.7321) translateY(-49.0748px);
-    -webkit-transform-origin: 0 0;
-    -ms-transform-origin: 0 0;
-    transform-origin: 0 0;
-    background: inherit;
-  }
-  
-  .hexTop {
-    top: -63.6396px;
-    border-top: solid 7.0711px #333333;
-    border-right: solid 7.0711px #333333;
-  }
-  
-  .hexTop:after {
-    background-position: center top;
-  }
-  
-  .hexBottom {
-    bottom: -63.6396px;
-    border-bottom: solid 7.0711px #333333;
-    border-left: solid 7.0711px #333333;
-  }
-  
-  .hexBottom:after {
-    background-position: center bottom;
-  }
-  
-  .hexagon:after {
-    content: "";
-    position: absolute;
-    top: 2.8868px;
-    left: 0;
-    width: 170.0000px;
-    height: 98.1495px;
-    z-index: 2;
-    background: inherit;
-  }
+  display: inline-block;
+  position: relative;
+  width: 8vw;
+  height: 4.62vw;
+  margin: 2.31vw 0;
+  background-image: url(http://csshexagon.com/img/meow.jpg);
+  background-size: auto 8.88vw;
+  background-position: center;
+  border-left: solid 0.22vw #333333;
+  border-right: solid 0.22vw #333333;
+}
 
-  .board-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background-color: #1e1e1e;
-    padding: 20px;
-  }
-  
-  .hex-row {
-    display: flex;
-    justify-content: center;
-    margin-top: -55px; /* Pull rows closer vertically */
-  }
-  
-  
-  .hex-spacer {
-    width: 90px; /* Half the width of a tile for offset */
-    height: 1px;
-  }
-  
-  .hex-number {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 22px;
-    font-weight: bold;
-    color: white;
-    text-shadow: 1px 1px 3px black;
-    z-index: 5;
-  }
+.hexTop,
+.hexBottom {
+  position: absolute;
+  z-index: 1;
+  width: 5.66vw;
+  height: 5.66vw;
+  overflow: hidden;
+  transform: scaleY(0.5774) rotate(-45deg);
+  background: inherit;
+  left: 0.95vw;
+}
 
-  .hex-number.token-2 {
-    background-image: url('../assets/2-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
+.hexTop:after,
+.hexBottom:after {
+  content: "";
+  position: absolute;
+  width: 7.56vw;
+  height: 4.36vw;
+  transform: rotate(45deg) scaleY(1.7321) translateY(-2.18vw);
+  transform-origin: 0 0;
+  background: inherit;
+}
 
-  .hex-number.token-3 {
-    background-image: url('../assets/3-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
+.hexTop {
+  top: -2.83vw;
+  border-top: solid 0.31vw #333333;
+  border-right: solid 0.31vw #333333;
+}
 
-  .hex-number.token-4 {
-    background-image: url('../assets/4-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
+.hexTop:after {
+  background-position: center top;
+}
 
-  .hex-number.token-5 {
-    background-image: url('../assets/5-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
+.hexBottom {
+  bottom: -2.83vw;
+  border-bottom: solid 0.31vw #333333;
+  border-left: solid 0.31vw #333333;
+}
 
-  .hex-number.token-6 {
-    background-image: url('../assets/6-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
-  
-  
-  .hex-number.token-8 {
-    background-image: url('../assets/8-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
+.hexBottom:after {
+  background-position: center bottom;
+}
 
-  .hex-number.token-9 {
-    background-image: url('../assets/9-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
-  
-  .hex-number.token-10 {
-    background-image: url('../assets/10-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
+.hexagon:after {
+  content: "";
+  position: absolute;
+  top: 0.13vw;
+  left: 0;
+  width: 7.56vw;
+  height: 4.36vw;
+  z-index: 2;
+  background: inherit;
+}
 
-  .hex-number.token-11 {
-    background-image: url('../assets/11-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
+.board-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #1e1e1e;
+  padding: 2vw;
+}
 
-  .hex-number.token-12 {
-    background-image: url('../assets/12-token.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    width: 60px;
-    height: 60px;
-  }
-  
-  
-  .hex-mountain {
-    background-image: url('../assets/hex-mountain.jpg');
-  }
+.hex-row {
+  display: flex;
+  justify-content: center;
+  margin-top: -2.44vw;
+}
 
-  .hex-pasture {
-    background-image: url('../assets/hex-pasture.jpg');
-  }
-  .hex-forest {
-    background-image: url('../assets/hex-forest.jpg');
-  }
-  .hex-hill {
-    background-image: url('../assets/hex-hill.jpg');
-  }
-  .hex-field {
-    background-image: url('../assets/hex-field.jpg');
-  }
-  .hex-desert {
-    background-image: url('../assets/hex-desert.jpg');
-  }
+.hex-spacer {
+  width: 4vw;
+  height: 1px;
+}
+
+/* Hex Number Center */
+.hex-number {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.2vw;
+  font-weight: bold;
+  color: white;
+  text-shadow: 0.05vw 0.05vw 0.15vw black;
+  z-index: 5;
+}
+
+/* Tokens scaled to board size */
+.hex-number.token-2,
+.hex-number.token-3,
+.hex-number.token-4,
+.hex-number.token-5,
+.hex-number.token-6,
+.hex-number.token-8,
+.hex-number.token-9,
+.hex-number.token-10,
+.hex-number.token-11,
+.hex-number.token-12 {
+  background-size: contain;
+  background-repeat: no-repeat;
+  width: 2.66vw;
+  height: 2.66vw;
+}
+
+.hex-number.token-2 { background-image: url('../assets/2-token.png'); }
+.hex-number.token-3 { background-image: url('../assets/3-token.png'); }
+.hex-number.token-4 { background-image: url('../assets/4-token.png'); }
+.hex-number.token-5 { background-image: url('../assets/5-token.png'); }
+.hex-number.token-6 { background-image: url('../assets/6-token.png'); }
+.hex-number.token-8 { background-image: url('../assets/8-token.png'); }
+.hex-number.token-9 { background-image: url('../assets/9-token.png'); }
+.hex-number.token-10 { background-image: url('../assets/10-token.png'); }
+.hex-number.token-11 { background-image: url('../assets/11-token.png'); }
+.hex-number.token-12 { background-image: url('../assets/12-token.png'); }
+
+/* Resource hex styles */
+.hex-mountain { background-image: url('../assets/hex-mountain.jpg'); }
+.hex-pasture  { background-image: url('../assets/hex-pasture.jpg'); }
+.hex-forest   { background-image: url('../assets/hex-forest.jpg'); }
+.hex-hill     { background-image: url('../assets/hex-hill.jpg'); }
+.hex-field    { background-image: url('../assets/hex-field.jpg'); }
+.hex-desert   { background-image: url('../assets/hex-desert.jpg'); }

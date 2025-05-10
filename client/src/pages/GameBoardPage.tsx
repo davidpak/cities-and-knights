@@ -10,7 +10,7 @@ import GamePlayerList from '../components/GamePlayerList';
 const GameBoardPage: React.FC = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
   const [roll, setRoll] = useState<{ dice1: number; dice2: number } | null>(null);
-  const [players, setPlayers] = useState<{ socketId: string; nickname: string }[]>([]);
+  const [players, setPlayers] = useState<{ socketId: string; nickname: string; color: string }[]>([]);
   const [userSocketId, setUserSocketId] = useState<string | null>(null);
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
 

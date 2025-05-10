@@ -10,6 +10,7 @@ function createRoom(socket, io) {
     playersInRoom[roomCode] = [{ 
         socketId: socket.id,
         nickname: socket.id,
+        color: '#888',
         isReady: false,
         isHost: true,
     }];
@@ -48,6 +49,7 @@ function joinRoom(socket, io) {
     playersInRoom[roomCode].push({ 
         socketId: socket.id,
         nickname: socket.id,
+        color: '#888',
         isReady: false,
         isHost: false,
       });
@@ -116,39 +118,39 @@ function toggleReady(socket, io) {
 }
 
 function startGame(socket, io) {
-    return (roomCode) => {
-        const players = playersInRoom[roomCode];
-        if (!players) return;
+  return (roomCode) => {
+    const players = playersInRoom[roomCode];
+    if (!players) return;
 
-        const playerColors = ['red', 'blue', 'green', 'white'];
-        const shuffledPlayers = [...playersInRoom[roomCode]].sort(() => Math.random() - 0.5);
+    const playerColors = ['red', 'blue', 'green', 'white'];
+    const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
 
-        const turnOrder = shuffledPlayers.map(p => p.socketId);
+    const turnOrder = shuffledPlayers.map(p => p.socketId);
 
-        gameState[roomCode] = {
-          ...(gameState[roomCode] || {}),
-          hasStarted: true,
-          turnOrder,
-          activePlayerIndex: 0,
-          playerColors: {},
-        };
+    // Assign colors directly to players
+    shuffledPlayers.forEach((player, index) => {
+      player.color = playerColors[index];
+    });
 
-        shuffledPlayers.forEach((player, index) => {
-          gameState[roomCode].playerColors[player.socketId] = playerColors[index];
-        });    
-
-        const state = gameState[roomCode];
-
-        const host = players.find(p => p.isHost);
-        const allReady = players.every(p => p.isReady);
-
-        if (host?.socketId === socket.id && allReady) {
-            console.log(`${host.nickname} has started the game for room: ${roomCode}`);
-            io.to(roomCode).emit('gameStarted', roomCode);
-            io.to(roomCode).emit('gameState', state);
-        }
+    gameState[roomCode] = {
+      ...(gameState[roomCode] || {}),
+      hasStarted: true,
+      turnOrder,
+      activePlayerIndex: 0
     };
+
+    const host = players.find(p => p.isHost);
+    const allReady = players.every(p => p.isReady);
+
+    if (host?.socketId === socket.id && allReady) {
+      console.log(`${host.nickname} has started the game for room: ${roomCode}`);
+      io.to(roomCode).emit('gameStarted', roomCode);
+      io.to(roomCode).emit('playerList', players); // Send updated players with colors
+      io.to(roomCode).emit('gameState', gameState[roomCode]);
+    }
+  };
 }
+
 
 function renderRoom(io) {
   return (roomCode) => {

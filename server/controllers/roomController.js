@@ -129,8 +129,10 @@ function startGame(socket, io) {
     const turnOrder = shuffledPlayers.map(p => p.socketId);
 
     // Assign colors directly to players
+    const playerColorMap = {};
     shuffledPlayers.forEach((player, index) => {
       player.color = playerColors[index];
+      playerColorMap[player.socketId] = playerColors[index];
     });
 
     const host = players.find(p => p.isHost);
@@ -143,7 +145,9 @@ function startGame(socket, io) {
         hasStarted: true,
         turnOrder,
         activePlayerIndex: 0,
-        board
+        board,
+        playerColors: playerColorMap,
+        settlements: {},
       };
       console.log(`${host.nickname} has started the game for room: ${roomCode}`);
       io.to(roomCode).emit('gameStarted', roomCode);

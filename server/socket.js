@@ -23,7 +23,7 @@ function setupSocket(io) {
     socket.on('toggleReady', toggleReady(socket, io));
     socket.on('gameStarted', startGame(socket, io));
     socket.on('renderRoom', renderRoom(io));
-    socket.on('placeSettlement', placeSettlement(io, socket));
+    socket.on('placeSettlement', placeSettlement(socket, io));
 
     socket.on('disconnect', () => {
         handleDisconnect(socket, io)

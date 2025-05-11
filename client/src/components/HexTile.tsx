@@ -1,6 +1,5 @@
 import React from 'react';
 import '../styles/HexBoard.css';
-import HexVertices from './HexVertices';
 import vertices from '../data/vertices';
 
 interface HexTileProps {

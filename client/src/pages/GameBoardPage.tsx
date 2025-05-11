@@ -13,6 +13,7 @@ const GameBoardPage: React.FC = () => {
   const [players, setPlayers] = useState<{ socketId: string; nickname: string; color: string }[]>([]);
   const [userSocketId, setUserSocketId] = useState<string | null>(null);
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
+  const [showVertices, setShowVertices] = useState(false);
 
   useEffect(() => {
     console.log('Entered GameBoard for room:', roomCode);
@@ -64,14 +65,19 @@ const GameBoardPage: React.FC = () => {
         <GamePlayerList players={players} userSocketId={userSocketId} />
       </div>
 
-      <CatanBoard />
+      <CatanBoard showVertices={showVertices}/>
 
       <div className="dice-ui-container">
         <p style={{ marginBottom: '10px' }}>
           {isUserTurn ? "🎯 Your turn!" : "⏳ Waiting for other players..."}
         </p>
         <button onClick={handleRoll}>Roll Dice</button>
+
         <DiceRoller roll={roll} />
+
+        <button onClick={() => setShowVertices((prev) => !prev)} style={{ marginTop: '10px' }}>
+          {showVertices ? 'Cancel Placement' : 'Place Settlement'}
+        </button>
       </div>
     </div>
   );

@@ -66,6 +66,10 @@
 }
 
 .board-container {
+  position: relative;
+  max-width: 100vw;
+  max-height: 90vh;
+  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -132,3 +136,60 @@
 .hex-hill     { background-image: url('../assets/hex-hill.jpg'); }
 .hex-field    { background-image: url('../assets/hex-field.jpg'); }
 .hex-desert   { background-image: url('../assets/hex-desert.jpg'); }
+
+.vertex {
+  position: absolute;
+  width: 1.1vw;
+  height: 1.1vw;
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  border: 0.1vw solid #222;
+  z-index: 5;
+  transition: background-color 0.2s;
+}
+
+.vertex:hover {
+  background-color: rgba(200, 200, 255, 0.9);
+  cursor: pointer;
+}
+
+/* Placement on hex */
+.vertex-top-left {
+  top: -0.6vw;
+  left: -0.6vw;
+}
+.vertex-top {
+  top: -2.6vw;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.vertex-top-right {
+  top: -0.6vw;
+  right: -0.6vw;
+}
+.vertex-bottom-left {
+  bottom: -0.6vw;
+  left: -0.6vw;
+}
+.vertex-bottom {
+  bottom: -2.6vw;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.vertex-bottom-right {
+  bottom: -0.6vw;
+  right: -0.6vw;
+}
+
+.hex-label {
+  position: absolute;
+  bottom: 5%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7vw;
+  color: white;
+  text-shadow: 1px 1px 3px black;
+  text-align: center;
+  z-index: 6;
+  pointer-events: none;
+}

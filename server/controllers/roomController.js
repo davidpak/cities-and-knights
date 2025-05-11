@@ -1,4 +1,5 @@
 const { gameState, activeRooms } = require('../gameState');
+const { generateRandomCatanBoard} = require('../game/generateBoard');
 
 // Track players per room
 const playersInRoom = {};
@@ -132,17 +133,18 @@ function startGame(socket, io) {
       player.color = playerColors[index];
     });
 
-    gameState[roomCode] = {
-      ...(gameState[roomCode] || {}),
-      hasStarted: true,
-      turnOrder,
-      activePlayerIndex: 0
-    };
-
     const host = players.find(p => p.isHost);
     const allReady = players.every(p => p.isReady);
 
     if (host?.socketId === socket.id && allReady) {
+      const board = generateRandomCatanBoard();
+      gameState[roomCode] = {
+        ...(gameState[roomCode] || {}),
+        hasStarted: true,
+        turnOrder,
+        activePlayerIndex: 0,
+        board
+      };
       console.log(`${host.nickname} has started the game for room: ${roomCode}`);
       io.to(roomCode).emit('gameStarted', roomCode);
       io.to(roomCode).emit('playerList', players); // Send updated players with colors

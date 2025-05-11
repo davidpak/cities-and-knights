@@ -1,27 +1,45 @@
 import React from 'react';
+import { useEffect, useState } from 'react';
 import HexTile from './HexTile';
 import '../styles/HexBoard.css';
+import socket from '../socket';
+import Tile from '../types/Tile';
 
-const tileMap = [
-  [ { type: 'field', number: 5 }, { type: 'forest', number: 2 }, { type: 'hill', number: 6 } ],
-  [ { type: 'pasture', number: 3 }, { type: 'mountain', number: 8 }, { type: 'desert' }, { type: 'forest', number: 10 } ],
-  [ { type: 'hill', number: 9 }, { type: 'field', number: 12 }, { type: 'pasture', number: 6 }, { type: 'mountain', number: 5 }, { type: 'forest', number: 11 } ],
-  [ { type: 'field', number: 4 }, { type: 'pasture', number: 10 }, { type: 'mountain', number: 3 }, { type: 'hill', number: 11 } ],
-  [ { type: 'forest', number: 8 }, { type: 'field', number: 9 }, { type: 'pasture', number: 4 } ]
-];
+interface CatanBoardProps {
+  // Define any props if needed
+  showVertices: boolean;
+}
 
-const CatanBoard: React.FC = () => {
+
+const CatanBoard: React.FC<CatanBoardProps> = ({ showVertices }) => {
+  const [tileMap, setTileMap] = useState<Tile[][]>([]);
+
+  useEffect(() => {
+    socket.on('gameState', (state: any) => {
+      setTileMap(state.board);
+    });
+
+    return () => {
+      socket.off('gameState');
+    }
+  }, []);
+
   return (
     <div className="board">
       {tileMap.map((row, i) => (
         <div className="hex-row" key={i}>
           {row.map((tile, j) => (
-            <HexTile key={j} type={tile.type} number={tile.number} />
+            <HexTile
+              key={j}
+              id={tile.id}
+              type={tile.type}
+              number={tile.number}
+              showVertices={showVertices}
+            />
           ))}
         </div>
       ))}
     </div>
   );
 };
-
 export default CatanBoard;

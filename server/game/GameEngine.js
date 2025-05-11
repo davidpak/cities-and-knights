@@ -6,7 +6,7 @@ class GameEngine {
     canPlaceSettlement(playerId, vertexId) {
         const isTurn = this.state.turnOrder[this.state.activePlayerIndex] === playerId;
         const alreadyPlaced = Object.values(this.state.settlements || {}).some(setts => 
-            setts.include(vertexId)
+            setts.includes(vertexId)
         );
         
         return isTurn && !alreadyPlaced;
@@ -18,7 +18,7 @@ class GameEngine {
         }
 
         if (!this.state.settlements[playerId]) {
-            this.state.settlements[plauyerId] = [];
+            this.state.settlements[playerId] = [];
         }
 
         this.state.settlements[playerId].push(vertexId);

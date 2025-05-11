@@ -48,26 +48,34 @@ const HexTile: React.FC<HexTileProps> = ({ id, type, number, showVertices, settl
       {number && (
         <div className={`hex-number ${tokenClass}`} />
       )}
-      {showVertices &&
-       myVertices.map(([vertexId, v]) => {
-          const settlement = settlements[vertexId];
-
+      {myVertices.map(([vertexId, v]) => {
+        const settlement = settlements[vertexId];
+      
+        if (settlement) {
           return (
             <div
               key={vertexId}
-              className={`vertex vertex-${v.position}`}
-              onClick={handleVertexClick(vertexId, settlement)}
+              className={`settlement-container settlement-${v.position}`}
             >
-              {settlement && (
-                <img
-                  src={`https://colonist.io/dist/images/settlement_${settlement.color}.svg`}
-                  alt="settlement"
-                  style={{ width: '1.5vw', height: '1.5vw' }}
-                />
-              )}
+              <img
+                src={`https://colonist.io/dist/images/settlement_${settlement.color}.svg`}
+                alt="settlement"
+                className="settlement-icon"
+              />
             </div>
           );
-        })}
+        }
+      
+        if (!showVertices) return null;
+      
+        return (
+          <div
+            key={vertexId}
+            className={`vertex vertex-${v.position}`}
+            onClick={handleVertexClick(vertexId, settlement)}
+          />
+        );
+      })}
     </div>
   );
 };

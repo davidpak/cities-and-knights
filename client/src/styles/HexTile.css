@@ -69,15 +69,50 @@
     right: -0.6vw;
   }
 
+   /* Placement on hex (Settlements) */
+   .settlement-top-left {
+    top: -1.3vw;
+    left: -1.2vw;
+  }
+  .settlement-top {
+    top: -3.6vw;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .settlement-top-right {
+    top: -1.3vw;
+    right: -1.2vw;
+  }
+  .settlement-bottom-left {
+    bottom: -1.0vw;
+    left: -1.0vw;
+  }
+  .settlement-bottom {
+    bottom: -3vw;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .settlement-bottom-right {
+    bottom: -1vw;
+    right: -1vw;
+  }
+
   .vertex.hidden {
     display: none;
   }
-  
-  .settlement-icon {
-    width: 1.6vw;
-    height: 1.6vw;
-    z-index: 10;
+
+  .settlement-container {
+    position: absolute;
+    z-index: 6;
+    width: 2.2vw;
+    height: 2.2vw;
     pointer-events: none;
+  }
+
+  .settlement-icon {
+    width: 100%;
+    height: 100%;
+    display: block;
   }
 
   .hex-label {

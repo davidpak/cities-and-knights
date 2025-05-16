@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import '../styles/HexBoard.css';
 import '../styles/HexTile.css';
 
-import vertices from '../data/vertices';
-import Settlement from '../types/Settlement';
-import socket from '../socket';
 import { useParams } from 'react-router-dom';
+import vertices from '../data/vertices';
+import socket from '../socket';
+import Settlement from '../types/Settlement';
 
 interface HexTileProps {
   id: string;
@@ -22,6 +22,11 @@ const HexTile: React.FC<HexTileProps> = ({ id, type, number, showVertices, settl
   const myVertices = Object.entries(vertices).filter(
     ([, v]) => v.renderFrom === id
   );
+
+  useEffect(() => {
+    console.log('Settlements:', settlements);
+  }
+  , [settlements]);
 
   // console.log('Vertices for', id, myVertices);
 

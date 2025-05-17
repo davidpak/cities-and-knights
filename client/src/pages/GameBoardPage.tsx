@@ -14,6 +14,7 @@ const GameBoardPage: React.FC = () => {
   const [userSocketId, setUserSocketId] = useState<string | null>(null);
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [showVertices, setShowVertices] = useState(false);
+  const [showRoads, setShowRoads] = useState(false);
 
   useEffect(() => {
     console.log('Entered GameBoard for room:', roomCode);
@@ -65,7 +66,7 @@ const GameBoardPage: React.FC = () => {
         <GamePlayerList players={players} userSocketId={userSocketId} />
       </div>
 
-      <CatanBoard showVertices={showVertices}/>
+      <CatanBoard showVertices={showVertices} showRoads={showRoads}/>
 
       <div className="dice-ui-container">
         <p style={{ marginBottom: '10px' }}>
@@ -78,6 +79,10 @@ const GameBoardPage: React.FC = () => {
         <button onClick={() => setShowVertices((prev) => !prev)} style={{ marginTop: '10px' }}>
           {showVertices ? 'Cancel Placement' : 'Place Settlement'}
         </button>
+        <button onClick={() => setShowRoads((prev) => !prev)} style={{ marginTop: '10px' }}>
+          {showRoads ? 'Cancel Road Placement' : 'Place Road'}
+        </button>
+
       </div>
     </div>
   );

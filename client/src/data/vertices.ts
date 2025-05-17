@@ -1,7 +1,14 @@
-const vertices = {
+interface VertexData {
+    adjacentHexes: string[];
+    adjacentVertices: string[];
+    renderFrom: string;
+    position: string;
+}
+
+const vertices: { [vertexId: string]: VertexData } = {
     vA1: {
         adjacentHexes: ['A1'],
-        adjacentVertices: ['vA2', 'vB1'],
+        adjacentVertices: ['vA2', 'vB2'],
         renderFrom: 'A1',
         position: 'top-left',
     },
@@ -181,7 +188,7 @@ const vertices = {
     },
     vD4: {
         adjacentHexes: ['C2', 'D1', 'D2'],
-        adjacentVertices: ['vD3', 'vD5', 'vE2'],
+        adjacentVertices: ['vD3', 'vD5', 'vE3'],
         renderFrom: 'D1',
         position: 'top-right', 
     },
@@ -193,7 +200,7 @@ const vertices = {
     },
     vD6: {
         adjacentHexes: ['C3', 'D2', 'D3'],
-        adjacentVertices: ['vD5', 'vD7', 'vE4'],
+        adjacentVertices: ['vD5', 'vD7', 'vE5'],
         renderFrom: 'D2',
         position: 'top-right', 
     },
@@ -205,7 +212,7 @@ const vertices = {
     },
     vD8: {
         adjacentHexes: ['C4', 'D3', 'D4'],
-        adjacentVertices: ['vD7', 'vD9', 'vE6'],
+        adjacentVertices: ['vD7', 'vD9', 'vE7'],
         renderFrom: 'D3',
         position: 'top-right', 
     },
@@ -217,7 +224,7 @@ const vertices = {
     },
     vD10: {
         adjacentHexes: ['C5', 'D4'],
-        adjacentVertices: ['vD9', 'vD11', 'vE8'],
+        adjacentVertices: ['vD9', 'vD11', 'vE9'],
         renderFrom: 'D4',
         position: 'top-right', 
     },
@@ -235,7 +242,7 @@ const vertices = {
     },
     vE2: {
         adjacentHexes: ['D1', 'E1'],
-        adjacentVertices: ['vD4', 'vE1', 'vE3'],
+        adjacentVertices: ['vE1', 'vE3', 'vF1'],
         renderFrom: 'E1',
         position: 'top-left',
     },
@@ -247,7 +254,7 @@ const vertices = {
     },
     vE4: {
         adjacentHexes: ['D2', 'E1', 'E2'],
-        adjacentVertices: ['vE3', 'vE5', 'VF3'],
+        adjacentVertices: ['vE3', 'vE5', 'vF3'],
         renderFrom: 'E1',
         position: 'top-right',
     },
@@ -259,7 +266,7 @@ const vertices = {
     },
     vE6: {
         adjacentHexes: ['D3', 'E2', 'E3'],
-        adjacentVertices: ['vE5', 'vE7', 'VF5'],
+        adjacentVertices: ['vE5', 'vE7', 'vF5'],
         renderFrom: 'E2',
         position: 'top-right',
     },
@@ -271,7 +278,7 @@ const vertices = {
     },
     vE8: {
         adjacentHexes: ['D4', 'E3'],
-        adjacentVertices: ['vE7', 'vE9', 'VF7'],
+        adjacentVertices: ['vE7', 'vE9', 'vF7'],
         renderFrom: 'E3',
         position: 'top-right',
     },

@@ -52,7 +52,36 @@ function placeSettlement(socket, io) {
   };
 }
 
+function placeRoad(socket, io) {
+  return ({ roomCode, roadId }) => {
+    console.log('Received placeRoad event with: ', roomCode, roadId);
+    const state = gameState[roomCode];
+    if (!state) return;
+
+    const engine = new GameEngine(state);
+
+    const [fromVertex, toVertex] = roadId.split('-');
+
+    try {
+      engine.placeRoad(socket.id, fromVertex, toVertex);
+    } catch (err) {
+      socket.emit('errorMessage', err.message);
+      return;
+    }
+
+    io.to(roomCode).emit('roadPlaced', {
+      playerId: socket.id,
+      roadId,
+      color: state.playerColors[socket.id]
+    });
+
+    console.log(`Player ${socket.id} placed a road on edge ${roadId}`);
+    io.to(roomCode).emit('gameState', state);
+  }
+}
+
 module.exports = {
   rollDice,
-  placeSettlement
+  placeSettlement,
+  placeRoad
 };

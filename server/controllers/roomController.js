@@ -148,6 +148,7 @@ function startGame(socket, io) {
         board,
         playerColors: playerColorMap,
         settlements: {},
+        roads: {},
         maxSettlementsPerPlayer: 5
       };
       console.log(`${host.nickname} has started the game for room: ${roomCode}`);

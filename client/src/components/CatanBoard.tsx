@@ -5,16 +5,19 @@ import '../styles/HexBoard.css';
 import socket from '../socket';
 import Tile from '../types/Tile';
 import Settlement from '../types/Settlement';
+import Road from '../types/Road';
 
 interface CatanBoardProps {
   // Define any props if needed
   showVertices: boolean;
+  showRoads: boolean;
 }
 
 
-const CatanBoard: React.FC<CatanBoardProps> = ({ showVertices }) => {
+const CatanBoard: React.FC<CatanBoardProps> = ({ showVertices, showRoads }) => {
   const [tileMap, setTileMap] = useState<Tile[][]>([]);
   const [settlements, setSettlements] = useState<{ [vertexId: string]: Settlement }>({});
+  const [roads, setRoads] = useState<{ [roadId: string]: Road }>({});
 
   useEffect(() => {
     socket.on('gameState', (state: any) => {
@@ -41,6 +44,18 @@ const CatanBoard: React.FC<CatanBoardProps> = ({ showVertices }) => {
       }
 
       setSettlements(vertexOwnership);
+
+      const edgeOwnership: { [roadId: string]: Road } = {};
+      for (const [playerId, edgeList] of Object.entries(state.roads || {})) {
+        for (const roadId of edgeList as string[]) {
+          edgeOwnership[roadId] = {
+            playerId,
+            roadId,
+            color: colors[playerId] || 'gray',
+          };
+        }
+      }
+      setRoads(edgeOwnership);
     });
 
     return () => {
@@ -59,7 +74,9 @@ const CatanBoard: React.FC<CatanBoardProps> = ({ showVertices }) => {
               type={tile.type}
               number={tile.number}
               showVertices={showVertices}
+              showRoads={showRoads}
               settlements={settlements}
+              roads={roads}
             />
           ))}
         </div>

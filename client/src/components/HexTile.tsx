@@ -1,15 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import '../styles/HexBoard.css';
 import '../styles/HexTile.css';
-import { useEffect } from 'react';
 
 import { useParams } from 'react-router-dom';
-import vertices from '../data/vertices';
-import roadSlots from '../data/roadSlots'; // <-- This is your hardcoded file
-import socket from '../socket';
-import Settlement from '../types/Settlement';
-import Road from '../types/Road';
 import edges from '../data/edges';
+import roadSlots from '../data/roadSlots';
+import vertices from '../data/vertices';
+import socket from '../socket';
+import Road from '../types/Road';
+import Settlement from '../types/Settlement';
 
 interface HexTileProps {
   id: string;
@@ -37,8 +36,8 @@ const HexTile: React.FC<HexTileProps> = ({ id, type, number, showVertices, showR
     ([, v]) => v.renderFrom === id
   );
 
-  const myRoads = Object.entries(edges).filter(([roadId, road]) => {
-    const { vertexA, vertexB, slot } = road;
+  const myRoads = Object.entries(edges).filter(([_ , road]) => {
+    const { vertexA, vertexB } = road;
     const hexesA = vertices[vertexA]?.adjacentHexes || [];
     const hexesB = vertices[vertexB]?.adjacentHexes || [];
     const sharedHexes = hexesA.filter(hex => hexesB.includes(hex));

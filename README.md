@@ -50,8 +50,11 @@ npm run e2e         # two scripted players and a bot play a whole game through a
 
 ## Deploying
 
-`railway.json` / `nixpacks.toml` build the client and run the server, which serves the client on the same address.
-To host the client somewhere else (Netlify, say), build it with `VITE_SERVER_URL=https://your-server` set.
+- **Railway (everything):** `railway.json` / `nixpacks.toml` build the client and run the server, which serves the
+  client on the same address. One URL, solo and online both work.
+- **Vercel (the client):** import the repo as-is; `vercel.json` builds `client/` from the repo root. Vercel can't run
+  the socket server, so set `VITE_SERVER_URL` in the Vercel project to the server's address (the Railway one) for
+  online play. Without it, solo works and the home screen says online play is off.
 
 ## Rules covered
 

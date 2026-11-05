@@ -10,8 +10,8 @@ import { botAction } from '../../shared/bot.ts'
 import { apply, newGame, viewFor, type Action, type GameState, type View } from '../../shared/engine.ts'
 import type { Ack, ClientToServer, RoomInfo, ServerToClient } from '../../shared/protocol.ts'
 
-type Store = { room: RoomInfo | null; view: View | null; connected: boolean; solo: boolean; toast: string | null }
-let store: Store = { room: null, view: null, connected: false, solo: false, toast: null }
+type Store = { room: RoomInfo | null; view: View | null; connected: boolean; serverDown: boolean; solo: boolean; toast: string | null }
+let store: Store = { room: null, view: null, connected: false, serverDown: false, solo: false, toast: null }
 const subs = new Set<() => void>()
 const set = (p: Partial<Store>) => {
   store = { ...store, ...p }
@@ -51,7 +51,10 @@ let socket: Socket<ServerToClient, ClientToServer> | null = null
 export function connect() {
   if (socket) return
   socket = io(SERVER, { auth: { player: playerId }, transports: ['websocket', 'polling'] })
-  socket.on('connect', () => set({ connected: true }))
+  let failures = 0
+  socket.on('connect', () => ((failures = 0), set({ connected: true, serverDown: false })))
+  // no game server here (a static host with no server set): say so, rather than "connecting" forever
+  socket.on('connect_error', () => ++failures >= 3 && !store.serverDown && set({ serverDown: true }))
   socket.on('disconnect', () => set({ connected: false }))
   socket.on('room', (room) => !store.solo && set({ room }))
   socket.on('game', (view) => !store.solo && set({ view }))

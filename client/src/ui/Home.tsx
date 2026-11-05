@@ -3,7 +3,7 @@ import { GAME_NAME } from '../lib/palette.ts'
 import { myName, rememberName, room, startSolo, toast, useStore } from '../net.ts'
 
 export function Home() {
-  const { connected, toast: msg } = useStore()
+  const { connected, serverDown, toast: msg } = useStore()
   const [name, setName] = useState(myName())
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('room') ?? '')
   const [bots, setBots] = useState(2)
@@ -48,7 +48,8 @@ export function Home() {
                 Join
               </button>
             </div>
-            {!connected && <small className="warn">Connecting to the server…</small>}
+            {!connected && !serverDown && <small className="warn">Connecting to the server…</small>}
+            {!connected && serverDown && <small className="warn">Can't reach the game server, so online play is off. Solo still works.</small>}
           </div>
           <div className="home-box">
             <h3>Play solo</h3>

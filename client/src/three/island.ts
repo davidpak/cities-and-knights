@@ -16,7 +16,7 @@ import type { Terrain } from '../../../shared/rules.ts'
 import { PAL, TERRAIN } from '../lib/palette.ts'
 import { atlasUV, cellOf } from './atlas.ts'
 import { frameGeo, hullGeo, sailGeo, seaGeo, signGeo, tileGeo, tokenGeo } from './geometry.ts'
-import { DIORAMA, HARBOR, SEA, TILE, TOKEN, harborFrame, hexAt } from './spec.ts'
+import { DIORAMA, HARBOR, SEA, TILE, TOKEN, harborFrame, hexAt, pierLine } from './spec.ts'
 
 const UNIT = {
   // (a box is centred; cones and cylinders stand on y 0)
@@ -154,40 +154,43 @@ function decorate(b: Builder, terrain: Terrain, seed: number, cx: number, cz: nu
 const WOOD = ['#e3b384', '#d6a473'] // deck planks, alternating
 const POST = '#8a5e3c'
 
-/** a dock along the coast side, a short pier, the sign at its end, posts in the water, a boat tied up beside */
+/** two short piers out from the side's two corners, meeting at the sign; a boat tied up beside */
 function harbor(b: Builder, pictures: BufferGeometry[], h: Harbor, n: number, sign: { side: BufferGeometry }) {
   const H = HARBOR
-  const { at: on, turn, out } = harborFrame(h.edge)
+  const P = H.pier
+  const { at: on, along, out } = harborFrame(h.edge)
   const outTurn = Math.atan2(-out[1], out[0])
-  const box = (u: number, v: number, w: number, d: number, top: number, hgt: number, color: string) => {
-    const [x, z] = on(u, v)
-    b.add(UNIT.brick, color, at(x, top - hgt / 2, z, [w, hgt, d], turn))
+  for (const side of [-1, 1] as const) {
+    const { start, d, len } = pierLine(side)
+    // the pier's way in board coordinates, and the turn that lays a shape's +x along it
+    const wx = along[0] * d[0] + out[0] * d[1]
+    const wz = along[1] * d[0] + out[1] * d[1]
+    const turn = Math.atan2(-wz, wx)
+    const n: [number, number] = [-d[1], d[0]] // across the pier, in the harbour's frame
+    const put = (t: number, k: number, sx: number, sz: number, top: number, hgt: number, color: string) => {
+      const [x, z] = on(start[0] + d[0] * t + n[0] * k, start[1] + d[1] * t + n[1] * k)
+      b.add(UNIT.brick, color, at(x, top - hgt / 2, z, [sx, hgt, sz], turn))
+    }
+    const post = (t: number, k: number) => {
+      const [x, z] = on(start[0] + d[0] * t + n[0] * k, start[1] + d[1] * t + n[1] * k)
+      b.add(UNIT.cyl, POST, at(x, 0, z, [H.post.r, P.top + 1.2, H.post.r]))
+    }
+    // cross planks, side by side down its length
+    const count = Math.max(1, Math.round((len + P.gap) / (P.plank + P.gap)))
+    const step = len / count
+    for (let i = 0; i < count; i++) put(step * (i + 0.5), 0, step - P.gap, P.w, P.top, P.h, WOOD[i % 2])
+    // a darker beam down each side, and posts at both ends
+    for (const k of [-1, 1]) {
+      put(len / 2, k * (P.w / 2 + P.rail / 2), len, P.rail, P.top - 0.5, P.h, POST)
+      post(0.8, k * (P.w / 2 + P.rail / 2))
+      post(len - (H.signR - P.into) * 0.15, k * (P.w / 2 + P.rail / 2))
+    }
   }
-  const post = (u: number, v: number, top: number) => {
-    const [x, z] = on(u, v)
-    b.add(UNIT.cyl, POST, at(x, 0, z, [H.post.r, top, H.post.r]))
-  }
-  // the dock: planks laid across it, side by side along the coast, a darker beam along its sea edge
-  const { len, from, to, planks, gap, h: ph, top, beam } = H.deck
-  const w = (len - gap * (planks - 1)) / planks
-  for (let i = 0; i < planks; i++) box(-len / 2 + w / 2 + i * (w + gap), (from + to) / 2, w, to - from, top, ph, WOOD[i % 2])
-  box(0, to - beam / 2, len + 1, beam, top + 0.4, ph + 1, POST)
-  for (const u of [-len / 2 + 1.6, len / 2 - 1.6]) post(u, from + 1.5, top - ph)
-  // a taller post at each corner of the side: these are the two building spots that get this harbour's rate
-  for (const u of [-len / 2 + H.corner.r, len / 2 - H.corner.r]) {
-    const [x, z] = on(u, to - beam / 2)
-    b.add(UNIT.cyl, POST, at(x, 0, z, [H.corner.r, top + H.corner.above, H.corner.r]))
-    b.add(UNIT.ball, POST, at(x, top + H.corner.above, z, H.corner.r))
-  }
-  // the pier: a walkway of cross planks from the dock into the sign
-  const P_ = H.pier
-  for (let i = 0; i < P_.planks; i++) box(0, P_.from + P_.plank / 2 + i * (P_.plank + P_.gap), P_.w, P_.plank, top, ph, WOOD[(i + 1) % 2])
-  for (const s of [-1, 1]) box((s * (P_.w + 1.2)) / 2, (P_.from + H.out - H.signR + 1) / 2, 1.2, H.out - H.signR + 1 - P_.from, top - 0.6, ph, POST)
-  // the sign, flush with the deck
+  // the sign, its face level with the piers
   const [sx, sz] = on(0, H.out)
-  b.add(sign.side, PAL.creamDeep, at(sx, top - H.signH, sz))
-  pictures.push(pictureDisc(H.signR - 1.2, cellOf({ harbor: h.kind })).translate(sx, top, sz))
-  // a boat on one side or the other, sitting in the water
+  b.add(sign.side, PAL.creamDeep, at(sx, P.top + 0.3 - H.signH, sz))
+  pictures.push(pictureDisc(H.signR - 1.2, cellOf({ harbor: h.kind })).translate(sx, P.top + 0.3, sz))
+  // a boat beside the sign, one side or the other, sitting in the water
   const side = n % 2 ? 1 : -1
   const [bx, bz] = on(side * H.boat.u, H.boat.v)
   const hullAt = at(bx, SEA.level - 1.2, bz, 1, outTurn)

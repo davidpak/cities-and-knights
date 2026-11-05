@@ -49,31 +49,26 @@ export const ROAD = { len: 32, w: 8, h: 6, round: 1.8 } // [D]
 export const ROBBER = { r: 11, h: 30 } // [D]
 
 /**
- * A harbour: a little wooden dock along the coast side it serves (so it plainly belongs to that side's two corners),
- * a short pier out from its middle, the sign at the end of the pier, posts in the water, and a boat tied up beside.
+ * A harbour, as on the usual board: its sign sits out in the water off one coast side, and two short wooden piers
+ * come out from that side's two corners and meet at it. Those two corners are the building spots that get its rate.
  * Measured in the harbour's own frame: u along the coast (0 = the side's middle), v straight out to sea from it.
  */
 export const HARBOR = {
-  deck: {
-    // [T] runs the whole side, corner to corner, stopping 1 mm short of each: so it plainly serves those two corners
-    get len() {
-      return TILE.layout - 2
-    },
-    from: 1.5, // [D] just off the tile's edge, over the water
-    to: 13, // [D]
-    planks: 9, // [D]
+  out: 23, // [D] the sign's centre, out from the side's middle: close in, so the piers stay short
+  signR: 14, // [D] big enough to read the rate
+  signH: 4, // [D]
+  pier: {
+    w: 7.5, // [D] a walkway, not a stick
+    inset: 1.5, // [D] starts this far out from its corner (from under a settlement standing there)
+    into: 2.5, // [D] runs this far under the sign's rim
+    plank: 2.2, // [D] cross planks, along the pier
     gap: 0.7, // [D]
     h: 2.2, // [D]
-    top: 9.5, // [D] a little below the tile tops, so a settlement on the corner stands over it
-    beam: 1.8, // [D] a darker beam along its sea edge
+    top: 9.5, // [D] a little below the tile tops
+    rail: 1.1, // [D] a darker beam down each side
   },
-  corner: { r: 2.2, above: 4.5 }, // [D] a taller post at each of the side's two corners, marking them
-  pier: { w: 10, from: 13.5, planks: 3, plank: 2.4, gap: 0.6 }, // [D] a walkway of cross planks from the dock into the sign
-  post: { r: 1.5, above: 2.6 }, // [D] the dock's sea-side posts stand a little above the deck
-  out: 30, // [D] the sign's centre, from the side's middle
-  signR: 14, // [D] big enough to read the rate, small enough to sit in the water
-  signH: 4, // [D]
-  boat: { u: 18, v: 23, len: 20, beam: 7.5, h: 4, mast: 18 }, // [D] moored beside the pier
+  post: { r: 1.4 }, // [D] at each end of each pier, both sides
+  boat: { u: 24, v: 17, len: 18, beam: 7, h: 4, mast: 16 }, // [D] moored beside the sign
 }
 
 export const SEA = {
@@ -128,14 +123,34 @@ export function harborSign(edge: number): [number, number] {
   return harborFrame(edge).at(0, HARBOR.out)
 }
 
+/** one of a harbour's two piers (side -1 or +1), in the harbour's frame: where it starts and ends, which way it runs */
+export function pierLine(side: -1 | 1) {
+  const H = HARBOR
+  const corner: [number, number] = [(side * TILE.layout) / 2, 0]
+  const dx = 0 - corner[0]
+  const dy = H.out - corner[1]
+  const l = Math.hypot(dx, dy)
+  const d: [number, number] = [dx / l, dy / l]
+  const start: [number, number] = [corner[0] + d[0] * H.pier.inset, corner[1] + d[1] * H.pier.inset]
+  const end: [number, number] = [-d[0] * (H.signR - H.pier.into), H.out - d[1] * (H.signR - H.pier.into)]
+  return { corner, start, end, d, len: Math.hypot(end[0] - start[0], end[1] - start[1]) }
+}
+
 /** points round everything a harbour puts in the water, for the checks */
 export function harborFootprint(edge: number): [number, number][] {
   const { at } = harborFrame(edge)
   const H = HARBOR
   const pts: [number, number][] = []
-  for (const u of [-H.deck.len / 2, H.deck.len / 2]) for (const v of [H.deck.from, H.deck.to]) pts.push(at(u, v))
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2
+  for (const side of [-1, 1] as const) {
+    const { start, end, d } = pierLine(side)
+    const n: [number, number] = [-d[1], d[0]]
+    // a pier leaves the coast at a slant, so its first 5 mm reaches under the tile it starts from (out of sight below
+    // the tile top: that is it meeting the shore); its footprint starts past that
+    const off: [number, number] = [start[0] + d[0] * 5, start[1] + d[1] * 5]
+    for (const p of [off, end]) for (const k of [-1, 1]) pts.push(at(p[0] + (n[0] * k * (H.pier.w / 2 + H.pier.rail)), p[1] + (n[1] * k * (H.pier.w / 2 + H.pier.rail))))
+  }
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2
     pts.push(at(Math.cos(a) * H.signR, H.out + Math.sin(a) * H.signR))
   }
   for (const s of [-1, 1]) for (const dv of [-H.boat.len / 2, H.boat.len / 2]) for (const du of [-H.boat.beam / 2, H.boat.beam / 2]) pts.push(at(s * H.boat.u + du, H.boat.v + dv))
@@ -184,29 +199,22 @@ export function checkBoard(): CheckResult[] {
   const apothem = (SEA.inner * SQRT3) / 2
   const prints = TOPO.harbors.map(harborFootprint)
   const farthest = Math.max(...prints.flat().map(([x, z]) => Math.hypot(x, z)))
-  add('every harbour (dock, pier, sign, boat) is inside the frame', farthest < apothem - 2, `${f(farthest)} < ${f(apothem - 2)}`)
+  add('every harbour (piers, sign, boat) is inside the frame', farthest < apothem - 2, `${f(farthest)} < ${f(apothem - 2)}`)
   const wet = prints.flat().filter(([x, z]) => onLand(x, z)).length
-  add('no part of a harbour stands on a tile', wet === 0, `${wet} points on land`)
+  add('no part of a harbour stands on a tile (past where each pier meets the shore)', wet === 0, `${wet} points on land`)
   const signs = TOPO.harbors.map(harborSign)
   let closest = Infinity
   signs.forEach((a, i) => signs.forEach((b, j) => j > i && (closest = Math.min(closest, Math.hypot(a[0] - b[0], a[1] - b[1])))))
   add('harbours never touch each other', closest > 2 * (HARBOR.boat.u + HARBOR.boat.beam), `${f(closest)} mm apart`)
-  // each dock lies exactly along its side and reaches both of that side's corners (the two that get the rate)
-  let worstOff = 0
-  let worstEnd = 0
-  for (const e of TOPO.harbors) {
-    const fr = harborFrame(e)
-    const [mx, mz] = edgeAt(e)
-    for (const v of [TOPO.edges[e].a, TOPO.edges[e].b]) {
-      const [x, z] = vertexAt(v)
-      const u = (x - mx) * fr.along[0] + (z - mz) * fr.along[1]
-      const w = (x - mx) * fr.out[0] + (z - mz) * fr.out[1]
-      worstOff = Math.max(worstOff, Math.abs(w)) // a corner off the dock's line
-      worstEnd = Math.max(worstEnd, Math.abs(Math.abs(u) - HARBOR.deck.len / 2)) // how far a dock end is from its corner
-    }
-  }
-  add('every dock lies along its side (corners on its line)', worstOff < 0.01, `${worstOff.toFixed(3)} mm off`)
-  add('every dock reaches both its corners', worstEnd <= 1.01, `ends ${f(worstEnd)} mm from the corners`)
+  // the two piers come out from the side's two corners (the two that get the rate) and meet the sign
+  const left = pierLine(-1)
+  const right = pierLine(1)
+  add('a pier starts at each of the side\'s two corners', Math.abs(Math.hypot(left.start[0] - left.corner[0], left.start[1] - left.corner[1]) - HARBOR.pier.inset) < 0.01 && left.corner[0] === -right.corner[0], `${f(HARBOR.pier.inset)} mm out from corners at u ±${f(right.corner[0])}`)
+  const reach = Math.hypot(right.end[0], right.end[1] - HARBOR.out)
+  add('both piers run into the sign', reach < HARBOR.signR, `ends ${f(reach)} mm from its centre (rim ${HARBOR.signR})`)
+  add('the piers are short', right.len < 26, `${f(right.len)} mm each`)
+  const apart = Math.hypot(right.end[0] - left.end[0], right.end[1] - left.end[1])
+  add('the two piers stay apart where they meet the sign', apart > HARBOR.pier.w + 2 * HARBOR.pier.rail, `${f(apart)} mm between their ends`)
   const landR = Math.max(...TOPO.vertices.map((v) => Math.hypot(...toBoard(v.x, v.y))))
   add('the frame clears the land', landR < apothem - 10, `${f(landR)} < ${f(apothem - 10)}`)
 

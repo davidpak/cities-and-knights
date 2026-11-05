@@ -1,21 +1,23 @@
 /**
  * The expansion's pieces on the table (fixed things, not bodies):
  *
- *   the voyage       a little sea board: the barbarians' route from the open sea to an island with a town, seven
- *                    buoys along it, their longship gliding buoy to buoy at each ship on the event die (and back out
- *                    once they've landed). A signpost on the shore is painted with what matters: their strength (a
- *                    city each) against the strength of the knights standing ready
+ *   the raid         the barbarians' way in: eight big hexes zig-zagging down beside the board, from the open sea
+ *                    (fog) through six numbered ones to the landing, a beach with a little town on it. Their longship
+ *                    sails a hex on at each ship on the event die (and back out once they've landed); the hexes
+ *                    crossed go dim. The landing is painted with what matters: their strength (a city each) against
+ *                    the strength of the knights standing ready
  *   flip charts      your three tracks, each a desk flip chart on a wooden stand: its page shows the level reached,
  *                    the building that grows with it, and what the next step costs. Click one to take its next step;
  *                    the page goes over the top. Everyone else's stand small beside their cards
  *
  * All of it is a few draws: the charts are three instanced draws however many there are (stands, rings, pages, every
- * page out of one picture), the voyage a handful.
+ * page out of one picture), the raid a handful.
  */
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import {
-  BoxGeometry, CanvasTexture, Color, InstancedBufferAttribute, Matrix4, Object3D, Quaternion, SRGBColorSpace, Vector3, type InstancedMesh, type Group,
+  BoxGeometry, BufferGeometry, CanvasTexture, Color, CylinderGeometry, InstancedBufferAttribute, Matrix4, Object3D, Quaternion, SRGBColorSpace, Shape, ShapeGeometry, Vector3,
+  type InstancedMesh, type Group,
 } from 'three'
 import type { View } from '../../../../shared/engine.ts'
 import { BARBARIAN_STEPS, MAX_LEVEL, TRACKS, TRACK_GOOD, TRACK_LEVELS, TRACK_NAME, type Track } from '../../../../shared/rules.ts'
@@ -23,104 +25,280 @@ import { ICON, SHIELD } from '../../lib/icons.ts'
 import { PAL, PLAYER, TRACK_COLOR } from '../../lib/palette.ts'
 import { mat } from '../../lib/toy.ts'
 import { FONT } from '../atlas.ts'
-import { rim } from '../geometry.ts'
 import { useRedraw } from '../Pieces.tsx'
 import { QUALITY } from '../quality.ts'
 import { settlementGeo, cityGeo } from '../geometry.ts'
-import {
-  CHART, ISLAND, buoyGeo, chartGeo, chartTop, hullGeo, islandGeo, meadowGeo, pageGeo, plaqueGeo, postGeo, ringGeo, sailGeo, shieldGeo, shieldSpots, towerGeo,
-} from '../voyage.ts'
+import { CHART, chartGeo, chartTop, hullGeo, pageGeo, ringGeo, sailGeo, shieldGeo, shieldSpots, towerGeo } from '../voyage.ts'
 import { wood } from '../wood.ts'
 import { atlasMaterial } from './cardMesh.ts'
-import { SEAT_TRACKS, TRACKS_BOX, VOYAGE, seatParts, type Layout } from './layout.ts'
+import { SEAT_TRACKS, TRACKS_BOX, seatParts, type Layout } from './layout.ts'
 
 const BOX = new BoxGeometry(1, 1, 1)
 const dummy = new Object3D()
 const INK = '#2a1d13'
 
-export function ExpansionTable({ view, layout, can, onImprove }: { view: View; layout: Layout; can: Record<Track, boolean>; onImprove: (t: Track) => void }) {
+export function ExpansionTable({ view, layout, can, onImprove, trayOut }: { view: View; layout: Layout; can: Record<Track, boolean>; onImprove: (t: Track) => void; trayOut: boolean }) {
   const x = view.x
   const K = layout.k
   if (!x || !K) return null
   return (
     <>
-      <Voyage view={view} at={K.lane} />
-      <FlipCharts view={view} layout={layout} can={can} onImprove={onImprove} />
+      <Raid view={view} path={K.raid} />
+      <FlipCharts view={view} layout={layout} can={can} onImprove={onImprove} mineShown={!(K.tracksYield && trayOut)} />
     </>
   )
 }
 
-// ---------------------------------------------------------------- the voyage
+// ---------------------------------------------------------------- the raid
 
-/** the route in the board's own frame (mm, its middle at 0): stop 0 out at sea on the left, stop 7 the island's shore */
-const ROUTE = Array.from({ length: BARBARIAN_STEPS + 1 }, (_, i) => {
-  const t = i / BARBARIAN_STEPS
-  return { x: -104 + t * 172, z: 22 * Math.sin(t * Math.PI * 1.3 + 0.35) * (1 - t * 0.35) }
-})
-const ISLE = { x: 94, z: -4 }
-/** a point along the route, for a step that may be part-way (2.4: four tenths from buoy 2 to buoy 3) */
-function along(step: number) {
-  const i = Math.max(0, Math.min(BARBARIAN_STEPS - 1, Math.floor(step)))
-  const f = Math.max(0, Math.min(1, step - i))
-  const a = ROUTE[i]
-  const b = ROUTE[i + 1]
-  return { x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, heading: Math.atan2(-(b.z - a.z), b.x - a.x) }
+const CELL = 256
+const RAID_COLS = 4
+const STEPS = BARBARIAN_STEPS + 1 // hexes 0 (out at sea) to 7 (the landing)
+/** what a hex shows from above, by step: 0 the open sea, fog; 1 to 6 sea with the step's number on a token; 7 the
+ *  landing (sand and grass) with what's at stake painted on it: their strength (a city each) against the knights' */
+function paintHex(g: CanvasRenderingContext2D, i: number, strength: number, defense: number) {
+  const cx = (i % RAID_COLS) * CELL + CELL / 2
+  const cy = Math.floor(i / RAID_COLS) * CELL + CELL / 2
+  const R = CELL / 2
+  g.save()
+  g.beginPath()
+  for (let k = 0; k < 6; k++) g[k ? 'lineTo' : 'moveTo'](cx + R * Math.cos((k * Math.PI) / 3), cy + R * Math.sin((k * Math.PI) / 3))
+  g.closePath()
+  g.clip()
+  const land = i === STEPS - 1
+  if (!land) {
+    // deeper and darker out at sea, lighter toward the shore
+    const t = i / (STEPS - 2)
+    const mix = (a: number[], b: number[]) => `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t)).join(',')})`
+    const grad = g.createLinearGradient(cx, cy - R, cx, cy + R)
+    grad.addColorStop(0, mix([34, 62, 84], [74, 140, 168]))
+    grad.addColorStop(1, mix([46, 82, 106], [98, 164, 186]))
+    g.fillStyle = grad
+    g.fillRect(cx - R, cy - R, CELL, CELL)
+    // waves (the same on every hex, turned a little each)
+    g.strokeStyle = 'rgba(235, 245, 248, 0.32)'
+    g.lineWidth = 5
+    let seed = 7 + i * 13
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
+    for (let k = 0; k < 9; k++) {
+      const wx = cx + (rnd() - 0.5) * CELL * 0.9
+      const wy = cy + (rnd() - 0.5) * CELL * 0.8
+      if (i > 0 && Math.hypot(wx - cx, wy - cy) < 70) continue
+      g.beginPath()
+      g.arc(wx, wy, 14 + rnd() * 10, Math.PI * 1.15, Math.PI * 1.85)
+      g.stroke()
+    }
+    if (i === 0) {
+      // out at sea: fog
+      const fog = g.createRadialGradient(cx, cy, 10, cx, cy, R)
+      fog.addColorStop(0, 'rgba(220, 228, 232, 0.55)')
+      fog.addColorStop(1, 'rgba(220, 228, 232, 0.05)')
+      g.fillStyle = fog
+      g.fillRect(cx - R, cy - R, CELL, CELL)
+    } else {
+      // the step, on a token like the board's
+      g.fillStyle = PAL.cream
+      g.beginPath()
+      g.arc(cx, cy, 62, 0, Math.PI * 2)
+      g.fill()
+      g.fillStyle = i >= STEPS - 3 ? PAL.red : PAL.plum
+      g.font = `800 92px ${FONT}`
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      g.fillText(String(i), cx, cy + 6)
+    }
+  } else {
+    // the landing: a beach in front of grass, and the two strengths
+    g.fillStyle = '#86b860'
+    g.fillRect(cx - R, cy - R, CELL, CELL)
+    g.fillStyle = '#e6d29c'
+    g.beginPath()
+    g.ellipse(cx, cy + R * 0.55, R * 1.2, R * 0.75, 0, 0, Math.PI * 2)
+    g.fill()
+    const safe = defense >= strength
+    // two numbers on cream, big: theirs (red, under a sail) and the knights' (under a shield: green while it holds)
+    g.fillStyle = PAL.cream
+    g.beginPath()
+    g.roundRect(cx - 104, cy - 6, 208, 92, 22)
+    g.fill()
+    const side = (x: number, path: string, color: string, n: number) => {
+      g.save()
+      g.translate(x - 20, cy - 52)
+      g.scale(40 / 24, 40 / 24)
+      g.fillStyle = color
+      g.fill(new Path2D(path))
+      g.restore()
+      g.fillStyle = color
+      g.font = `800 82px ${FONT}`
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      g.fillText(String(n), x, cy + 44)
+    }
+    side(cx - 52, 'M4 15h16l-3 5H7z M11 2h2v12h-2z M13 3l7 9h-7z', '#9c2f24', strength)
+    side(cx + 52, SHIELD, safe ? '#2e7d4a' : '#9c2f24', defense)
+    g.fillStyle = 'rgba(42, 29, 19, 0.55)'
+    g.font = `800 40px ${FONT}`
+    g.textAlign = 'center'
+    g.fillText('vs', cx, cy + 44)
+  }
+  g.restore()
 }
 
-let seaPicture: CanvasTexture | null = null
-/** the board's painted sea: deeper toward the open sea, waves, the route dashed in, sand round the island */
-function sea() {
-  if (seaPicture) return seaPicture
-  const S = 4 // px per mm
-  const c = document.createElement('canvas')
-  c.width = VOYAGE.w * S
-  c.height = VOYAGE.d * S
-  const g = c.getContext('2d')!
-  const X = (x: number) => (x + VOYAGE.w / 2) * S
-  const Z = (z: number) => (z + VOYAGE.d / 2) * S
-  const grad = g.createLinearGradient(0, 0, c.width, 0)
-  grad.addColorStop(0, '#2f5f7c')
-  grad.addColorStop(0.55, '#4d8aa8')
-  grad.addColorStop(1, '#6eaac0')
-  g.fillStyle = grad
-  g.fillRect(0, 0, c.width, c.height)
-  // the open sea, darker and misty where they come from
-  const fog = g.createRadialGradient(X(-125), Z(0), 10, X(-125), Z(0), 360)
-  fog.addColorStop(0, 'rgba(20, 30, 40, 0.45)')
-  fog.addColorStop(1, 'rgba(20, 30, 40, 0)')
-  g.fillStyle = fog
-  g.fillRect(0, 0, c.width, c.height)
-  // shallows and sand round the island
-  const sand = g.createRadialGradient(X(ISLE.x), Z(ISLE.z), ISLAND.r * S * 0.8, X(ISLE.x), Z(ISLE.z), ISLAND.r * S * 1.7)
-  sand.addColorStop(0, 'rgba(230, 214, 170, 0.95)')
-  sand.addColorStop(0.45, 'rgba(150, 205, 200, 0.6)')
-  sand.addColorStop(1, 'rgba(150, 205, 200, 0)')
-  g.fillStyle = sand
-  g.fillRect(0, 0, c.width, c.height)
-  // waves: little arcs scattered (the same every time)
-  let t = 11
-  const rnd = () => ((t = (t * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff)
-  g.strokeStyle = 'rgba(235, 245, 248, 0.35)'
-  g.lineWidth = 3
-  for (let i = 0; i < 70; i++) {
-    const wx = rnd() * c.width
-    const wz = rnd() * c.height
-    if (Math.hypot(wx - X(ISLE.x), wz - Z(ISLE.z)) < ISLAND.r * S * 1.5) continue
-    g.beginPath()
-    g.arc(wx, wz, 10 + rnd() * 10, Math.PI * 1.15, Math.PI * 1.85)
-    g.stroke()
+/** the hexes' tops, all in one picture (the landing's repainted when what's at stake changes) */
+function useRaidPicture(strength: number, defense: number) {
+  const tex = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = CELL * RAID_COLS
+    c.height = CELL * Math.ceil(STEPS / RAID_COLS)
+    const g = c.getContext('2d')!
+    for (let i = 0; i < STEPS - 1; i++) paintHex(g, i, 0, 0)
+    const t = new CanvasTexture(c)
+    t.colorSpace = SRGBColorSpace
+    t.anisotropy = QUALITY.aniso
+    return t
+  }, [])
+  useLayoutEffect(() => {
+    const g = (tex.image as HTMLCanvasElement).getContext('2d')!
+    paintHex(g, STEPS - 1, strength, defense)
+    tex.needsUpdate = true
+  }, [tex, strength, defense])
+  return tex
+}
+
+const HEX_H = 7 // [D] each hex: a thick wooden tile like the board's
+const hexTop = (() => {
+  let g: BufferGeometry | null = null
+  return () => {
+    if (g) return g
+    const sh = new Shape()
+    for (let k = 0; k < 6; k++) sh[k ? 'lineTo' : 'moveTo'](Math.cos((k * Math.PI) / 3), Math.sin((k * Math.PI) / 3))
+    g = new ShapeGeometry(sh)
+    // uv straight from the shape (its picture's square round it); laid flat, the picture's top lies away from you
+    const pos = g.attributes.position
+    const uv = g.attributes.uv
+    for (let k = 0; k < pos.count; k++) uv.setXY(k, pos.getX(k) / 2 + 0.5, pos.getY(k) / 2 + 0.5)
+    return g.rotateX(-Math.PI / 2)
   }
-  // the route, dashed
-  g.setLineDash([16, 14])
-  g.strokeStyle = 'rgba(255, 246, 226, 0.75)'
-  g.lineWidth = 5
-  g.beginPath()
-  ROUTE.forEach((p, i) => (i ? g.lineTo(X(p.x), Z(p.z)) : g.moveTo(X(p.x), Z(p.z))))
-  g.stroke()
-  seaPicture = new CanvasTexture(c)
-  seaPicture.colorSpace = SRGBColorSpace
-  seaPicture.anisotropy = QUALITY.aniso
-  return seaPicture
+})()
+const hexBody = (() => {
+  let g: BufferGeometry | null = null
+  return () => (g ??= new CylinderGeometry(1, 1, 1, 6).rotateY(Math.PI / 6).translate(0, 0.5, 0))
+})()
+
+function Raid({ view, path }: { view: View; path: { r: number; at: [number, number][] } }) {
+  const x = view.x!
+  const step = Math.min(x.barbarian, BARBARIAN_STEPS)
+  const strength = Object.values(view.buildings).filter((b) => b.kind === 'city').length
+  const defense = Object.values(x.knights).filter((k) => k.active).reduce((n, k) => n + k.level, 0)
+  const picture = useRaidPicture(strength, defense)
+  const redraw = useRedraw()
+  const ship = useRef<Group>(null)
+  const tops = useRef<InstancedMesh>(null)
+  const bodies = useRef<InstancedMesh>(null)
+  const shields = useRef<InstancedMesh>(null)
+  const shown = useRef(step)
+  const { r, at } = path
+  const tiles = useMemo(() => new InstancedBufferAttribute(new Float32Array(STEPS), 1), [])
+  const topGeo = useMemo(() => {
+    const g = hexTop().clone()
+    g.setAttribute('aTile', tiles)
+    return g
+  }, [tiles])
+  const topMat = useMemo(() => atlasMaterial(picture, RAID_COLS, Math.ceil(STEPS / RAID_COLS), 'raid'), [picture])
+  const k = r / 36 // the ship and the town grow with the hexes
+
+  // the hexes: the ones they've crossed go dim; the landing's edge is red
+  useLayoutEffect(() => {
+    const t = tops.current
+    const b = bodies.current
+    if (!t || !b) return
+    for (let i = 0; i < STEPS; i++) {
+      const [hx, hz] = at[i]
+      dummy.position.set(hx, 0, hz)
+      dummy.rotation.set(0, 0, 0)
+      dummy.scale.set(r - 1.5, HEX_H, r - 1.5)
+      dummy.updateMatrix()
+      b.setMatrixAt(i, dummy.matrix)
+      b.setColorAt(i, new Color(i === STEPS - 1 ? '#b5463a' : i < step ? '#6e6259' : PAL.maple))
+      dummy.position.set(hx, HEX_H + 0.05, hz)
+      dummy.scale.set(r - 4, 1, r - 4)
+      dummy.updateMatrix()
+      t.setMatrixAt(i, dummy.matrix)
+      // (crossed: grey and dark, so the way still to go stands out)
+      t.setColorAt(i, new Color(i < step && i !== STEPS - 1 ? '#5d6164' : '#ffffff'))
+      tiles.setX(i, i)
+    }
+    tiles.needsUpdate = true
+    for (const m of [t, b]) {
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+      m.computeBoundingSphere()
+    }
+    redraw()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [at, r, step])
+  // the shields down the ship's sides, red and cream
+  useLayoutEffect(() => {
+    const m = shields.current
+    if (!m) return
+    shieldSpots().forEach((s, i) => {
+      dummy.position.set(s.x, s.y, s.z)
+      dummy.rotation.set(0, 0, 0)
+      dummy.scale.setScalar(1)
+      dummy.updateMatrix()
+      m.setMatrixAt(i, dummy.matrix)
+      m.setColorAt(i, new Color(i % 2 ? '#efe4cc' : '#a8362d'))
+    })
+    m.instanceMatrix.needsUpdate = true
+    if (m.instanceColor) m.instanceColor.needsUpdate = true
+  }, [])
+
+  /** a point along the hexes, for a step that may be part-way */
+  const along = (s: number) => {
+    const i = Math.max(0, Math.min(STEPS - 2, Math.floor(s)))
+    const f = Math.max(0, Math.min(1, s - i))
+    const [ax, az] = at[i]
+    const [bx, bz] = at[i + 1]
+    return { x: ax + (bx - ax) * f, z: az + (bz - az) * f, heading: Math.atan2(-(bz - az), bx - ax) }
+  }
+  // the ship glides on a hex at a time (and, once they've landed, sails back out quickly), rocking as it goes
+  useFrame((_, dt) => {
+    const o = ship.current
+    if (!o) return
+    const want = step
+    const was = shown.current
+    if (Math.abs(want - was) > 0.0005) {
+      shown.current = want < was ? Math.max(want, was - dt * 5) : Math.min(want, was + dt * 1.4)
+      redraw()
+    }
+    const s = shown.current
+    const p = along(s)
+    const moving = Math.abs(want - s) > 0.0005
+    const t = performance.now() / 1000
+    o.position.set(p.x, HEX_H + 0.4 + (moving ? Math.sin(t * 6) * 0.6 : 0), p.z)
+    o.rotation.set(moving ? Math.sin(t * 5) * 0.06 : 0, p.heading, 0, 'YXZ')
+    o.scale.setScalar(k)
+  })
+
+  const [lx, lz] = at[STEPS - 1]
+  return (
+    <group>
+      <instancedMesh ref={bodies} args={[hexBody(), wood(), STEPS]} castShadow receiveShadow />
+      <instancedMesh ref={tops} args={[topGeo, topMat, STEPS]} receiveShadow />
+      {/* the town at the landing, along its far edge (what's at stake is painted in front of it) */}
+      <group position={[lx, HEX_H, lz - r * 0.62]} scale={k}>
+        <mesh geometry={settlementGeo()} material={wood('#efe6d4')} position={[-9, 0, 0]} scale={0.42} castShadow />
+        <mesh geometry={cityGeo()} material={wood('#efe6d4')} position={[2, 0, -1]} scale={0.34} castShadow />
+        <mesh geometry={towerGeo()} material={mat('#b8a88c')} position={[11, 0, 1]} scale={0.55} castShadow />
+      </group>
+      {/* the longship */}
+      <group ref={ship}>
+        <mesh geometry={hullGeo()} material={wood('#4a3527')} castShadow />
+        <mesh geometry={sailGeo()} material={mat('#ffffff', { map: sailStripes(), side: 2 })} castShadow />
+        <instancedMesh ref={shields} args={[shieldGeo(), wood(), 12]} castShadow />
+      </group>
+    </group>
+  )
 }
 
 /** the sail: red and cream stripes */
@@ -138,146 +316,6 @@ function sailStripes() {
   sailPicture = new CanvasTexture(c)
   sailPicture.colorSpace = SRGBColorSpace
   return sailPicture
-}
-
-/** the signpost's board: their strength against the knights' (painted, so it's part of the scene) */
-function usePlaque(strength: number, defense: number) {
-  const tex = useMemo(() => {
-    const c = document.createElement('canvas')
-    c.width = 256
-    c.height = 146
-    const t = new CanvasTexture(c)
-    t.colorSpace = SRGBColorSpace
-    t.anisotropy = QUALITY.aniso
-    return t
-  }, [])
-  useLayoutEffect(() => {
-    const c = tex.image as HTMLCanvasElement
-    const g = c.getContext('2d')!
-    g.fillStyle = '#d9c29a'
-    g.fillRect(0, 0, 256, 146)
-    g.fillStyle = 'rgba(90, 60, 30, 0.18)'
-    for (let y = 8; y < 146; y += 13) g.fillRect(0, y, 256, 2)
-    const row = (y: number, path: string, color: string, n: number, word: string) => {
-      g.save()
-      g.translate(18, y - 24)
-      g.scale(48 / 24, 48 / 24)
-      g.fillStyle = color
-      g.fill(new Path2D(path))
-      g.restore()
-      g.fillStyle = color
-      g.font = `800 64px ${FONT}`
-      g.textAlign = 'right'
-      g.textBaseline = 'middle'
-      g.fillText(String(n), 236, y + 3)
-      void word
-    }
-    const safe = defense >= strength
-    row(40, 'M12 2l1.6 5.2H19l-4.4 3.2 1.7 5.3L12 12.5l-4.3 3.2 1.7-5.3L5 7.2h5.4z M11 13h2v9h-2z', '#9c2f24', strength, 'raiders')
-    row(106, SHIELD, safe ? '#2e7d4a' : '#9c2f24', defense, 'knights')
-    tex.needsUpdate = true
-  }, [tex, strength, defense])
-  return tex
-}
-
-function Voyage({ view, at }: { view: View; at: [number, number] }) {
-  const x = view.x!
-  const step = Math.min(x.barbarian, BARBARIAN_STEPS)
-  const strength = Object.values(view.buildings).filter((b) => b.kind === 'city').length
-  const defense = Object.values(x.knights).filter((k) => k.active).reduce((n, k) => n + k.level, 0)
-  const plaque = usePlaque(strength, defense)
-  const redraw = useRedraw()
-  const ship = useRef<Group>(null)
-  const buoys = useRef<InstancedMesh>(null)
-  const shields = useRef<InstancedMesh>(null)
-  const frame = useMemo(() => rim(VOYAGE.w + 8, VOYAGE.d + 8, 5, 8, 6), [])
-  const shown = useRef(step)
-  const [ax, az] = at
-
-  // the buoys: the ones they've passed go grey
-  useLayoutEffect(() => {
-    const m = buoys.current
-    if (!m) return
-    for (let i = 0; i < BARBARIAN_STEPS; i++) {
-      const p = ROUTE[i + 1]
-      dummy.position.set(ax + p.x, 3, az + p.z + 9)
-      dummy.rotation.set(0, 0, 0)
-      dummy.scale.setScalar(1)
-      dummy.updateMatrix()
-      m.setMatrixAt(i, dummy.matrix)
-      m.setColorAt(i, new Color(i < step ? '#7d8a91' : i === BARBARIAN_STEPS - 1 ? '#e3a72c' : '#c8453c'))
-    }
-    m.instanceMatrix.needsUpdate = true
-    if (m.instanceColor) m.instanceColor.needsUpdate = true
-    m.computeBoundingSphere()
-    redraw()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ax, az, step])
-  // the shields down the ship's sides, red and cream
-  useLayoutEffect(() => {
-    const m = shields.current
-    if (!m) return
-    shieldSpots().forEach((s, i) => {
-      dummy.position.set(s.x, s.y, s.z)
-      dummy.rotation.set(0, 0, 0)
-      dummy.scale.setScalar(1)
-      dummy.updateMatrix()
-      m.setMatrixAt(i, dummy.matrix)
-      m.setColorAt(i, new Color(i % 2 ? '#efe4cc' : '#a8362d'))
-    })
-    m.instanceMatrix.needsUpdate = true
-    if (m.instanceColor) m.instanceColor.needsUpdate = true
-  }, [])
-
-  // the ship glides on a step at a time (and, once they've landed, sails back out quickly), rocking as it goes
-  useFrame((_, dt) => {
-    const o = ship.current
-    if (!o) return
-    const want = step
-    const was = shown.current
-    if (Math.abs(want - was) > 0.0005) {
-      shown.current = want < was ? Math.max(want, was - dt * 5) : Math.min(want, was + dt * 1.4)
-      redraw()
-    }
-    const s = shown.current
-    const p = along(s)
-    const moving = Math.abs(want - s) > 0.0005
-    const t = performance.now() / 1000
-    o.position.set(ax + p.x, 1.2 + (moving ? Math.sin(t * 6) * 0.6 : 0), az + p.z)
-    o.rotation.set(moving ? Math.sin(t * 5) * 0.06 : 0, p.heading, 0, 'YXZ')
-  })
-
-  return (
-    <group>
-      {/* the board: painted sea in a maple frame */}
-      <mesh geometry={BOX} material={mat('#ffffff', { map: sea() })} scale={[VOYAGE.w, 2, VOYAGE.d]} position={[ax, 1, az]} receiveShadow />
-      <mesh geometry={frame} material={mat(PAL.maple)} position={[ax, 0, az]} castShadow receiveShadow />
-      {/* the island, its town and watchtower, the signpost on the shore */}
-      <group position={[ax + ISLE.x, 2, az + ISLE.z]}>
-        <mesh geometry={islandGeo()} material={mat('#d9c08a')} castShadow receiveShadow />
-        <mesh geometry={meadowGeo()} material={mat('#7fb05b')} castShadow receiveShadow />
-        <mesh geometry={settlementGeo()} material={wood('#efe6d4')} position={[-9, ISLAND.h + 1, 6]} scale={0.55} castShadow />
-        <mesh geometry={settlementGeo()} material={wood('#e6d8bf')} position={[2, ISLAND.h + 1.2, 9]} scale={0.5} rotation={[0, 0.6, 0]} castShadow />
-        <mesh geometry={cityGeo()} material={wood('#efe6d4')} position={[-4, ISLAND.h + 1.2, -7]} scale={0.45} castShadow />
-        <mesh geometry={towerGeo()} material={mat('#b8a88c')} position={[10, ISLAND.h - 0.5, -6]} castShadow />
-      </group>
-      {/* the signpost, on a rock in the shallows before the island: their strength against the knights' */}
-      <group position={[ax + ISLE.x - 40, 2, az + 35]}>
-        <mesh geometry={BOX} material={mat('#8f877c')} scale={[12, 4, 9]} position={[0, 2, 0]} castShadow receiveShadow />
-        <group rotation={[-0.62, 0, 0]}>
-          <mesh geometry={postGeo()} material={mat('#6d4c33')} castShadow />
-          <mesh geometry={plaqueGeo()} material={[mat('#8a5e3c'), mat('#8a5e3c'), mat('#8a5e3c'), mat('#8a5e3c'), mat('#ffffff', { map: plaque }), mat('#8a5e3c')]} position={[0, 18, 1]} scale={1.5} castShadow />
-        </group>
-      </group>
-      <instancedMesh ref={buoys} args={[buoyGeo(), wood(), BARBARIAN_STEPS]} castShadow />
-      {/* the longship */}
-      <group ref={ship}>
-        <mesh geometry={hullGeo()} material={wood('#4a3527')} castShadow />
-        <mesh geometry={sailGeo()} material={mat('#ffffff', { map: sailStripes(), side: 2 })} castShadow />
-        <instancedMesh ref={shields} args={[shieldGeo(), wood(), 12]} castShadow />
-      </group>
-    </group>
-  )
 }
 
 // ---------------------------------------------------------------- flip charts
@@ -428,13 +466,14 @@ function pageMatrix(c: Chart, psi: number, out: Matrix4) {
   return new Matrix4().makeScale(c.scale, c.scale, c.scale).premultiply(new Matrix4().makeTranslation(c.x, 0, c.z)).multiply(out)
 }
 
-function FlipCharts({ view, layout, can, onImprove }: { view: View; layout: Layout; can: Record<Track, boolean>; onImprove: (t: Track) => void }) {
+/** (on a phone your charts make way for the tray while it's out: `mineShown` false) */
+function FlipCharts({ view, layout, can, onImprove, mineShown }: { view: View; layout: Layout; can: Record<Track, boolean>; onImprove: (t: Track) => void; mineShown: boolean }) {
   const x = view.x!
   const K = layout.k!
   const me = view.you
   const charts: Chart[] = useMemo(() => {
     const out: Chart[] = []
-    if (me >= 0)
+    if (me >= 0 && mineShown)
       TRACKS.forEach((t, i) =>
         out.push({ key: `${me}:${t}`, x: K.tracks[0] + (i - 1) * TRACKS_BOX.stand, z: K.tracks[1], scale: SEAT_TRACKS.mine, track: t, level: x.levels[me][t], mine: true, color: TRACK_COLOR[t] }),
       )
@@ -445,7 +484,7 @@ function FlipCharts({ view, layout, can, onImprove }: { view: View; layout: Layo
       )
     }
     return out
-  }, [x.levels, me, layout, K.tracks, view.players])
+  }, [x.levels, me, layout, K.tracks, view.players, mineShown])
 
   const stands = useRef<InstancedMesh>(null)
   const rings = useRef<InstancedMesh>(null)

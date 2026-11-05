@@ -11,14 +11,14 @@
  * while everything lies still.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BoxGeometry, Vector3 } from 'three'
 import { Adaptive } from '../Adaptive.tsx'
 import { rim } from '../geometry.ts'
 import { Pulse, Robber, Settlement } from '../Pieces.tsx'
 import { TOPO } from '../../../../shared/board.ts'
-import type { View } from '../../../../shared/engine.ts'
-import { CARDS, GOODS, PROGRESS, PROGRESS_CARDS, PROGRESS_POINTS, RESOURCES, TRACKS, type Card, type Good, type Hand, type Progress, type Track } from '../../../../shared/rules.ts'
+import { resourceOf, type View } from '../../../../shared/engine.ts'
+import { CARDS, CITY_YIELD, GOODS, PROGRESS, PROGRESS_CARDS, PROGRESS_POINTS, RESOURCES, TRACKS, type Card, type Good, type Hand, type Progress, type Track } from '../../../../shared/rules.ts'
 import { PAL } from '../../lib/palette.ts'
 import { mat } from '../../lib/toy.ts'
 import { BoardContents, Fit, Lights, canvasProps, type BoardProps } from '../Board.tsx'
@@ -118,7 +118,59 @@ function supplyHome(what: Build, at: Spot) {
   }
 }
 
+/** how long after a roll its cards set off from their tiles (the dice have landed and the tiles lit up) */
+export const HARVEST = 0.85
+
+/**
+ * Right after a roll: the tile each player's new cards come up out of, by kind (for a moment; any card after that
+ * comes as cards usually do).
+ */
+function useHarvest(view: View) {
+  const seen = useRef<number | null>(null)
+  const until = useRef(0)
+  const roll = [...view.events].reverse().find((e) => e.k === 'roll')
+  const gain = roll ? view.events.find((e) => e.k === 'gain' && e.n > roll.n) : undefined
+  const key = gain?.n ?? -1
+  if (seen.current !== key) {
+    if (seen.current !== null && gain) until.current = performance.now() + 1500
+    seen.current = key
+  }
+  const from = useMemo(() => {
+    const out = new Map<number, Partial<Record<Good, Spot>>>()
+    if (!roll || roll.k !== 'roll' || !gain) return out
+    const total = roll.dice[0] + roll.dice[1]
+    view.tiles.forEach((t, hi) => {
+      const r = resourceOf(t)
+      if (!r || t.number !== total || hi === view.robber) return
+      const at = hexAt(hi) as Spot
+      for (const v of TOPO.hexes[hi].vertices) {
+        const b = view.buildings[v]
+        if (!b) continue
+        const goods = b.kind === 'city' && view.x ? (Object.keys(CITY_YIELD[t.terrain as Exclude<typeof t.terrain, 'desert'>]) as Good[]) : [r]
+        const m = out.get(b.owner) ?? out.set(b.owner, {}).get(b.owner)!
+        for (const g of goods) m[g] ??= at
+      }
+    })
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  return { from, live: performance.now() < until.current }
+}
+
+/** where each kind in your hand lies: only the kinds you hold, packed from the left in the usual order (a kind you
+ *  have none of: where it would go) */
+export function packHand(slots: Spot[], kinds: readonly Good[], hand: Partial<Hand> | null): Record<Good, Spot> {
+  const out = {} as Record<Good, Spot>
+  let i = 0
+  for (const r of kinds) {
+    out[r] = slots[Math.min(slots.length - 1, i)]
+    if ((hand?.[r] ?? 0) > 0) i++
+  }
+  return out
+}
+
 function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): Spec[] {
+  const { from: harvest, live: fresh } = useHarvest(view)
   const me = view.you
   const pl = me >= 0 ? view.players[me] : null
   const specs: Spec[] = []
@@ -129,17 +181,26 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   const x = view.x
   const K = layout.k
   const kinds: readonly Good[] = x ? GOODS : RESOURCES
-  // your hand: one stack per kind
+  const spots = packHand(layout.hand, kinds, hand)
+  const held = hand ? kinds.filter((r) => hand[r] > 0).length : 0
+  /** a roll's cards: up out of the tile that gave them, once the dice have landed */
+  const fromTile = (p: number, r?: Good) => {
+    if (!fresh) return {}
+    const m = harvest.get(p)
+    const at = m && (r ? m[r] : Object.values(m)[0])
+    return at ? { from: at, fromY: TILE.h - 4, wait: HARVEST } : {}
+  }
+  // your hand: one stack per kind you hold, packed from the left
   if (hand)
-    kinds.forEach((r, i) => {
+    kinds.forEach((r) => {
       const id = `hand:${r}`
-      card({ id, family: 'res', look: `res:${r}`, n: hand[r], home: cardHome(id, layout.hand[i]), enabled: can.hand && hand[r] > 0, onClick: () => on.hand(r) })
+      card({ id, family: 'res', look: `res:${r}`, n: hand[r], home: cardHome(id, spots[r]), enabled: can.hand && hand[r] > 0, onClick: () => on.hand(r), ...fromTile(me, r) })
     })
   // your development cards, by kind; the ones you can play now stand a little proud
   const cards = pl?.cards ?? []
   CARDS.filter((c) => cards.some((x) => x.card === c)).forEach((c, i) => {
     const id = `dev:${c}`
-    card({ id, family: 'dev', look: `dev:${c}`, n: cards.filter((x) => x.card === c).length, home: cardHome(id, layout.dev(i)), lift: can.dev[c] ? 3 : 0, enabled: !!can.dev[c], onClick: () => on.dev(c) })
+    card({ id, family: 'dev', look: `dev:${c}`, n: cards.filter((x) => x.card === c).length, home: cardHome(id, layout.dev(i, held)), lift: can.dev[c] ? 3 : 0, enabled: !!can.dev[c], onClick: () => on.dev(c) })
   })
   // the expansion: your progress cards where development cards would be, by kind (ready to play: a little proud)
   if (x && K && pl?.progress) {
@@ -147,7 +208,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     PROGRESS_CARDS.filter((c) => mineP.some((h) => h.card === c)).forEach((c, i) => {
       const id = `prog:${c}`
       const deck = K.decks[PROGRESS[c].track]
-      card({ id, family: 'prog', look: `prog:${c}`, n: mineP.filter((h) => h.card === c).length, home: cardHome(id, layout.dev(i)), from: deck, to: deck, lift: can.progress[c] ? 3 : 0, enabled: !!can.progress[c], onClick: () => on.progress(c) })
+      card({ id, family: 'prog', look: `prog:${c}`, n: mineP.filter((h) => h.card === c).length, home: cardHome(id, layout.dev(i, held)), from: deck, to: deck, lift: can.progress[c] ? 3 : 0, enabled: !!can.progress[c], onClick: () => on.progress(c) })
     })
   }
   // the bank: a stack of each kind, and its deck (or in the expansion the three progress piles), face down
@@ -169,7 +230,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     const o = view.players[p]
     const parts = seatParts(at, layout.portrait)
     const small = parts.small
-    card({ id: `opp:${p}`, family: 'res', look: 'res:?', n: o.handCount, small, home: cardHome(`opp:${p}`, parts.hand, { faceDown: true, loose: 3 }), hidden: true, from: parts.hand, to: parts.hand, enabled: can.opponents.includes(p), onClick: () => on.opponent(p) })
+    card({ id: `opp:${p}`, family: 'res', look: 'res:?', n: o.handCount, small, home: cardHome(`opp:${p}`, parts.hand, { faceDown: true, loose: 3 }), hidden: true, from: parts.hand, to: parts.hand, enabled: can.opponents.includes(p), onClick: () => on.opponent(p), ...fromTile(p) })
     if (x) card({ id: `oprog:${p}`, family: 'prog', look: 'prog:?', n: o.progressCount, small, home: cardHome(`oprog:${p}`, parts.dev, { faceDown: true, loose: 2.5 }), hidden: true, from: parts.dev, to: parts.dev })
     else card({ id: `odev:${p}`, family: 'dev', look: 'dev:?', n: o.cardCount, small, home: cardHome(`odev:${p}`, parts.dev, { faceDown: true, loose: 2.5 }), hidden: true, from: parts.dev, to: parts.dev })
     card({ id: `kn:${p}`, family: 'dev', look: 'dev:knight', n: o.knights, small, home: cardHome(`kn:${p}`, parts.knights, { loose: 4 }), from: parts.knights, to: parts.knights })
@@ -206,7 +267,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
         const id = `tray:${side}:${r}`
         const at: Spot = [tx + (i - (shown.length - 1) / 2) * (CARD.w * CARD.small + 6), z]
         // an offer to you: your side comes out of your hand, theirs from their cards; what you ask for, from the bank
-        const src = side === 'give' ? layout.hand[kinds.indexOf(r)] : view.offer && view.offer.from !== me ? homeOf(view.offer.from) : layout.bank[kinds.indexOf(r)]
+        const src = side === 'give' ? spots[r] : view.offer && view.offer.from !== me ? homeOf(view.offer.from) : layout.bank[kinds.indexOf(r)]
         card({ id, family: 'res', look: `res:${r}`, n: h[r] ?? 0, small: true, home: cardHome(id, at, { base: TRAY_FLOOR, loose: 1.8 }), from: src, to: src, enabled: can.tray && !tray.locked, onClick: () => (side === 'give' ? on.trayGive(r) : on.trayGet(r)) })
       })
     }
@@ -503,7 +564,7 @@ export function TableView(props: TableProps) {
       <TableTop />
       <BoardContents {...props} arrive={VANISH} />
       <Dice dice={props.dice ?? null} rolls={props.rolls ?? 0} onRoll={props.onRoll} at={layout.dice} event={view.x ? view.x.event : undefined} />
-      <ExpansionTable view={view} layout={layout} can={can.improve} onImprove={on.improve} />
+      <ExpansionTable view={view} layout={layout} can={can.improve} onImprove={on.improve} trayOut={!!tray} />
       {tray && <Tray at={layout.tray} mode={tray.mode} />}
       <Slots {...props} />
       <SupplyMats {...props} />

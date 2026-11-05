@@ -21,19 +21,21 @@ expansion, with our own names and wording throughout:
   everyone whose level in that track is high enough for the red die. Hold four at most; point cards go down at once.
 - The **trader**: put it on a tile beside you to trade that tile's resource 2 for 1, and hold a point while it's yours.
 
-On the table: your knights and walls wait beside your pieces. Your three tracks are desk **flip charts** by the dice:
-each page shows the level reached, the building it has grown to, and what the next step costs; click a chart to take
-its next step and the page goes over the top (everyone else's stand small beside their cards). The barbarians'
-**voyage** is a little sea board above the bank: their longship sails buoy to buoy toward an island with a town, and a
-signpost on the shore is painted with their strength against the knights standing ready. Click a
+On the table: your knights and walls wait beside your pieces. Your three tracks are desk **flip charts** just above
+your hand: each page shows the level reached, the building it has grown to, and what the next step costs; click a
+chart to take its next step and the page goes over the top (everyone else's stand small beside their cards; on a
+phone yours make way for the trade tray while it's out). The barbarians' **raid** is eight big hexes zig-zagging down
+beside the board's upper-left side: out of the fog, six numbered sea hexes, then the landing, a beach with a little
+town painted with their strength against the knights standing ready. Their longship sails a hex on at each ship on
+the event die, and the hexes it has crossed go dark, so how close they are reads at a glance. Click a
 knight on the board to ready it, click a ready one to pick it up and then where it goes. Click a progress card to play
 it; if it needs a target, the line at the top says what to click.
 
 Every move is a plain click or button press: the board only shows spots where a move is legal, and the server
 decides every result. The board is 3D, tipped a little toward you; two real dice are thrown into a tray beside it.
 
-**Everything is on the table.** Your cards lie in front of you in stacks, with your development cards beside them
-and your pieces waiting to be built. The bank sits at the side as one card of each kind, fanned like a hand of cards (a kind's count shows only when it
+**Everything is on the table.** Your cards lie in front of you in stacks, only the kinds you hold, packed from the
+left (no empty places), with your development cards right after them and your pieces waiting to be built. The bank sits at the side as one card of each kind, fanned like a hand of cards (a kind's count shows only when it
 runs low), with its development deck (or the three progress piles), next to the dice
 in their tray. Everyone else's cards lie face down at their places. To do something, you do it to the thing:
 
@@ -44,13 +46,25 @@ in their tray. Everyone else's cards lie face down at their places. To do someth
   check puts it to everyone; the red cross puts it back. An offer to you shows on your own tray: check or cross.
 - **Roll:** click the dice. **Rob:** click a tile, then the cards of the player to steal from.
 
+**A roll is easy to follow.** Once the dice land, the roll shows big beside them for a moment (both dice, the total,
+and in the expansion what the event die means), the tiles with that number light up (the one under the robber is
+ringed red: it gives nothing), and the cards they give come up out of those tiles and fly to whoever gets them.
+
+**An offer to you is said plainly** in the top line ("Ana offers 1 brick for your 1 wool") with Accept and Decline.
+
 On screen there's only whose turn it is, what just happened, the turn button, the tray's check and cross, counts on
 the stacks, everyone's name and points, and a History panel you can open.
 
+**On a phone** every button is at least 44 px (Apple's and Google's guidance for fingers), however small the table is
+drawn; the tray's buttons, with words, sit down by your thumb next to the turn button. A finger only ever taps:
+nothing on the table is picked up by touch, and a tap may wobble a little. There's no hover on a phone, so placing a
+piece takes two taps: the first shows it there, the second (on it) places it, and the reach for a spot is a
+fingertip wide on screen.
+
 **The things on the table are real objects.** Every card and every piece waiting in your supply is a body in a
 physics world (Rapier). When the game changes, the cards that must move fly to their new places and settle there:
-they land on their stacks, a stolen card crosses the table and turns over. You can pick any of them up with the mouse,
-carry it, drop it, or toss it into the others (a card from your hand dropped on the tray goes on the tray). Whatever
+they land on their stacks, a stolen card crosses the table and turns over. You can pick any of them up with the mouse
+(not by touch), carry it, drop it, or toss it into the others (a card from your hand dropped on the tray goes on the tray). Whatever
 comes to rest out of place goes back home a moment later. The board is not physical: pieces on it and the robber are
 fixed where they stand. Click a piece in your supply, then a spot, and it flies over and is set down there. The dice are a real throw too,
 worked out the moment they're rolled and seeded by the roll's number, so everyone sees the same throw; once it lands,

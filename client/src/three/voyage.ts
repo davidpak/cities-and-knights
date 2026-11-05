@@ -1,16 +1,15 @@
 /**
- * The expansion's two table pieces, as shapes: the barbarians' longship (and its island), and the city tracks' flip
+ * The expansion's two table pieces, as shapes: the barbarians' longship (and a watchtower), and the city tracks' flip
  * charts. Built once, from parts, in millimetres.
  *
  *   longship    a long low hull, narrowing to both ends and rising at them, a curled prow and stern, a mast and a
  *               square sail braced at an angle (so it shows from above), a row of round shields down each side
- *   island      a sandy mound with a green top, a little town, a watchtower
- *   buoy        a small turned marker for each step of the voyage
+ *   watchtower  a tapered tower with a pointed cap, in the town at the barbarians' landing
  *   flip chart  a wooden A-frame stand with spiral rings across its top; its pages hang down the front, one per
  *               level, and go over the top when you take the next step
  */
 import {
-  BoxGeometry, BufferGeometry, CatmullRomCurve3, CylinderGeometry, LatheGeometry, Matrix4, PlaneGeometry, TorusGeometry, TubeGeometry, Vector2, Vector3,
+  BoxGeometry, BufferGeometry, CatmullRomCurve3, CylinderGeometry, Matrix4, PlaneGeometry, TorusGeometry, TubeGeometry, Vector3,
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
@@ -93,18 +92,8 @@ export function shieldSpots() {
   return out
 }
 
-// ---------------------------------------------------------------- the island at the end of the voyage
+// ---------------------------------------------------------------- the town at the barbarians' landing
 
-export const ISLAND = { r: 26, h: 6 } // [D]
-export const islandGeo = memo(() =>
-  new LatheGeometry(
-    [[0, 0], [ISLAND.r, 0], [ISLAND.r * 0.92, 2.2], [ISLAND.r * 0.7, ISLAND.h * 0.8], [ISLAND.r * 0.35, ISLAND.h], [0, ISLAND.h + 0.6]].map(([x, y]) => new Vector2(x, y)),
-    28,
-  ),
-)
-export const meadowGeo = memo(() =>
-  new LatheGeometry([[0, 0], [ISLAND.r * 0.62, 0], [ISLAND.r * 0.5, 1.6], [0, 2.4]].map(([x, y]) => new Vector2(x, y)), 24).translate(-3, ISLAND.h - 0.8, -2),
-)
 /** a watchtower: a tapered tower with a pointed cap */
 export const towerGeo = memo(() =>
   mergeGeometries([
@@ -112,15 +101,6 @@ export const towerGeo = memo(() =>
     plain(new CylinderGeometry(0, 4, 5.5, 8).translate(0, 17.7, 0)),
   ])!,
 )
-/** the signpost on the shore: a post and a board, tipped back to face you */
-export const postGeo = memo(() => new BoxGeometry(1.6, 16, 1.6).translate(0, 8, 0))
-export const plaqueGeo = memo(() => new BoxGeometry(30, 17, 1.2))
-
-/** a buoy: a little turned marker */
-export const buoyGeo = memo(() =>
-  new LatheGeometry([[0, 0], [3.2, 0], [3.6, 1.8], [2.2, 4.6], [1.2, 7.4], [1.9, 8.4], [0, 9.6]].map(([x, y]) => new Vector2(x, y)), 12),
-)
-
 // ---------------------------------------------------------------- flip charts
 
 /** a flip chart's stand: two boards meeting at the top (the front leans back so its page faces you) */

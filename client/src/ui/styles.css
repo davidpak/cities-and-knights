@@ -199,6 +199,14 @@ input {
   position: absolute !important;
   inset: 0;
 }
+/* the table takes every touch itself: no page zoom or scroll, no long-press menu, no text selection */
+.game {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
 /*
  * Everything over the table is one kind of label: cream card stock, a thin ink edge, the slab serif. Sizes follow
  * --k (pixels per millimetre of table, set by the game), so each label keeps its place on the table on any screen.
@@ -231,12 +239,55 @@ input {
   z-index: 3;
 }
 .todo {
-  font-size: calc(var(--u) * 17);
-  padding: calc(var(--u) * 3) calc(var(--u) * 14);
+  font-size: max(calc(var(--u) * 17), 15px);
+  padding: max(calc(var(--u) * 3), 3px) max(calc(var(--u) * 14), 12px);
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+.todo .bundle {
+  display: inline-flex;
+}
+.todo .for {
+  font-weight: 500;
+}
+/* an offer to you: the answer right there in the line */
+.todo.offer {
+  pointer-events: auto;
+  flex-wrap: wrap;
+  justify-content: center;
+  white-space: normal;
+  max-width: calc(100vw - 120px);
+  padding: 6px 8px 6px 14px;
+}
+.answer {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: 6px;
+}
+.ans {
+  min-height: 44px;
+  min-width: 88px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+  color: #fff;
+  touch-action: manipulation;
+}
+.ans.ok {
+  background: #2f9e57;
+}
+.ans.no {
+  background: #d2452f;
+}
+.ans:disabled {
+  opacity: 0.4;
 }
 .happened {
-  font-size: calc(var(--u) * 13.5);
+  font-size: max(calc(var(--u) * 13.5), 12px);
   font-weight: 500;
   padding: calc(var(--u) * 2) calc(var(--u) * 10);
   white-space: nowrap;
@@ -260,45 +311,19 @@ input {
   to { opacity: 1; transform: none; }
 }
 
-/* the expansion: putting a progress card back, and the barbarians' count beside their lane */
+/* the expansion: putting a progress card back */
 .todo-x {
   margin-left: calc(var(--u) * 10);
   border: none;
   background: #d2452f;
   color: #fff;
   border-radius: 50%;
-  width: calc(var(--u) * 22);
-  height: calc(var(--u) * 22);
-  font-size: calc(var(--u) * 12);
+  width: max(calc(var(--u) * 22), 36px);
+  height: max(calc(var(--u) * 22), 36px);
+  font-size: max(calc(var(--u) * 12), 14px);
   pointer-events: auto;
   vertical-align: middle;
 }
-.lane-tag {
-  position: absolute;
-  transform: translate(-50%, 90%);
-  white-space: nowrap;
-  font-size: calc(var(--u) * 12.5);
-  padding: calc(var(--u) * 1) calc(var(--u) * 8);
-  background: var(--paper);
-  border-radius: calc(var(--u) * 4);
-  color: var(--ink);
-}
-.track-tag {
-  position: absolute;
-  transform: translate(-100%, -50%);
-  white-space: nowrap;
-  font-size: calc(var(--u) * 11.5);
-  font-weight: 700;
-  color: var(--paper);
-  text-shadow: none;
-}
-.lane-tag .ok {
-  color: #2f8a4f;
-}
-.lane-tag .no {
-  color: #c4412b;
-}
-
 /* pinned to the table */
 .labels {
   position: absolute;
@@ -309,14 +334,14 @@ input {
 .count {
   position: absolute;
   transform: translate(-50%, -50%);
-  min-width: calc(var(--u) * 20);
-  height: calc(var(--u) * 20);
+  min-width: max(calc(var(--u) * 20), 17px);
+  height: max(calc(var(--u) * 20), 17px);
   padding: 0 calc(var(--u) * 5);
-  border-radius: calc(var(--u) * 10);
+  border-radius: 99px;
   background: var(--ink);
   color: var(--paper);
   font-weight: 700;
-  font-size: calc(var(--u) * 12);
+  font-size: max(calc(var(--u) * 12), 11px);
   display: grid;
   place-items: center;
 }
@@ -327,7 +352,7 @@ input {
   position: absolute;
   transform: translate(-50%, -50%);
   white-space: nowrap;
-  font-size: calc(var(--u) * 14);
+  font-size: max(calc(var(--u) * 14), 11px);
   padding: calc(var(--u) * 1) calc(var(--u) * 9) calc(var(--u) * 1) calc(var(--u) * 7);
   display: inline-flex;
   align-items: center;
@@ -372,12 +397,16 @@ input {
   gap: calc(var(--u) * 10);
   z-index: 3;
 }
+.marks.left {
+  transform: translate(-100%, -50%);
+}
 .mark-btn {
-  width: calc(var(--u) * 44);
-  height: calc(var(--u) * 44);
+  width: max(calc(var(--u) * 44), 44px);
+  height: max(calc(var(--u) * 44), 44px);
   border-radius: 50%;
   border: none;
-  font-size: calc(var(--u) * 22);
+  touch-action: manipulation;
+  font-size: max(calc(var(--u) * 22), 20px);
   font-weight: 700;
   line-height: 1;
   color: #fff;
@@ -404,26 +433,46 @@ input {
 /* the turn button, and the history */
 .corner {
   position: absolute;
-  right: calc(var(--u) * 14);
-  bottom: calc(var(--u) * 14);
+  right: max(calc(var(--u) * 14), 10px);
+  bottom: max(calc(var(--u) * 14), 10px);
   z-index: 3;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
 }
 .corner .stamp-btn {
-  font-size: calc(var(--u) * 17);
-  padding: calc(var(--u) * 7) calc(var(--u) * 18);
+  font-size: max(calc(var(--u) * 17), 16px);
+  min-height: 48px;
+  min-width: 88px;
+  padding: 0 max(calc(var(--u) * 18), 16px);
+  touch-action: manipulation;
+}
+.corner .stamp-btn.ok {
+  background: #2f9e57;
+  color: #fff;
+}
+.corner .stamp-btn.no {
+  background: #d2452f;
+  color: #fff;
+}
+.corner .stamp-btn:disabled {
+  opacity: 0.45;
 }
 .corner .stamp-btn:active:not(:disabled) {
   transform: translateY(1px);
 }
 .history-btn {
   position: absolute;
-  top: calc(var(--u) * 10);
-  right: calc(var(--u) * 12);
+  top: max(calc(var(--u) * 10), 6px);
+  right: max(calc(var(--u) * 12), 6px);
   z-index: 4;
-  font-size: calc(var(--u) * 13);
-  padding: calc(var(--u) * 3) calc(var(--u) * 10);
+  font-size: max(calc(var(--u) * 13), 13px);
+  min-height: 36px;
+  padding: 0 max(calc(var(--u) * 10), 10px);
+  touch-action: manipulation;
 }
 .drawer {
+  touch-action: pan-y;
   position: absolute;
   top: calc(var(--u) * 46);
   right: calc(var(--u) * 12);
@@ -739,3 +788,93 @@ input {
   }
 }
 
+
+/* the roll, big in the middle of the board for a moment */
+.roll-flash {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: none;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 10px 18px 12px;
+  border-radius: 14px;
+  background: rgba(42, 29, 19, 0.82);
+  color: var(--paper);
+  animation: roll-flash 1.5s ease-out forwards;
+}
+.rf-who {
+  font-size: 15px;
+  font-weight: 700;
+}
+.rf-who .who {
+  color: var(--paper);
+}
+.rf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rf-total {
+  font-size: 64px;
+  line-height: 1;
+  min-width: 1.2em;
+  text-align: center;
+}
+.rf-total.seven {
+  color: #ff8a7a;
+}
+.rf-note {
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: #9c2f24;
+  color: #fff;
+}
+.die {
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
+  background: var(--paper);
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 6px;
+  place-items: center;
+}
+.die i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.die.red {
+  background: #c8453c;
+}
+.die.red i {
+  background: #fff4e6;
+}
+.die.yellow {
+  background: #f0c94a;
+}
+@keyframes roll-flash {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+  20% { transform: translate(-50%, -50%) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .roll-flash { animation: none; }
+}
+@media (max-width: 600px) {
+  .roll-flash { padding: 6px 12px 8px; gap: 4px; }
+  .rf-who, .rf-note { font-size: 13px; }
+  .rf-total { font-size: 44px; }
+  .die { width: 34px; height: 34px; padding: 4px; border-radius: 7px; }
+  .die i { width: 7px; height: 7px; }
+}

@@ -43,6 +43,10 @@ export type PileSpec = {
   /** where new things come from when no loose one fits (else from above); where leftovers go (else up and away) */
   from?: [number, number]
   to?: [number, number]
+  /** new things start at this height there (below a tile's top: they come up out of it) */
+  fromY?: number
+  /** new things wait this long (s) before they set off (cards from a roll wait for the dice) */
+  wait?: number
   /** leftovers arrive there at this height and turned this way (a piece going onto the board) */
   toY?: number
   toYaw?: number
@@ -351,7 +355,8 @@ export class Table {
           this.place(t)
           continue
         }
-        if (fresh.has(t) || (moved && t.mode !== 'held') || (t.mode === 'fly' && t.fly?.vanish)) this.flyTo(t, want, now + Math.min(0.6, stagger++ * 0.045), false)
+        if (fresh.has(t) || (moved && t.mode !== 'held') || (t.mode === 'fly' && t.fly?.vanish))
+          this.flyTo(t, want, now + Math.min(0.6, stagger++ * 0.045) + (fresh.has(t) ? spec.wait ?? 0 : 0), false)
       }
     }
     // nothing wants these: back where they came from, and gone
@@ -370,7 +375,7 @@ export class Table {
     const home = poseOf(h)
     const start = clone(home)
     if (!first) {
-      if (spec.from) start.p.set(spec.from[0], 30, spec.from[1])
+      if (spec.from) start.p.set(spec.from[0], spec.fromY ?? 30, spec.from[1])
       else start.p.y += 220
     }
     const t: Thing = {

@@ -195,7 +195,8 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
   })
 
   // ---- pointing: hover, click, carry
-  const down = useRef<{ thing: Thing; x: number; y: number; held: boolean } | null>(null)
+  /** (a finger only ever taps: nothing is picked up by touch, and a tap may wobble a little) */
+  const down = useRef<{ thing: Thing; x: number; y: number; held: boolean; touch: boolean; far: boolean } | null>(null)
   const ray = useMemo(() => new Raycaster(), [])
   const plane = useMemo(() => new Plane(new Vector3(0, 1, 0), 0), [])
   const hit = useMemo(() => new Vector3(), [])
@@ -215,7 +216,12 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
     const move = (e: PointerEvent) => {
       const d = down.current
       if (!d) return
-      if (!d.held && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6 && grabbable(d.thing)) {
+      const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y)
+      if (d.touch) {
+        if (moved > 28) d.far = true
+        return
+      }
+      if (!d.held && moved > 6 && grabbable(d.thing)) {
         const t = table.grab(d.thing)
         d.held = !!t
         if (t) {
@@ -244,6 +250,7 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
         kick()
         return
       }
+      if (d.far) return
       const spec = specOf(d.thing)
       if (spec?.enabled && spec.onClick) spec.onClick()
     }
@@ -285,8 +292,11 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
       const t = thingOf(k, e)
       const spec = specOf(t)
       if (!t || (!spec?.enabled && !grabbable(t))) return
+      const touch = e.nativeEvent.pointerType === 'touch'
+      // (on a phone only things to click take a tap: a stack you can't use lets the tap through to the table)
+      if (touch && !spec?.enabled) return
       e.stopPropagation()
-      down.current = { thing: t, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, held: false }
+      down.current = { thing: t, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, held: false, touch, far: false }
     },
   })
 

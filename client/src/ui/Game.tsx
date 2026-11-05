@@ -8,14 +8,15 @@ import {
   affordable, canAct, canPlay, chaseSpots, citySpots, improveCost, knightMoves, knightSpots, pickTargets, promoteSpots,
   roadSpots, robberSpots, settlementSpots, tradeRatios, wallSpots, type PickNeed, type View,
 } from '../../../shared/engine.ts'
-import { COST, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
-import { PLAYER } from '../lib/palette.ts'
+import { BARBARIAN_STEPS, COST, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
+import { PLAYER, TRACK_COLOR } from '../lib/palette.ts'
 import { act, room, toast as say, useStore } from '../net.ts'
-import type { PickKind, Picking } from '../three/Board.tsx'
+import { GLOW_AT, type PickKind, type Picking } from '../three/Board.tsx'
 import { useProjector } from '../three/labels.ts'
-import { TableView, type TrayContents } from '../three/table/Table.tsx'
+import { TableView, packHand, type TrayContents } from '../three/table/Table.tsx'
 import { CARD, TRAY, layoutFor, seatParts, type Spot } from '../three/table/layout.ts'
 import { publishState } from '../three/TestHook.tsx'
+import { Bundle } from './Cards.tsx'
 import { Chronicle, describe, Who } from './Chronicle.tsx'
 
 type Build = 'road' | 'settlement' | 'city' | 'knight' | 'wall'
@@ -72,6 +73,8 @@ export function Game({ view }: { view: View }) {
   const [plenty, setPlenty] = useState<Resource[] | null>(null)
   const [monopoly, setMonopoly] = useState(false)
   const [history, setHistory] = useState(false)
+  /** a finger has shown a piece on the board: tap it again to place it */
+  const [armed, setArmed] = useState(false)
   /** the expansion: one of your ready knights, picked up to move (or to chase the robber) */
   const [selected, setSelected] = useState<number | null>(null)
 
@@ -148,26 +151,6 @@ export function Game({ view }: { view: View }) {
     if (main && myKnights.length && !deal) return { kind: 'quiet', spots: myKnights }
     return null
   }, [mine, main, ph, building, view, me, selected, deal])
-  useEffect(
-    () =>
-      publishState({
-        view,
-        picking,
-        // where things are on the table, for browser tests
-        spots: {
-          hand: layout.hand,
-          bank: layout.bank,
-          deck: layout.deck,
-          dev: [0, 1, 2, 3, 4].map(layout.dev),
-          wants: layout.hand.map((_, i) => layout.wants(i)),
-          supply: layout.supply,
-          k: layout.k,
-          seats: layout.seats.map((s) => ({ p: s.p, hand: seatParts(s.at).hand })),
-          tray: layout.tray,
-        },
-      }),
-    [view, picking, layout],
-  )
 
   const onPick = async (kind: PickKind, id: number) => {
     if (pickPhase) {
@@ -225,6 +208,32 @@ export function Game({ view }: { view: View }) {
   // what's on the tray came out of your hand (an offer to you shows what you'd hand over)
   const onTray = owe ? drop : myOffer ? myOffer.give : toMe ? toMe.get : deal ? deal.give : {}
   const shownHand = hand ? minus(hand, onTray) : null
+  useEffect(
+    () =>
+      publishState({
+        view,
+        picking,
+        // where things are on the table, for browser tests
+        spots: {
+          // (by kind, in the usual order: where each kind you hold lies now)
+          hand: (() => {
+            const kinds = view.x ? GOODS : RESOURCES
+            const h = shownHand
+            const at = packHand(layout.hand, kinds, h)
+            return kinds.map((r) => at[r])
+          })(),
+          bank: layout.bank,
+          deck: layout.deck,
+          dev: [0, 1, 2, 3, 4].map((i) => layout.dev(i, shownHand ? (view.x ? GOODS : RESOURCES).filter((r) => shownHand[r] > 0).length : 0)),
+          wants: layout.hand.map((_, i) => layout.wants(i)),
+          supply: layout.supply,
+          k: layout.k,
+          seats: layout.seats.map((s) => ({ p: s.p, hand: seatParts(s.at).hand })),
+          tray: layout.tray,
+        },
+      }),
+    [view, picking, layout, shownHand],
+  )
 
   const on = {
     hand: (r: Good) => {
@@ -317,6 +326,8 @@ export function Game({ view }: { view: View }) {
     },
   }
 
+  const acts = trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop })
+
   // keys: R roll, E end turn, Esc put everything back
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
@@ -358,6 +369,7 @@ export function Game({ view }: { view: View }) {
         picking={picking}
         you={me}
         onPick={onPick}
+        onArm={setArmed}
         dice={dice}
         rolls={view.rolls}
         onRoll={mine && ph.kind === 'roll' ? () => act({ type: 'roll' }) : undefined}
@@ -386,30 +398,34 @@ export function Game({ view }: { view: View }) {
         on={on}
       />
 
-      <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} />
+      <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} toMe={toMe} acts={acts} armed={armed && !!picking} corner={layout.marks === 'corner'} />
 
       <Labels view={view} layout={layout} hand={shownHand} />
 
-      {tray && (
-        <TrayMarks
-          view={view}
-          layout={layout}
-          deal={deal}
-          setDeal={setDeal}
-          toMe={toMe}
-          myOffer={myOffer}
-          owe={owe}
-          drop={drop}
-        />
-      )}
+      {/* (an offer to you is answered in the top line, in words) */}
+      {tray && layout.marks !== 'corner' && !toMe && <TrayMarks layout={layout} acts={acts} />}
+
+      <RollFlash view={view} layout={layout} />
 
       <div className="corner">
+        {/* on a phone the tray's buttons are here, big, with words */}
+        {tray && layout.marks === 'corner' && acts.no && (
+          <button className="stamp-btn big no" onClick={acts.no}>
+            {acts.noWord}
+          </button>
+        )}
+        {tray && layout.marks === 'corner' && acts.ok && (
+          <button className="stamp-btn go big ok" disabled={!acts.okLive} onClick={acts.ok}>
+            {acts.okWord}
+          </button>
+        )}
         {mine && ph.kind === 'roll' && (
           <button className="stamp-btn go big" onClick={() => act({ type: 'roll' })}>
             Roll
           </button>
         )}
-        {main && (
+        {/* (on a phone, while the tray's buttons are down here, they take the turn button's place) */}
+        {main && !(tray && layout.marks === 'corner' && (acts.ok || acts.no)) && (
           <button className="stamp-btn go big" disabled={!!myOffer} onClick={() => act({ type: 'endTurn' })}>
             End turn
           </button>
@@ -436,8 +452,8 @@ export function Game({ view }: { view: View }) {
 
 // ---------------------------------------------------------------- the two lines at the top
 
-function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean; owe: number; building: Build | null; selected: number | null; progressOwed: number }) {
-  const { view, plenty, monopoly, owe, building, selected, progressOwed } = props
+function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean; owe: number; building: Build | null; selected: number | null; progressOwed: number; toMe: View['offer']; acts: TrayActs; armed: boolean; corner: boolean }) {
+  const { view, plenty, monopoly, owe, building, selected, progressOwed, toMe, acts, armed, corner } = props
   const ph = view.phase
   const mine = view.current === view.you
   const who = <Who view={view} p={view.current} you={false} />
@@ -464,11 +480,33 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   }
   if (ph.kind === 'progressDiscard') todo = progressOwed ? `Put back ${progressOwed} progress card${progressOwed > 1 ? 's' : ''} (four at most)` : 'Waiting for progress cards to be put back'
   if (ph.kind === 'over') todo = <>{<Who view={view} p={ph.winner} />} won!</>
+  if (armed) todo = 'Tap it again to confirm'
+  // an offer to you: what you'd get and what you'd give, said plainly, and the answer right there
+  let answer: React.ReactNode = null
+  if (toMe) {
+    todo = (
+      <>
+        <Who view={view} p={toMe.from} you={false} /> offers <Bundle of={toMe.give} /> <span className="for">for your</span> <Bundle of={toMe.get} />
+      </>
+    )
+    // (on a phone the answer is down by your thumb, in the corner)
+    answer = corner ? null : (
+      <span className="answer">
+        <button className="ans no" onClick={acts.no ?? undefined}>
+          Decline
+        </button>
+        <button className="ans ok" disabled={!acts.okLive} onClick={acts.ok ?? undefined}>
+          Accept
+        </button>
+      </span>
+    )
+  }
   const last = [...view.events].reverse().find((e) => e.k !== 'turn' && e.k !== 'answer')
   return (
     <div className="lines">
-      <div className={`todo ${mine ? 'mine' : ''}`}>
+      <div className={`todo ${mine ? 'mine' : ''} ${toMe ? 'offer' : ''}`}>
         {todo}
+        {answer}
         {cancel && (
           <button className="todo-x" onClick={() => act({ type: 'cancelPick' })} aria-label="Put it back">
             ✕
@@ -503,7 +541,10 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
   const pl = me >= 0 ? view.players[me] : null
   return (
     <div className="labels">
-      {hand && (view.x ? GOODS : RESOURCES).map((r, i) => count(`h${r}`, layout.hand[i], hand[r]))}
+      {hand && (() => {
+        const spots = packHand(layout.hand, view.x ? GOODS : RESOURCES, hand)
+        return (view.x ? GOODS : RESOURCES).map((r) => count(`h${r}`, spots[r], hand[r]))
+      })()}
       {/* the bank shows one card of each kind; only a kind running low says how many are left */}
       {(view.x ? GOODS : RESOURCES).map((r, i) =>
         view.bank[r] > 0 && view.bank[r] <= 4 ? (
@@ -540,41 +581,122 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
 
 // ---------------------------------------------------------------- the tray's buttons
 
-/** the tray's two marks: a green check and a red cross, beside it */
-function TrayMarks({ view, layout, deal, setDeal, toMe, myOffer, owe, drop }: { view: View; layout: ReturnType<typeof layoutFor>; deal: Deal | null; setDeal: (d: Deal | null) => void; toMe: View['offer']; myOffer: View['offer']; owe: number; drop: Hand }) {
-  const project = useProjector()
-  const [x, y] = project(layout.tray[0] + TRAY.w / 2 + 10, 0, layout.tray[1])
-  const style = { left: x, top: y }
+type TrayActs = { ok: (() => void) | null; no: (() => void) | null; okLive: boolean; okWord: string; noWord: string }
+/** what the tray's two buttons do now (and what they say, where there's room to say it) */
+function trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop }: { view: View; deal: Deal | null; setDeal: (d: Deal | null) => void; toMe: View['offer']; myOffer: View['offer']; owe: number; drop: Hand }): TrayActs {
   const me = view.you
-  let ok: (() => void) | null = null
-  let no: (() => void) | null = null
-  let okLive = true
-  if (toMe) {
-    ok = () => act({ type: 'acceptOffer' })
-    okLive = GOODS.every((r) => (view.players[me].hand?.[r] ?? 0) >= (toMe.get[r] ?? 0))
-    no = () => act({ type: 'declineOffer' })
-  } else if (myOffer) {
-    no = () => act({ type: 'cancelOffer' })
-  } else if (owe) {
-    ok = () => act({ type: 'discard', cards: drop })
-    okLive = handSize(drop) === owe
-  } else if (deal) {
+  if (toMe)
+    return {
+      ok: () => act({ type: 'acceptOffer' }),
+      okLive: GOODS.every((r) => (view.players[me].hand?.[r] ?? 0) >= (toMe.get[r] ?? 0)),
+      okWord: 'Accept',
+      no: () => act({ type: 'declineOffer' }),
+      noWord: 'Decline',
+    }
+  if (myOffer) return { ok: null, okLive: false, okWord: '', no: () => act({ type: 'cancelOffer' }), noWord: 'Take back' }
+  if (owe) return { ok: () => act({ type: 'discard', cards: drop }), okLive: handSize(drop) === owe, okWord: `Discard ${owe}`, no: null, noWord: '' }
+  if (deal)
     // the check puts it to everyone; to offer one player, click their cards
-    ok = () => act({ type: 'offerTrade', give: deal.give, get: deal.get })
-    okLive = handSize(deal.give) > 0 && handSize(deal.get) > 0 && !GOODS.some((r) => deal.give[r] && deal.get[r])
-    no = () => setDeal(null)
-  }
+    return {
+      ok: () => act({ type: 'offerTrade', give: deal.give, get: deal.get }),
+      okLive: handSize(deal.give) > 0 && handSize(deal.get) > 0 && !GOODS.some((r) => deal.give[r] && deal.get[r]),
+      okWord: 'Offer',
+      no: () => setDeal(null),
+      noWord: 'Clear',
+    }
+  return { ok: null, no: null, okLive: false, okWord: '', noWord: '' }
+}
+
+/** the tray's two marks: a green check and a red cross, beside it */
+function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; acts: TrayActs }) {
+  const project = useProjector()
+  const side = layout.marks === 'left' ? -1 : 1
+  const [x, y] = project(layout.tray[0] + side * (TRAY.w / 2 + 10), 0, layout.tray[1])
+  const { ok, no, okLive } = acts
   return (
-    <div className="marks" style={style}>
+    <div className={`marks ${side < 0 ? 'left' : ''}`} style={{ left: x, top: y }}>
       {ok && (
-        <button className="mark-btn ok" disabled={!okLive} onClick={ok} aria-label="Yes">
+        <button className="mark-btn ok" disabled={!okLive} onClick={ok} aria-label={acts.okWord}>
           ✓
         </button>
       )}
       {no && (
-        <button className="mark-btn no" onClick={no} aria-label="No">
+        <button className="mark-btn no" onClick={no} aria-label={acts.noWord}>
           ✕
         </button>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- the roll, big, for a moment
+
+const PIP_AT: Record<number, [number, number][]> = {
+  1: [[1, 1]],
+  2: [[0, 0], [2, 2]],
+  3: [[0, 0], [1, 1], [2, 2]],
+  4: [[0, 0], [2, 0], [0, 2], [2, 2]],
+  5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]],
+  6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]],
+}
+function DieFace({ v, kind }: { v: number; kind: 'plain' | 'red' | 'yellow' }) {
+  return (
+    <span className={`die ${kind}`}>
+      {PIP_AT[v].map(([c, r], i) => (
+        <i key={i} style={{ gridColumn: c + 1, gridRow: r + 1 }} />
+      ))}
+    </span>
+  )
+}
+const FACE_WORD: Record<string, string> = { ship: 'The barbarians sail on', trade: 'Trade cards', politics: 'Politics cards', science: 'Science cards' }
+
+/** once the dice have landed: what was rolled, big in the middle, for a moment (the dice in their tray are small) */
+function RollFlash({ view, layout }: { view: View; layout: ReturnType<typeof layoutFor> }) {
+  const project = useProjector()
+  const last = [...view.events].reverse().find((e) => e.k === 'roll')
+  const seen = useRef(last?.n ?? -1)
+  const [shown, setShown] = useState<Extract<View['events'][number], { k: 'roll' }> | null>(null)
+  useEffect(() => {
+    if (!last || last.k !== 'roll' || last.n <= seen.current) return
+    seen.current = last.n
+    const a = window.setTimeout(() => setShown(last), GLOW_AT * 1000 - 80)
+    const b = window.setTimeout(() => setShown((s) => (s?.n === last.n ? null : s)), GLOW_AT * 1000 + 1500)
+    return () => {
+      clearTimeout(a)
+      clearTimeout(b)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [last?.n])
+  if (!shown) return null
+  const [a, b] = shown.dice
+  const total = a + b
+  const x = !!view.x
+  const face = shown.event
+  const note =
+    total === 7
+      ? 'Robber!'
+      : face && face !== 'ship'
+        ? `${FACE_WORD[face]} for level ${Math.max(1, a - 1)} and up`
+        : face === 'ship'
+          ? view.x?.barbarian
+            ? `${FACE_WORD.ship}: ${Math.min(view.x.barbarian, BARBARIAN_STEPS)} of ${BARBARIAN_STEPS}`
+            : 'The barbarians land!'
+          : null
+  const [fx, fy] = project(layout.flash[0], 10, layout.flash[1])
+  return (
+    <div className="roll-flash" key={shown.n} aria-live="polite" style={{ left: fx, top: fy }}>
+      <div className="rf-who">
+        <Who view={view} p={shown.p} />
+      </div>
+      <div className="rf-row">
+        <DieFace v={a} kind={x ? 'red' : 'plain'} />
+        <DieFace v={b} kind={x ? 'yellow' : 'plain'} />
+        <b className={`rf-total ${total === 7 ? 'seven' : ''}`}>{total}</b>
+      </div>
+      {note && (
+        <div className="rf-note" style={face && face !== 'ship' && total !== 7 ? { background: TRACK_COLOR[face] } : undefined}>
+          {note}
+        </div>
       )}
     </div>
   )

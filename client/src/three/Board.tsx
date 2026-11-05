@@ -5,9 +5,9 @@
  *   - shadows are worked out again only when a piece moves, not every frame
  *   - picking uses one flat plane and snaps to the nearest legal spot, so there are no tiny targets to hit
  */
-import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, RingGeometry, type InstancedMesh, type OrthographicCamera } from 'three'
+import { AdditiveBlending, CircleGeometry, MeshBasicMaterial, MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, RingGeometry, type InstancedMesh, type OrthographicCamera } from 'three'
 import { TOPO } from '../../../shared/board.ts'
 import type { Building, GameEvent, Harbor, Tile } from '../../../shared/engine.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
@@ -44,6 +44,8 @@ export type BoardProps = {
   events?: GameEvent[]
   /** the expansion's pieces on the board */
   extras?: BoardExtras | null
+  /** (a finger has shown a piece somewhere: the next tap on it places it) */
+  onArm?: (armed: boolean) => void
 }
 
 const islandMat = new MeshLambertMaterial({ vertexColors: true })
@@ -129,13 +131,23 @@ function Markers({ kind, spots }: { kind: PickKind; spots: number[] }) {
   )
 }
 
-function Picker({ picking, color, onPick }: { picking: NonNullable<Picking>; color: PlayerColor; onPick?: BoardProps['onPick'] }) {
+/**
+ * Picking a spot: the nearest legal one to the pointer, within reach (at least a fingertip's width on screen).
+ * With a mouse, hovering shows the piece and a click places it; with a finger there's no hover, so the first tap
+ * shows it there and a second tap on it places it (a tap elsewhere moves it).
+ */
+function Picker({ picking, color, onPick, onArm }: { picking: NonNullable<Picking>; color: PlayerColor; onPick?: BoardProps['onPick']; onArm?: BoardProps['onArm'] }) {
   const [hover, setHover] = useState<number | null>(null)
   const { kind, spots } = picking
+  const { camera } = useThree()
+  const touch = useRef(false)
   useEffect(() => setHover(null), [kind, spots])
+  useEffect(() => onArm?.(touch.current && hover !== null), [hover, onArm])
+  useEffect(() => () => onArm?.(false), [onArm])
   const nearest = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
     let best: number | null = null
-    let bestD = REACH[kind]
+    // (an orthographic camera's zoom is pixels per millimetre)
+    let bestD = Math.max(REACH[kind], (touch.current ? 26 : 12) / Math.max(0.05, camera.zoom))
     for (const id of spots) {
       const [x, z] = spotAt(kind, id)
       const d = Math.hypot(e.point.x - x, e.point.z - z)
@@ -153,14 +165,28 @@ function Picker({ picking, color, onPick }: { picking: NonNullable<Picking>; col
       <mesh
         position={[0, TILE.h + 1, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
+        onPointerDown={(e) => {
+          touch.current = e.nativeEvent.pointerType === 'touch'
+        }}
         onPointerMove={(e) => {
+          if (e.nativeEvent.pointerType === 'touch') return
+          touch.current = false
           const n = nearest(e)
           if (n !== hover) setHover(n)
           document.body.style.cursor = n !== null ? 'pointer' : ''
         }}
-        onPointerLeave={() => (setHover(null), (document.body.style.cursor = ''))}
+        onPointerLeave={(e) => {
+          if (e.nativeEvent.pointerType === 'touch') return
+          setHover(null)
+          document.body.style.cursor = ''
+        }}
         onClick={(e) => {
           const n = nearest(e)
+          if (touch.current && n !== hover) {
+            // a finger: show it here first
+            setHover(n)
+            return
+          }
           if (n === null) return
           setHover(null)
           document.body.style.cursor = ''
@@ -219,8 +245,77 @@ function Pulses({ events, colors }: { events: GameEvent[]; colors: PlayerColor[]
   )
 }
 
+/** after a roll, once the dice have landed: the tiles with that number light up for a moment (a tile the robber
+ *  sits on, ringed red instead: it gives nothing) */
+export const GLOW_AT = 0.5
+const GLOW_FOR = 1.9
+const GLOW_FILL = new CircleGeometry(1, 6, Math.PI / 2).rotateX(-Math.PI / 2)
+const GLOW_RING = new RingGeometry(0.84, 1, 6, 1, Math.PI / 2).rotateX(-Math.PI / 2)
+function RollGlow({ events, tiles, robber }: { events: GameEvent[]; tiles: Tile[]; robber: number }) {
+  const last = [...events].reverse().find((e) => e.k === 'roll')
+  const seen = useRef(last?.n ?? -1)
+  const [lit, setLit] = useState<{ n: number; t0: number; good: number[]; blocked: number[] } | null>(null)
+  const mats = useMemo(
+    () => ({
+      fill: new MeshBasicMaterial({ color: '#fff2c2', transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending }),
+      ring: new MeshBasicMaterial({ color: '#ffcf40', transparent: true, opacity: 0, depthWrite: false }),
+      shade: new MeshBasicMaterial({ color: '#2a1410', transparent: true, opacity: 0, depthWrite: false }),
+      red: new MeshBasicMaterial({ color: '#d8473b', transparent: true, opacity: 0, depthWrite: false }),
+    }),
+    [],
+  )
+  const redraw = useRedraw()
+  useEffect(() => {
+    if (!last || last.k !== 'roll' || last.n <= seen.current) return
+    seen.current = last.n
+    const total = last.dice[0] + last.dice[1]
+    const all = tiles.flatMap((t, i) => (t.number === total ? [i] : []))
+    setLit({ n: last.n, t0: performance.now() / 1000 + GLOW_AT, good: all.filter((i) => i !== robber), blocked: all.filter((i) => i === robber) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [last?.n])
+  useFrame(() => {
+    if (!lit) return
+    const t = performance.now() / 1000 - lit.t0
+    if (t > GLOW_FOR) {
+      setLit(null)
+      redraw()
+      return
+    }
+    const k = t < 0 ? 0 : t < 0.15 ? t / 0.15 : t > GLOW_FOR - 0.5 ? (GLOW_FOR - t) / 0.5 : 1
+    const beat = 0.85 + 0.15 * Math.cos(Math.max(0, t) * 7)
+    mats.fill.opacity = 0.42 * k * beat
+    mats.ring.opacity = k
+    mats.shade.opacity = 0.35 * k
+    mats.red.opacity = k
+    redraw()
+  })
+  if (!lit) return null
+  return (
+    <>
+      {lit.good.map((i) => {
+        const [x, z] = hexAt(i)
+        return (
+          <group key={i} position={[x, TILE.h + 0.4, z]}>
+            <mesh geometry={GLOW_FILL} material={mats.fill} scale={TILE.r - 3} renderOrder={2} />
+            <mesh geometry={GLOW_RING} material={mats.ring} scale={TILE.r - 1} renderOrder={2} />
+          </group>
+        )
+      })}
+      {lit.blocked.map((i) => {
+        const [x, z] = hexAt(i)
+        return (
+          <group key={i} position={[x, TILE.h + 0.4, z]}>
+            <mesh geometry={GLOW_FILL} material={mats.shade} scale={TILE.r - 3} renderOrder={2} />
+            <mesh geometry={GLOW_RING} material={mats.red} scale={TILE.r - 1} renderOrder={2} />
+          </group>
+        )
+      })}
+    </>
+  )
+}
+
 /** the board and everything on it (not the dice: they sit wherever the table puts them) */
-export function BoardContents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, events = [], arrive = 0, extras = null }: BoardProps & { arrive?: number }) {
+export function BoardContents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, onArm, events = [], arrive = 0, extras = null }: BoardProps & { arrive?: number }) {
   const [rx, rz] = hexAt(robber)
   useState(boardShown)
   return (
@@ -229,7 +324,8 @@ export function BoardContents({ tiles, harbors, buildings, roads, robber, colors
       <BoardPieces buildings={buildings} roads={roads} colors={colors} you={you} arrive={arrive} extras={extras} />
       <Robber x={rx} z={rz} />
       <Pulses events={events} colors={colors} />
-      {picking && you >= 0 && <Picker picking={picking} color={colors[you]} onPick={onPick} />}
+      <RollGlow events={events} tiles={tiles} robber={robber} />
+      {picking && you >= 0 && <Picker picking={picking} color={colors[you]} onPick={onPick} onArm={onArm} />}
       <ShadowsOnChange deps={[JSON.stringify(buildings), JSON.stringify(roads), robber, tiles, JSON.stringify(extras)]} />
     </>
   )

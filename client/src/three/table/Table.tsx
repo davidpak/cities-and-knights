@@ -27,7 +27,7 @@ import { setProjector } from '../labels.ts'
 import { CAMERA, CITY, DICE, ROAD, SEA, SETTLEMENT, TILE, TOKEN, WALL, edgeAt, hexAt, vertexAt } from '../spec.ts'
 import { TestHook } from '../TestHook.tsx'
 import { trayFace } from './faces.ts'
-import { CARD, TRAY, seatParts, type Layout, type Spot } from './layout.ts'
+import { CARD, TRAY, fanPose, seatParts, type Layout, type Spot } from './layout.ts'
 import { Physical, type Static } from './Physical.tsx'
 import { ExpansionTable } from './Expansion.tsx'
 import { VANISH, seeded, type Home, type PileSpec, type Thing } from './things.ts'
@@ -151,14 +151,17 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     })
   }
   // the bank: a stack of each kind, and its deck (or in the expansion the three progress piles), face down
+  // (one card of each kind, fanned: cards taken come from it and cards paid go into it)
   kinds.forEach((r, i) => {
     const id = `bank:${r}`
-    card({ id, family: 'res', look: `res:${r}`, n: view.bank[r], home: cardHome(id, layout.bank[i], { loose: 0.8 }), from: layout.bank[i], to: layout.bank[i], enabled: can.bank && view.bank[r] > 0, onClick: () => on.bank(r) })
+    const f = fanPose(layout.fan, kinds.length, i)
+    const spot: Spot = [f.x, f.z]
+    card({ id, family: 'res', look: `res:${r}`, n: Math.min(1, view.bank[r]), home: () => ({ x: f.x, y: f.base + CT / 2, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0, onClick: () => on.bank(r) })
   })
   if (x && K)
     TRACKS.forEach((t) => {
       const id = `deck:${t}`
-      card({ id, family: 'prog', look: `prog:?${t}`, n: x.decks[t], home: cardHome(id, K.decks[t], { faceDown: true, loose: 0.8 }), hidden: true, from: K.decks[t], to: K.decks[t] })
+      card({ id, family: 'prog', look: `prog:?${t}`, n: x.decks[t], small: true, home: cardHome(id, K.decks[t], { faceDown: true, loose: 0.6 }), hidden: true, from: K.decks[t], to: K.decks[t] })
     })
   else card({ id: 'deck', family: 'dev', look: 'dev:?', n: view.pile, home: cardHome('deck', layout.deck, { faceDown: true, loose: 0.8 }), hidden: true, from: layout.deck, to: layout.deck, enabled: can.deck, onClick: on.deck })
   // everyone else: their cards face down, their development cards face down, the knights they've played
@@ -355,7 +358,8 @@ function staticsFor(layout: Layout, tray: boolean, { tiles, buildings, roads }: 
 /** a dark place on the table where an empty pile goes (your hand, someone's cards), still clickable */
 function Slots({ view, layout, hand, can, on }: TableProps) {
   const slots: { id: string; at: Spot; k: number; onClick?: () => void }[] = []
-  if (hand) (view.x ? GOODS : RESOURCES).forEach((r, i) => hand[r] <= 0 && slots.push({ id: `h${r}`, at: layout.hand[i], k: 1 }))
+  // (your own empty kinds leave nothing behind: an empty place only where you might click someone with no cards)
+  void hand
   for (const { p, at } of layout.seats)
     if (view.players[p].handCount <= 0) slots.push({ id: `o${p}`, at: seatParts(at, layout.portrait).hand, k: layout.portrait ? CARD.small : 1, onClick: can.opponents.includes(p) ? () => on.opponent(p) : undefined })
   return (

@@ -13,10 +13,51 @@ export const TRAY = { w: 200, d: 150, rim: 6, h: 7 } // [D] the trade tray: near
 export const DICE_TRAY = { w: 92, d: 62 } // [D] (matches spec DICE.tray)
 /** your pieces waiting to be built: a pile of roads, a cluster of houses, a group of cities */
 export const SUPPLY = { road: { w: 52, d: 52 }, settlement: { w: 72, d: 50 }, city: { w: 76, d: 54 }, knight: { w: 44, d: 44 }, wall: { w: 62, d: 40 } } // [D]
-/** the expansion's boards on the table: your three city tracks (five steps each), the barbarians' sea lane */
-export const TRACKS_BOX = { step: 34, row: 34, w: 5 * 34, d: 3 * 34 } // [D] yours; everyone else's are small (SEAT_TRACKS)
-export const SEAT_TRACKS = { step: 9, row: 10, w: 5 * 9, d: 3 * 10 } // [D]
-export const SEA_LANE = { step: 28, steps: 8, d: 30 } // [D] seven steps of sea and the shore
+/** the expansion's boards on the table: your three city tracks as flip charts (everyone else's small, by their cards),
+ *  and the barbarians' voyage, a little sea board with their route to the island */
+export const TRACKS_BOX = { stand: 70, w: 3 * 70, d: 86 } // [D] yours: three flip charts side by side (drawn at 1.2)
+export const SEAT_TRACKS = { scale: 0.36, mine: 1.2 } // [D] everyone else's: the same charts, small
+export const VOYAGE = { w: 240, d: 100 } // [D]
+
+/**
+ * The bank: one card of each kind, fanned from a point below them like a hand of cards held up (the stacks behind
+ * them aren't shown: only when a kind runs low does its count show). Card i of n: where it lies and how it's turned,
+ * and a point on the part of it that shows (to click).
+ */
+export const FAN = { reach: 50, step8: 10.5, step5: 13 } // [D] the card's middle from the pivot (mm); degrees between cards
+export function fanPose(pivot: Spot, n: number, i: number) {
+  const step = ((n > 5 ? FAN.step8 : FAN.step5) * Math.PI) / 180
+  const th = (i - (n - 1) / 2) * step
+  const at = (d: number, off = 0): Spot => [pivot[0] + d * Math.sin(th + off), pivot[1] - d * Math.cos(th + off)]
+  const [x, z] = at(FAN.reach)
+  // the next card covers this one's right side; what shows is a wedge on its left, widest near the top
+  const d = FAN.reach + CARD.d / 2 - 8
+  const tap = i === n - 1 ? at(FAN.reach + 10) : at(d, -Math.atan(CARD.w / 2 / d) + step / 2)
+  return { x, z, yaw: -th, base: i * CARD.t, tap }
+}
+/** the fan's footprint (for the layout check) */
+function fanBox(pivot: Spot, n: number): { x0: number; x1: number; z0: number; z1: number } {
+  let x0 = Infinity
+  let x1 = -Infinity
+  let z0 = Infinity
+  let z1 = -Infinity
+  for (let i = 0; i < n; i++) {
+    const p = fanPose(pivot, n, i)
+    for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const ax = (lx * CARD.w) / 2
+      const az = (lz * CARD.d) / 2
+      const c = Math.cos(p.yaw)
+      const sn = Math.sin(p.yaw)
+      const wx = p.x + ax * c + az * sn
+      const wz = p.z - ax * sn + az * c
+      x0 = Math.min(x0, wx)
+      x1 = Math.max(x1, wx)
+      z0 = Math.min(z0, wz)
+      z1 = Math.max(z1, wz)
+    }
+  }
+  return { x0, x1, z0, z1 }
+}
 
 export type Layout = {
   portrait: boolean
@@ -27,7 +68,8 @@ export type Layout = {
   meLabel: Spot
   tray: Spot
   wants: (i: number) => Spot // the five "ask for" cards behind the tray
-  bank: Spot[] // five resource stacks
+  bank: Spot[] // where to click each kind of the bank's cards
+  fan: Spot // the bank's fan of cards: its pivot
   deck: Spot
   dice: Spot
   seats: { p: number; at: Spot }[]
@@ -38,8 +80,8 @@ export type Layout = {
     knights: [Spot, Spot, Spot] // your knights waiting, by strength
     wall: Spot
     points: Spot // your defender and point cards
-    tracks: Spot // the middle of your three tracks
-    lane: Spot // the middle of the barbarians' lane
+    tracks: Spot // the middle of your three flip charts
+    lane: Spot // the middle of the barbarians' voyage board
     decks: Record<'trade' | 'politics' | 'science', Spot>
   } | null
 }
@@ -82,9 +124,10 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       meLabel: [-144, 322],
       tray: [-520, 0],
       wants: (i) => [-520 + (i - 2) * 44, -130],
-      bank: Array.from({ length: 5 }, (_, i): Spot => [452 + (i % 3) * 74, -100 + Math.floor(i / 3) * 100]),
-      deck: [600, 0],
-      dice: [526, 140],
+      fan: [520, -10],
+      bank: [],
+      deck: [520, 95],
+      dice: [526, 205],
       seats: others.map((p, i) => ({ p, at: [xs[i], -395] as Spot })),
       bounds: { minX: -645, maxX: 645, minZ: -515, maxZ: 450 },
       k: null,
@@ -100,16 +143,16 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
         wants: (i) => (i < 5 ? [-520 + (i - 2) * 42, -178] : [-520 + (i - 6) * 42, -118]),
         supply: { road: [-610, 190], settlement: [-532, 190], city: [-445, 190] },
         awardsMine: [-600, 345],
-        bank: Array.from({ length: 8 }, (_, i): Spot => [452 + (i % 3) * 74, -200 + Math.floor(i / 3) * 100]),
-        deck: [600, 0],
-        dice: [526, 205],
+        fan: [520, 20],
+        deck: [520, 85],
+        dice: [526, 168],
         k: {
           knights: [[-612, 262], [-562, 262], [-512, 262]],
           wall: [-440, 262],
           points: [-528, 345],
-          tracks: [545, 316],
-          lane: [528, -285],
-          decks: { trade: [600, 0], politics: [452, 100], science: [526, 100] },
+          tracks: [536, 300],
+          lane: [516, -205],
+          decks: { trade: [466, 85], politics: [520, 85], science: [574, 85] },
         },
       }
   } else {
@@ -124,10 +167,12 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       awardsMine: [-300, 620],
       meLabel: [0, 548],
       tray: [0, 450],
-      wants: (i) => [(i - 2) * 44, 450 - TRAY.d / 2 - 32],
-      bank: Array.from({ length: 5 }, (_, i): Spot => [-300 + i * 72, -440]),
-      deck: [66, -440],
-      dice: [200, -440],
+      wants: (i) => [(i - 2) * 44, 340],
+      fan: [0, -345],
+      bank: [],
+      deck: [190, -400],
+      // the dice at the board's bottom right, where there's room
+      dice: [300, 340],
       seats: others.map((p, i) => ({ p, at: [xs[i], -560] as Spot })),
       bounds: { minX: -362, maxX: 362, minZ: -665, maxZ: 852 },
       k: null,
@@ -136,23 +181,26 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       L = {
         ...L,
         hand: Array.from({ length: 8 }, (_, i): Spot => [-266 + i * 76, 620]),
-        bank: Array.from({ length: 8 }, (_, i): Spot => [-300 + i * 72, -440]),
-        deck: [-330, 450],
-        dice: [300, -440],
-        wants: (i) => (i < 5 ? [(i - 2) * 42, 450 - TRAY.d / 2 - 32] : [(i - 6) * 42 + 260, 450 - TRAY.d / 2 - 32]),
+        seats: others.map((p, i) => ({ p, at: [xs[i], -700] as Spot })),
+        fan: [0, -470],
+        deck: [185, -520],
+        dice: [300, 340],
+        wants: (i) => [(i - 3.5) * 42, 340],
         awardsMine: [40, 830],
-        bounds: { minX: -362, maxX: 362, minZ: -665, maxZ: 960 },
+        bounds: { minX: -362, maxX: 362, minZ: -805, maxZ: 960 },
         k: {
           knights: [[-330, 815], [-280, 815], [-230, 815]],
           wall: [-160, 815],
           points: [115, 830],
-          tracks: [272, 826],
-          lane: [0, -355],
-          decks: { trade: [-330, 450], politics: [-262, 450], science: [-194, 450] },
+          tracks: [257, 826],
+          lane: [0, -375],
+          decks: { trade: [140, -520], politics: [185, -520], science: [230, -520] },
         },
       }
   }
 
+  const kinds = knights ? 8 : 5
+  L.bank = Array.from({ length: kinds }, (_, i) => fanPose(L.fan, kinds, i).tap)
   const c = (what: string, [x, z]: Spot, w = CARD.w, d = CARD.d): Box => ({ what, x, z, w, d })
   const boxes: Box[] = [
     ...L.hand.map((s, i) => c(`hand ${i}`, s)),
@@ -162,7 +210,10 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
     c('cities', L.supply.city, SUPPLY.city.w, SUPPLY.city.d),
     c('tray', L.tray, TRAY.w, TRAY.d),
     ...L.hand.map((_, i) => c(`want ${i}`, L.wants(i), CARD.w * CARD.small, CARD.d * CARD.small)),
-    ...L.bank.map((s, i) => c(`bank ${i}`, s)),
+    (() => {
+      const f = fanBox(L.fan, kinds)
+      return { what: 'bank fan', x: (f.x0 + f.x1) / 2, z: (f.z0 + f.z1) / 2, w: f.x1 - f.x0, d: f.z1 - f.z0 }
+    })(),
     ...(L.k ? [] : [c('deck', L.deck)]),
     c('dice', L.dice, DICE_TRAY.w, DICE_TRAY.d),
     c('my awards', L.awardsMine),
@@ -172,8 +223,8 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
           c('walls', L.k.wall, SUPPLY.wall.w, SUPPLY.wall.d),
           c('my points', L.k.points),
           c('my tracks', L.k.tracks, TRACKS_BOX.w, TRACKS_BOX.d),
-          c('barbarian lane', L.k.lane, SEA_LANE.step * SEA_LANE.steps, SEA_LANE.d),
-          ...Object.entries(L.k.decks).map(([t, s]) => c(`${t} deck`, s)),
+          c('barbarian voyage', L.k.lane, VOYAGE.w, VOYAGE.d),
+          ...Object.entries(L.k.decks).map(([t, s]) => c(`${t} deck`, s, CARD.w * CARD.small, CARD.d * CARD.small)),
         ]
       : []),
     ...L.seats.flatMap(({ p, at }) => {

@@ -77,13 +77,33 @@ function text(c: CanvasRenderingContext2D, s: string, x: number, y: number, size
   c.fillText(s, x, y)
 }
 
+/** the resource a commodity is made from (its card wears that colour, and shows it small in the corner) */
+const SOURCE: Partial<Record<Good, Good>> = { paper: 'lumber', cloth: 'wool', coin: 'ore' }
+
 function resource(c: CanvasRenderingContext2D, r: Good) {
   c.fillStyle = PAPER
   c.fillRect(0, 0, W, H)
   c.fillStyle = RESOURCE_COLOR[r]
   round(c, 14, 14, W - 28, H - 78, 10)
   c.fill()
-  icon(c, ICON[r], W / 2, 14 + (H - 78) / 2, 112, '#fffaf0')
+  const from = SOURCE[r]
+  if (from) {
+    // a commodity: the same colour as its resource, framed in cream like a label, the resource small in a corner
+    c.strokeStyle = '#fffaf0'
+    c.lineWidth = 5
+    round(c, 26, 26, W - 52, H - 102, 7)
+    c.stroke()
+    c.fillStyle = 'rgba(0, 0, 0, 0.16)'
+    c.beginPath()
+    c.arc(W - 42, 44, 17, 0, Math.PI * 2)
+    c.fill()
+    icon(c, ICON[from], W - 42, 44, 22, '#fffaf0')
+    icon(c, ICON[r], W / 2, 14 + (H - 78) / 2 + 4, 92, '#fffaf0')
+  } else icon(c, ICON[r], W / 2, 14 + (H - 78) / 2, 112, '#fffaf0')
+  // a corner mark, as on playing cards: what shows when cards are fanned (the bank's are)
+  c.fillStyle = RESOURCE_COLOR[r]
+  c.fillRect(0, 0, 50, 58)
+  icon(c, ICON[r], 25, 30, 34, '#fffaf0')
   text(c, RESOURCE_NAME[r], W / 2, H - 33, 32, INK)
 }
 

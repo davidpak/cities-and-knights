@@ -320,6 +320,9 @@ input {
   display: grid;
   place-items: center;
 }
+.count.low {
+  background: #b8432f;
+}
 .name {
   position: absolute;
   transform: translate(-50%, -50%);

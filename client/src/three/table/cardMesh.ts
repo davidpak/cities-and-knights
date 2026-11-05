@@ -50,3 +50,23 @@ export function cardMaterial() {
   material = m
   return m
 }
+
+/** a material for instanced pictures out of one atlas (attribute aTile: which cell), e.g. the flip charts' pages */
+export function atlasMaterial(map: import('three').Texture, cols: number, rows: number, key: string) {
+  const m = new MeshLambertMaterial({ map, side: 2 })
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\n        attribute float aTile;`)
+      .replace(
+        '#include <uv_vertex>',
+        `#include <uv_vertex>
+        {
+          vec2 cell = vec2(mod(aTile, ${cols.toFixed(1)}), floor(aTile / ${cols.toFixed(1)}));
+          vec2 u = mix(vec2(0.004), vec2(0.996), uv);
+          vMapUv = vec2((cell.x + u.x) / ${cols.toFixed(1)}, 1.0 - (cell.y + 1.0 - u.y) / ${rows.toFixed(1)});
+        }`,
+      )
+  }
+  m.customProgramCacheKey = () => `atlas-${key}`
+  return m
+}

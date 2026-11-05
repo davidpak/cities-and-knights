@@ -9,12 +9,12 @@ import {
   roadSpots, robberSpots, settlementSpots, tradeRatios, wallSpots, type PickNeed, type View,
 } from '../../../shared/engine.ts'
 import { COST, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
-import { PLAYER, TRACK_COLOR } from '../lib/palette.ts'
+import { PLAYER } from '../lib/palette.ts'
 import { act, room, toast as say, useStore } from '../net.ts'
 import type { PickKind, Picking } from '../three/Board.tsx'
 import { useProjector } from '../three/labels.ts'
 import { TableView, type TrayContents } from '../three/table/Table.tsx'
-import { CARD, TRACKS_BOX, TRAY, layoutFor, seatParts, type Spot } from '../three/table/layout.ts'
+import { CARD, TRAY, layoutFor, seatParts, type Spot } from '../three/table/layout.ts'
 import { publishState } from '../three/TestHook.tsx'
 import { Chronicle, describe, Who } from './Chronicle.tsx'
 
@@ -504,14 +504,15 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
   return (
     <div className="labels">
       {hand && (view.x ? GOODS : RESOURCES).map((r, i) => count(`h${r}`, layout.hand[i], hand[r]))}
-      {pl?.progress && PROGRESS_KINDS(pl.progress).map((c, i) => count(`pg${c}`, layout.dev(i), pl.progress!.filter((h) => h.card === c).length))}
-      {view.x && layout.k && <Barbarians view={view} at={at(layout.k.lane, 6)} />}
-      {view.x && layout.k && pl &&
-        TRACKS.map((t, r) => (
-          <span key={t} className="track-tag" style={{ ...at([layout.k!.tracks[0] - TRACKS_BOX.w / 2 - 6, layout.k!.tracks[1] + (r - 1) * TRACKS_BOX.row], 4), color: TRACK_COLOR[t] }}>
-            {TRACK_NAME[t]}
+      {/* the bank shows one card of each kind; only a kind running low says how many are left */}
+      {(view.x ? GOODS : RESOURCES).map((r, i) =>
+        view.bank[r] > 0 && view.bank[r] <= 4 ? (
+          <span key={`b${r}`} className="count low" style={at(layout.bank[i], 8)}>
+            {view.bank[r]}
           </span>
-        ))}
+        ) : null,
+      )}
+
       {layout.seats.map(({ p, at: spot }) => {
         const op = view.players[p]
         const parts = seatParts(spot, layout.portrait)
@@ -520,7 +521,6 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
         return (
           <span key={`s${p}`}>
             {count(`oh${p}`, parts.hand, op.handCount, parts.small ? CARD.small : 1)}
-            {view.x && count(`op${p}`, parts.dev, op.progressCount, parts.small ? CARD.small : 1)}
             <span className={`name ${view.current === p ? 'turn' : ''}`} style={{ ...at(parts.label), ['--pc' as string]: PLAYER[op.color].ui }}>
               {op.name} <b>{op.points}</b>
               {answer === 'yes' && <i className="mark ok">✓</i>}
@@ -535,20 +535,6 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
         </span>
       )}
     </div>
-  )
-}
-
-const PROGRESS_KINDS = (held: { card: Progress }[]) => (Object.keys(PROGRESS) as Progress[]).filter((c) => held.some((h) => h.card === c))
-
-/** beside the barbarians' lane: how strong they'll be when they land (a city each), and the knights standing ready */
-function Barbarians({ view, at }: { view: View; at: { left: number; top: number } }) {
-  const x = view.x!
-  const strength = Object.values(view.buildings).filter((b) => b.kind === 'city').length
-  const defense = Object.values(x.knights).filter((k) => k.active).reduce((n, k) => n + k.level, 0)
-  return (
-    <span className="lane-tag" style={{ left: at.left, top: at.top }}>
-      <b>{7 - x.barbarian}</b> to go · barbarians <b>{strength}</b> · knights <b className={defense >= strength ? 'ok' : 'no'}>{defense}</b>
-    </span>
   )
 }
 

@@ -21,8 +21,11 @@ expansion, with our own names and wording throughout:
   everyone whose level in that track is high enough for the red die. Hold four at most; point cards go down at once.
 - The **trader**: put it on a tile beside you to trade that tile's resource 2 for 1, and hold a point while it's yours.
 
-On the table: your knights and walls wait beside your pieces; your three tracks sit by the dice (click a track to take
-its next step); everyone else's tracks are small beside their cards; the barbarians' lane runs above the bank. Click a
+On the table: your knights and walls wait beside your pieces. Your three tracks are desk **flip charts** by the dice:
+each page shows the level reached, the building it has grown to, and what the next step costs; click a chart to take
+its next step and the page goes over the top (everyone else's stand small beside their cards). The barbarians'
+**voyage** is a little sea board above the bank: their longship sails buoy to buoy toward an island with a town, and a
+signpost on the shore is painted with their strength against the knights standing ready. Click a
 knight on the board to ready it, click a ready one to pick it up and then where it goes. Click a progress card to play
 it; if it needs a target, the line at the top says what to click.
 
@@ -30,7 +33,8 @@ Every move is a plain click or button press: the board only shows spots where a 
 decides every result. The board is 3D, tipped a little toward you; two real dice are thrown into a tray beside it.
 
 **Everything is on the table.** Your cards lie in front of you in stacks, with your development cards beside them
-and your pieces waiting to be built. The bank's five stacks and its development deck sit at the side, next to the dice
+and your pieces waiting to be built. The bank sits at the side as one card of each kind, fanned like a hand of cards (a kind's count shows only when it
+runs low), with its development deck (or the three progress piles), next to the dice
 in their tray. Everyone else's cards lie face down at their places. To do something, you do it to the thing:
 
 - **Build:** click a piece in your supply (the ones you can afford stand on a little mat), then click a white spot.

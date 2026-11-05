@@ -51,9 +51,10 @@ export const RESOURCE_COLOR: Record<Good, string> = {
   wool: '#9ccd6e',
   grain: '#e5b94e',
   ore: '#8f8ca6',
-  paper: '#c9a55c',
-  cloth: '#b95b8c',
-  coin: '#4f78b8',
+  // a commodity takes its tile's colour (paper from forest, cloth from pasture, coin from mountains)
+  paper: '#3f7f4c',
+  cloth: '#9ccd6e',
+  coin: '#8f8ca6',
 }
 
 export const RESOURCE_NAME: Record<Good, string> = {

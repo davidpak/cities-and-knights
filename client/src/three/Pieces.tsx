@@ -1,86 +1,109 @@
 /**
- * The playing pieces. Each lands softly when it first appears (a short eased drop, so you see what just changed),
- * then is perfectly still. Ghosts are the same piece, see-through, shown where a click would put it.
+ * The playing pieces. A new piece drops in over a fifth of a second, so you see what just changed; then it is
+ * still and costs nothing (the scene only redraws when something moves). Ghosts are the same piece, see-through.
  */
-import { useFrame, type ThreeElements } from '@react-three/fiber'
-import { easing } from 'maath'
-import { useRef } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
+import { useRef, type ReactNode } from 'react'
 import type { Group } from 'three'
 import type { PlayerColor } from '../../../shared/rules.ts'
 import { PAL, PLAYER } from '../lib/palette.ts'
 import { mat } from '../lib/toy.ts'
 import { cityGeo, roadGeo, robberGeo, settlementGeo } from './geometry.ts'
-import { TILE } from './spec.ts'
+import { TILE, TOKEN } from './spec.ts'
 
-/** drops in from `from` mm above on mount; `instant` skips it (things already there when you arrive) */
-function Landing({ children, instant, from = 45, ...rest }: { children: React.ReactNode; instant?: boolean; from?: number } & ThreeElements['group']) {
+const DROP = 0.2 // seconds
+const FROM = 30 // mm
+
+/** redraw, and redraw the shadows too (they only update when asked) */
+export function useRedraw() {
+  const { gl, invalidate } = useThree()
+  return () => {
+    gl.shadowMap.needsUpdate = true
+    invalidate()
+  }
+}
+
+function Drop({ children, ghost }: { children: ReactNode; ghost?: boolean }) {
   const g = useRef<Group>(null)
-  const settled = useRef(!!instant)
-  useFrame((_, dt) => {
+  const t0 = useRef<number | null>(ghost ? -1 : null)
+  const redraw = useRedraw()
+  useFrame(({ clock }) => {
     const o = g.current
-    if (!o || settled.current) return
-    easing.damp(o.position, 'y', 0, 0.12, dt)
-    if (o.position.y < 0.05) {
-      o.position.y = 0
-      settled.current = true
-    }
+    if (!o || t0.current === -1) return
+    if (t0.current === null) t0.current = clock.elapsedTime
+    const t = Math.min(1, (clock.elapsedTime - t0.current) / DROP)
+    o.position.y = FROM * (1 - t) * (1 - t)
+    redraw()
+    if (t >= 1) t0.current = -1
   })
   return (
-    <group {...rest}>
-      <group ref={g} position={[0, instant ? 0 : from, 0]}>
-        {children}
-      </group>
+    <group ref={g} position={[0, ghost ? 0 : FROM, 0]}>
+      {children}
     </group>
   )
 }
 
-type PieceProps = { color: PlayerColor; ghost?: boolean; instant?: boolean; x: number; z: number }
+type PieceProps = { color: PlayerColor; ghost?: boolean; x: number; z: number }
+const body = (c: PlayerColor, ghost?: boolean) => [mat(PLAYER[c].body, { opacity: ghost ? 0.7 : 1 }), mat(PLAYER[c].roof, { opacity: ghost ? 0.7 : 1 })]
 
-const body = (c: PlayerColor, ghost?: boolean) => [mat(PLAYER[c].body, { opacity: ghost ? 0.72 : 1 }), mat(PLAYER[c].roof, { opacity: ghost ? 0.72 : 1 })]
-
-export function Settlement({ color, ghost, instant, x, z }: PieceProps) {
+export function Settlement({ color, ghost, x, z }: PieceProps) {
   return (
-    <Landing instant={instant || ghost} position={[x, TILE.h, z]}>
-      <mesh geometry={settlementGeo()} material={body(color, ghost)} castShadow={!ghost} receiveShadow />
-    </Landing>
+    <group position={[x, TILE.h, z]}>
+      <Drop ghost={ghost}>
+        <mesh geometry={settlementGeo()} material={body(color, ghost)} castShadow={!ghost} />
+      </Drop>
+    </group>
   )
 }
 
-export function City({ color, ghost, instant, x, z }: PieceProps) {
+export function City({ color, ghost, x, z }: PieceProps) {
   return (
-    <Landing instant={instant || ghost} position={[x, TILE.h, z]}>
-      <mesh geometry={cityGeo()} material={body(color, ghost)} castShadow={!ghost} receiveShadow />
-    </Landing>
+    <group position={[x, TILE.h, z]}>
+      <Drop ghost={ghost}>
+        <mesh geometry={cityGeo()} material={body(color, ghost)} castShadow={!ghost} />
+      </Drop>
+    </group>
   )
 }
 
-export function Road({ color, ghost, instant, x, z, angle }: PieceProps & { angle: number }) {
+export function Road({ color, ghost, x, z, angle }: PieceProps & { angle: number }) {
   return (
-    <Landing instant={instant || ghost} position={[x, TILE.h - 1.5, z]} rotation={[0, -angle, 0]} from={30}>
-      <mesh geometry={roadGeo()} material={body(color, ghost)} castShadow={!ghost} receiveShadow />
-    </Landing>
+    <group position={[x, TILE.h - 1.5, z]} rotation={[0, -angle, 0]}>
+      <Drop ghost={ghost}>
+        <mesh geometry={roadGeo()} material={body(color, ghost)} castShadow={!ghost} />
+      </Drop>
+    </group>
   )
 }
 
-/** the robber glides from tile to tile in a little hop */
+/** the robber slides to its new tile in a quarter second */
 export function Robber({ x, z, ghost }: { x: number; z: number; ghost?: boolean }) {
   const g = useRef<Group>(null)
-  const first = useRef(true)
-  useFrame((_, dt) => {
+  const from = useRef<[number, number] | null>(null)
+  const t0 = useRef<number | null>(null)
+  const target = useRef<[number, number]>([x, z])
+  const redraw = useRedraw()
+  if (target.current[0] !== x || target.current[1] !== z) {
     const o = g.current
-    if (!o) return
-    if (first.current || ghost) {
-      o.position.set(x, o.position.y, z)
-      first.current = false
-    }
-    easing.damp(o.position, 'x', x, 0.22, dt)
-    easing.damp(o.position, 'z', z, 0.22, dt)
-    const far = Math.hypot(o.position.x - x, o.position.z - z)
-    easing.damp(o.position, 'y', TILE.h + 4.5 + Math.min(40, far * 0.4), 0.1, dt)
+    from.current = o ? [o.position.x, o.position.z] : [x, z]
+    target.current = [x, z]
+    t0.current = null
+  }
+  useFrame(({ clock }) => {
+    const o = g.current
+    if (!o || !from.current) return
+    if (t0.current === null) t0.current = clock.elapsedTime
+    const t = Math.min(1, (clock.elapsedTime - t0.current) / 0.25)
+    const e = t * (2 - t)
+    o.position.x = from.current[0] + (x - from.current[0]) * e
+    o.position.z = from.current[1] + (z - from.current[1]) * e
+    o.position.y = TILE.h + TOKEN.h + Math.sin(t * Math.PI) * 20
+    redraw()
+    if (t >= 1) from.current = null
   })
   return (
-    <group ref={g} position={[x, TILE.h + 4.5, z]}>
-      <mesh geometry={robberGeo()} material={mat(PAL.plum, { opacity: ghost ? 0.5 : 1 })} castShadow={!ghost} />
+    <group ref={g} position={[x, TILE.h + TOKEN.h, z]}>
+      <mesh geometry={robberGeo()} material={mat(PAL.plum, { opacity: ghost ? 0.55 : 1 })} castShadow={!ghost} />
     </group>
   )
 }

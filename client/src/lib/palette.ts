@@ -20,7 +20,7 @@ export const PAL = {
   sea: '#78b4c6',
   seaDeep: '#5e97ad',
   red: '#c8453c', // 6 and 8 on the tokens
-  bg: '#2a2340',
+  bg: '#1c2230', // behind the board (the page's own background)
   bgLow: '#4a3a62',
 } as const
 

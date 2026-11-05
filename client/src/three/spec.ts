@@ -3,7 +3,6 @@
  *
  * Sources
  *   [D]   our own design (this is our game; nothing here is measured off another game's pieces)
- *   [STD] common real-world sizes: a 16 mm six-sided die with opposite faces adding to 7
  *   [T]   follows from the board layout in shared/board.ts (unit hexes, pointy-topped)
  *
  * Its frame: the middle tile's centre at x 0, z 0; the tray floor (where tiles stand) at y 0; +x right, +z toward
@@ -17,7 +16,6 @@
  *   sea        a hexagonal tray of water held in a maple frame; harbours are little piers with a round sign
  *   pieces     settlement = a house; city = a house with a tower; road = a beveled bar along a side;
  *              robber = a plum pawn
- *   dice       two rounded 16 mm dice, beside the board
  *
  * Estimates: none; every size here is a choice ([D]) or follows from one.
  */
@@ -40,19 +38,19 @@ export const TILE = {
 export const DIORAMA = {
   clearIn: 25, // [D] the token's radius plus a margin
   clearOut: 44, // [D] corners hold a settlement or city, sides a road
-  maxH: 30, // [D] tallest thing (a peak), so it never hides a piece behind it from the usual camera
+  maxH: 30, // [D] tallest thing (a peak)
 }
 
-export const TOKEN = { r: 19, h: 4.5, bevel: 1.4 } // [D]
+export const TOKEN = { r: 21, h: 4.5, bevel: 1.4 } // [D] seen straight down, big enough to read at a glance
 
-export const SETTLEMENT = { w: 15, d: 15, wall: 10, peak: 18, round: 1.3 } // [D]
-export const CITY = { w: 27, d: 15, wall: 11, peak: 17, towerW: 12, tower: 22, towerPeak: 28, round: 1.3 } // [D]
-export const ROAD = { len: 34, w: 6.5, h: 6, round: 1.6 } // [D]
-export const ROBBER = { r: 9, h: 30 } // [D]
+export const SETTLEMENT = { w: 17, d: 17, wall: 10, peak: 18, round: 1.3 } // [D] seen from above: a square with a roof ridge
+export const CITY = { w: 30, d: 19, wall: 11, peak: 17, towerW: 13, tower: 22, towerPeak: 28, round: 1.3 } // [D] wider and deeper: tells apart from above
+export const ROAD = { len: 32, w: 8, h: 6, round: 1.8 } // [D]
+export const ROBBER = { r: 11, h: 30 } // [D]
 
 export const HARBOR = {
   out: 30, // [D] how far the sign stands out to sea from the coast side
-  signR: 17, // [D] big enough to read the rate from the usual camera
+  signR: 19, // [D] big enough to read the rate
   signH: 4, // [D]
   plank: { w: 5, h: 2.5 }, // [D]
 }
@@ -64,10 +62,15 @@ export const SEA = {
   rimH: 16, // [D]
 }
 
-export const DIE = { size: 16, round: 2.6, pip: 1.6 } // [STD] 16 mm; [D] rounding and pips
-export const DICE_AT = { x: 345, z: 225, apart: 26 } // [D] on the table, front right of the frame
-
-export const TABLE = { r: 900, top: 0, h: 30 } // [D] its top is the tray floor
+/** what the top-down camera must show: the frame, flat-topped, plus a margin */
+export const VIEW = {
+  get w() {
+    return 2 * (SEA.inner + SEA.rim) * 1.03
+  },
+  get h() {
+    return 2 * (SEA.inner + SEA.rim) * (Math.sqrt(3) / 2) * 1.04
+  },
+}
 
 /** layout coordinates (unit hexes) to the board plane, mm */
 export const toBoard = (x: number, y: number): [number, number] => [x * TILE.layout, y * TILE.layout]
@@ -125,11 +128,9 @@ export function checkBoard(): CheckResult[] {
   const landR = Math.max(...TOPO.vertices.map((v) => Math.hypot(...toBoard(v.x, v.y))))
   add('the frame clears the land', landR < apothem - 10, `${f(landR)} < ${f(apothem - 10)}`)
 
-  // the dice sit on the table, off the frame
-  const frameOut = SEA.inner + SEA.rim
-  const diceR = Math.hypot(DICE_AT.x, DICE_AT.z) - DIE.size
-  add('the dice clear the frame', diceR > frameOut * (SQRT3 / 2), `${f(diceR)} > ${f(frameOut * (SQRT3 / 2))}`)
-  add('dice: 16 mm', DIE.size === 16, `${DIE.size} mm`)
+  // from straight above, a city must look different from a settlement
+  add('a city is clearly bigger than a settlement from above', CITY.w * CITY.d > 1.7 * SETTLEMENT.w * SETTLEMENT.d, `${CITY.w * CITY.d} vs ${SETTLEMENT.w * SETTLEMENT.d} mm²`)
+  add('a settlement at a corner overhangs no token', TILE.layout - Math.hypot(SETTLEMENT.w, SETTLEMENT.d) / 2 > TOKEN.r + 4, `${f(TILE.layout - Math.hypot(SETTLEMENT.w, SETTLEMENT.d) / 2)} > ${TOKEN.r + 4}`)
 
   // the board's nine harbours each touch two corners and no corner twice
   const hc = new Set(TOPO.harbors.flatMap((e) => [TOPO.edges[e].a, TOPO.edges[e].b]))

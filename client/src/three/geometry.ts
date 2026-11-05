@@ -3,10 +3,10 @@
  * and turned once (the playbook's rule); turned things are lathed. Nothing is a plane laid over another surface.
  */
 import {
-  BoxGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2, Vector3,
+  CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2,
 } from 'three'
 import { roundedPolygon, roundedRect } from '../lib/shapes.ts'
-import { CITY, DIE, HARBOR, ROAD, ROBBER, SEA, SETTLEMENT, TILE, TOKEN } from './spec.ts'
+import { CITY, HARBOR, ROAD, ROBBER, SEA, SETTLEMENT, TILE, TOKEN } from './spec.ts'
 
 const memo = <T>(f: () => T) => {
   let v: T | undefined
@@ -100,30 +100,6 @@ export const robberGeo = memo(() => {
   ].map(([x, y]) => new Vector2(x * k, (y * ROBBER.h) / 30))
   return new LatheGeometry(pts, 32)
 })
-
-/** a die: a box with six faces (each its own material group), its edges pushed out to round corners */
-export const dieGeo = memo(() => {
-  const s = DIE.size
-  const h = s / 2
-  const r = DIE.round
-  const g = new BoxGeometry(s, s, s, 8, 8, 8)
-  const p = g.attributes.position
-  const n = g.attributes.normal
-  const v = new Vector3()
-  const inner = new Vector3()
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i)
-    inner.set(Math.max(-h + r, Math.min(h - r, v.x)), Math.max(-h + r, Math.min(h - r, v.y)), Math.max(-h + r, Math.min(h - r, v.z)))
-    const dir = v.clone().sub(inner).normalize()
-    v.copy(inner).addScaledVector(dir, r)
-    p.setXYZ(i, v.x, v.y, v.z)
-    n.setXYZ(i, dir.x, dir.y, dir.z)
-  }
-  return g
-})
-
-/** which value faces each box side (+x, -x, +y, -y, +z, -z); opposite faces add to 7 */
-export const DIE_FACES = [2, 5, 1, 6, 3, 4]
 
 /** the maple frame round the sea (a flat-topped hexagonal ring) */
 export const frameGeo = memo(() => {

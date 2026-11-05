@@ -1,26 +1,26 @@
 /**
- * The island on the table: tiles, tokens, sea, harbours, and everyone's pieces, drawn from a game view.
- * Clickable spots are passed in (computed from the shared rules), so anything you can click is a legal move.
+ * The board, straight down, fitted to its box. Built to be cheap on any computer:
+ *   - it draws only when something changes (a piece lands, the robber moves, you hover a spot), never on its own
+ *   - the whole island is two draw calls (see island.ts); pieces are a few dozen more
+ *   - shadows are worked out again only when a piece moves, not every frame
+ *   - picking uses one flat plane and snaps to the nearest legal spot, so there are no tiny targets to hit
  */
-import type { ThreeEvent } from '@react-three/fiber'
-import { memo, useState } from 'react'
+import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, type InstancedMesh, type OrthographicCamera } from 'three'
 import { TOPO } from '../../../shared/board.ts'
 import type { Building, Harbor, Tile } from '../../../shared/engine.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
-import { PAL, TERRAIN } from '../lib/palette.ts'
-import { mat } from '../lib/toy.ts'
-import { frameGeo, plankGeo, seaGeo, signGeo, tileGeo, tokenGeo } from './geometry.ts'
-import { City, Road, Robber, Settlement } from './Pieces.tsx'
-import { HARBOR, SEA, TABLE, TILE, TOKEN, edgeAt, harborSign, hexAt, toBoard, vertexAt } from './spec.ts'
-import { harborTexture, tokenTexture } from './textures.ts'
-import { Terrain } from '../three/Terrain.tsx'
+import { PAL } from '../lib/palette.ts'
+import '../lib/toy.ts'
+import { getAtlas } from './atlas.ts'
+import { buildIsland } from './island.ts'
+import { City, Road, Robber, Settlement, useRedraw } from './Pieces.tsx'
+import { SEA, TILE, VIEW, edgeAt, hexAt, vertexAt } from './spec.ts'
+import { TestHook } from './TestHook.tsx'
 
-export type Picking =
-  | { kind: 'settlement'; spots: number[] }
-  | { kind: 'city'; spots: number[] }
-  | { kind: 'road'; spots: number[] }
-  | { kind: 'robber'; spots: number[] }
-  | null
+export type PickKind = 'settlement' | 'city' | 'road' | 'robber'
+export type Picking = { kind: PickKind; spots: number[] } | null
 
 export type BoardProps = {
   tiles: Tile[]
@@ -29,204 +29,183 @@ export type BoardProps = {
   roads: Record<number, number>
   robber: number
   colors: PlayerColor[]
-  /** what you are placing, and where you may */
   picking?: Picking
   you?: number
-  onPick?: (kind: NonNullable<Picking>['kind'], id: number) => void
+  onPick?: (kind: PickKind, id: number) => void
 }
 
-/** a click, not the end of a drag to turn the camera */
-const isClick = (e: ThreeEvent<MouseEvent>) => e.delta < 6
+const islandMat = new MeshLambertMaterial({ vertexColors: true })
+const MARK = new MeshLambertMaterial({ color: PAL.cream })
+const dummy = new Object3D()
 
-const TileMesh = memo(function TileMesh({ i, tile, robbed }: { i: number; tile: Tile; robbed: boolean }) {
-  const [x, z] = hexAt(i)
-  const c = TERRAIN[tile.terrain]
-  const tok = tokenGeo()
-  return (
-    <group position={[x, 0, z]}>
-      <mesh geometry={tileGeo()} material={[mat(c.top), mat(c.side)]} receiveShadow castShadow />
-      <group position={[0, TILE.h, 0]}>
-        <Terrain terrain={tile.terrain} seed={i * 31 + tile.terrain.length} />
-        {tile.number !== null && (
-          <group>
-            <mesh geometry={tok.side} material={mat(PAL.creamDeep)} castShadow receiveShadow />
-            <mesh geometry={tok.top} material={mat(robbed ? '#cfc6c0' : '#ffffff', { map: tokenTexture(tile.number) })} receiveShadow />
-          </group>
-        )}
-      </group>
-    </group>
-  )
-})
+/** the camera looks straight down, zoomed so the whole board fits the box */
+function Fit() {
+  const { camera, size, invalidate } = useThree()
+  useLayoutEffect(() => {
+    const cam = camera as OrthographicCamera
+    cam.zoom = Math.min(size.width / VIEW.w, size.height / VIEW.h)
+    cam.position.set(0, 1500, 0)
+    cam.up.set(0, 0, -1)
+    cam.lookAt(0, 0, 0)
+    cam.updateProjectionMatrix()
+    invalidate()
+  }, [camera, size.width, size.height, invalidate])
+  return null
+}
 
-const HarborMesh = memo(function HarborMesh({ h }: { h: Harbor }) {
-  const [sx, sz] = harborSign(h.edge)
-  const e = TOPO.edges[h.edge]
-  const sign = signGeo()
-  return (
-    <group>
-      {/* two planks, one from each corner of the side out to the sign */}
-      {[e.a, e.b].map((v) => {
-        const [vx, vz] = vertexAt(v)
-        const len = Math.hypot(sx - vx, sz - vz) - HARBOR.signR + 2
-        const ang = Math.atan2(sz - vz, sx - vx)
-        return (
-          <mesh
-            key={v}
-            geometry={plankGeo()}
-            material={mat(PAL.mapleDeep)}
-            position={[vx + (Math.cos(ang) * len) / 2, SEA.level - 0.5, vz + (Math.sin(ang) * len) / 2]}
-            rotation={[0, -ang, 0]}
-            scale={[len, 1, 1]}
-            castShadow
-            receiveShadow
-          />
-        )
-      })}
-      <group position={[sx, SEA.level - 1, sz]}>
-        <mesh geometry={sign.side} material={mat(PAL.creamDeep)} castShadow receiveShadow />
-        <mesh geometry={sign.top} material={mat('#ffffff', { map: harborTexture(h.kind) })} />
-      </group>
-    </group>
-  )
-})
-
-const Island = memo(function Island({ tiles, harbors, robber }: { tiles: Tile[]; harbors: Harbor[]; robber: number }) {
+function Island({ tiles, harbors }: { tiles: Tile[]; harbors: Harbor[] }) {
+  const key = JSON.stringify([tiles, harbors])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { colored, painted } = useMemo(() => buildIsland(tiles, harbors), [key])
+  const paintedMat = useMemo(() => new MeshLambertMaterial({ map: getAtlas() }), [])
+  useEffect(() => () => (colored.dispose(), painted.dispose()), [colored, painted])
   return (
     <>
-      <mesh geometry={seaGeo()} material={mat(PAL.sea)} receiveShadow />
-      <mesh geometry={frameGeo()} material={[mat(PAL.maple), mat(PAL.mapleDeep)]} castShadow receiveShadow />
-      <mesh position={[0, TABLE.top - TABLE.h / 2, 0]} receiveShadow>
-        <cylinderGeometry args={[TABLE.r, TABLE.r, TABLE.h, 96]} />
-        <meshLambertMaterial color={PAL.honey} />
-      </mesh>
-      {tiles.map((t, i) => (
-        <TileMesh key={i} i={i} tile={t} robbed={i === robber} />
-      ))}
-      {harbors.map((h) => (
-        <HarborMesh key={h.edge} h={h} />
-      ))}
+      <mesh geometry={colored} material={islandMat} receiveShadow castShadow />
+      <mesh geometry={painted} material={paintedMat} receiveShadow />
     </>
   )
-})
+}
 
-/** a small cream marker where you may build; hovering shows the piece there */
-function Spot({ x, z, onClick, onHover, long, angle = 0 }: { x: number; z: number; onClick: () => void; onHover: (on: boolean) => void; long?: boolean; angle?: number }) {
+const spotAt = (kind: PickKind, id: number): [number, number] => (kind === 'road' ? edgeAt(id) : kind === 'robber' ? hexAt(id) : vertexAt(id))
+/** how close (mm) the pointer must be to a spot to pick it */
+const REACH: Record<PickKind, number> = { settlement: 26, city: 26, road: 24, robber: 52 }
+
+/** cream markers on every legal spot, all one draw call */
+function Markers({ kind, spots }: { kind: PickKind; spots: number[] }) {
+  const ref = useRef<InstancedMesh>(null)
+  useLayoutEffect(() => {
+    const m = ref.current
+    if (!m) return
+    spots.forEach((id, i) => {
+      const [x, z] = spotAt(kind, id)
+      dummy.position.set(x, TILE.h + 0.8, z)
+      dummy.rotation.set(0, kind === 'road' ? -TOPO.edges[id].angle : 0, 0)
+      dummy.scale.set(kind === 'road' ? 16 : 6.5, 1.6, kind === 'road' ? 4.5 : 6.5)
+      dummy.updateMatrix()
+      m.setMatrixAt(i, dummy.matrix)
+    })
+    m.instanceMatrix.needsUpdate = true
+  }, [kind, spots])
+  if (kind === 'robber' || kind === 'city' || spots.length === 0) return null
   return (
-    <group position={[x, TILE.h, z]} rotation={[0, -angle, 0]}>
-      <mesh material={mat(PAL.cream)} position={[0, 0.6, 0]} scale={long ? [14, 1.6, 4] : [5.5, 1.6, 5.5]} castShadow>
-        {long ? <boxGeometry args={[1, 1, 1]} /> : <cylinderGeometry args={[1, 1, 1, 20]} />}
-      </mesh>
-      {/* a generous invisible target, so small spots are easy to hit */}
+    <instancedMesh key={`${kind}${spots.length}`} ref={ref} args={[undefined, MARK, spots.length]}>
+      {kind === 'road' ? <boxGeometry args={[1, 1, 1]} /> : <cylinderGeometry args={[1, 1, 1, 16]} />}
+    </instancedMesh>
+  )
+}
+
+function Picker({ picking, color, onPick }: { picking: NonNullable<Picking>; color: PlayerColor; onPick?: BoardProps['onPick'] }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const { kind, spots } = picking
+  useEffect(() => setHover(null), [kind, spots])
+  const nearest = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
+    let best: number | null = null
+    let bestD = REACH[kind]
+    for (const id of spots) {
+      const [x, z] = spotAt(kind, id)
+      const d = Math.hypot(e.point.x - x, e.point.z - z)
+      if (d < bestD) {
+        best = id
+        bestD = d
+      }
+    }
+    return best
+  }
+  const [hx, hz] = hover !== null ? spotAt(kind, hover) : [0, 0]
+  return (
+    <>
+      <Markers kind={kind} spots={spots} />
       <mesh
-        scale={long ? [26, 14, 12] : [13, 14, 13]}
-        position={[0, 4, 0]}
-        onPointerOver={(e) => (e.stopPropagation(), onHover(true), (document.body.style.cursor = 'pointer'))}
-        onPointerOut={() => (onHover(false), (document.body.style.cursor = ''))}
+        position={[0, TILE.h + 1, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        onPointerMove={(e) => {
+          const n = nearest(e)
+          if (n !== hover) setHover(n)
+          document.body.style.cursor = n !== null ? 'pointer' : ''
+        }}
+        onPointerLeave={() => (setHover(null), (document.body.style.cursor = ''))}
         onClick={(e) => {
-          e.stopPropagation()
-          if (isClick(e)) onClick()
+          const n = nearest(e)
+          if (n === null) return
+          setHover(null)
+          document.body.style.cursor = ''
+          onPick?.(kind, n)
         }}
       >
-        <boxGeometry args={[1, 1, 1]} />
+        <planeGeometry args={[SEA.inner * 2.2, SEA.inner * 2.2]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
-    </group>
-  )
-}
-
-function Picker({ picking, color, onPick }: { picking: NonNullable<Picking>; color: PlayerColor; onPick: BoardProps['onPick'] }) {
-  const [hover, setHover] = useState<number | null>(null)
-  const pick = (id: number) => () => {
-    setHover(null)
-    document.body.style.cursor = ''
-    onPick?.(picking.kind, id)
-  }
-  const on = (id: number) => (v: boolean) => setHover((h) => (v ? id : h === id ? null : h))
-
-  if (picking.kind === 'robber') {
-    return (
-      <>
-        {picking.spots.map((h) => {
-          const [x, z] = hexAt(h)
-          return (
-            <mesh
-              key={h}
-              position={[x, TILE.h + 6, z]}
-              onPointerOver={(e) => (e.stopPropagation(), setHover(h), (document.body.style.cursor = 'pointer'))}
-              onPointerOut={() => (setHover((c) => (c === h ? null : c)), (document.body.style.cursor = ''))}
-              onClick={(e) => (e.stopPropagation(), isClick(e) && pick(h)())}
-            >
-              <cylinderGeometry args={[TILE.flat - 4, TILE.flat - 4, 12, 6]} />
-              <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
-            </mesh>
-          )
-        })}
-        {hover !== null && <Robber ghost x={hexAt(hover)[0]} z={hexAt(hover)[1] - TOKEN.r * 0} />}
-      </>
-    )
-  }
-  if (picking.kind === 'road') {
-    return (
-      <>
-        {picking.spots.map((e) => {
-          const [x, z] = edgeAt(e)
-          return <Spot key={e} x={x} z={z} long angle={TOPO.edges[e].angle} onClick={pick(e)} onHover={on(e)} />
-        })}
-        {hover !== null && <Road ghost color={color} x={edgeAt(hover)[0]} z={edgeAt(hover)[1]} angle={TOPO.edges[hover].angle} />}
-      </>
-    )
-  }
-  return (
-    <>
-      {picking.kind === 'settlement' &&
-        picking.spots.map((v) => {
-          const [x, z] = vertexAt(v)
-          return <Spot key={v} x={x} z={z} onClick={pick(v)} onHover={on(v)} />
-        })}
-      {picking.kind === 'city' &&
-        picking.spots.map((v) => {
-          const [x, z] = vertexAt(v)
-          return (
-            <mesh
-              key={v}
-              position={[x, TILE.h + 9, z]}
-              onPointerOver={(e) => (e.stopPropagation(), setHover(v), (document.body.style.cursor = 'pointer'))}
-              onPointerOut={() => (setHover((c) => (c === v ? null : c)), (document.body.style.cursor = ''))}
-              onClick={(e) => (e.stopPropagation(), isClick(e) && pick(v)())}
-            >
-              <boxGeometry args={[22, 22, 22]} />
-              <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
-            </mesh>
-          )
-        })}
-      {hover !== null && picking.kind === 'settlement' && <Settlement ghost color={color} x={vertexAt(hover)[0]} z={vertexAt(hover)[1]} />}
-      {hover !== null && picking.kind === 'city' && <City ghost color={color} x={vertexAt(hover)[0]} z={vertexAt(hover)[1]} />}
+      {hover !== null && kind === 'settlement' && <Settlement ghost color={color} x={hx} z={hz} />}
+      {hover !== null && kind === 'city' && <City ghost color={color} x={hx} z={hz} />}
+      {hover !== null && kind === 'road' && <Road ghost color={color} x={hx} z={hz} angle={TOPO.edges[hover].angle} />}
+      {hover !== null && kind === 'robber' && <Robber ghost x={hx} z={hz} />}
     </>
   )
 }
 
-export function Board({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick }: BoardProps) {
+/** shadows are recomputed when the pieces change, and otherwise left alone */
+function ShadowsOnChange({ deps }: { deps: unknown[] }) {
+  const redraw = useRedraw()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => redraw(), deps)
+  return null
+}
+
+function Contents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick }: BoardProps) {
   const [rx, rz] = hexAt(robber)
   return (
-    <group>
-      <Island tiles={tiles} harbors={harbors} robber={robber} />
+    <>
+      <Island tiles={tiles} harbors={harbors} />
       {Object.entries(roads).map(([e, owner]) => {
         const [x, z] = edgeAt(Number(e))
         return <Road key={`r${e}`} color={colors[owner]} x={x} z={z} angle={TOPO.edges[Number(e)].angle} />
       })}
       {Object.entries(buildings).map(([v, b]) => {
         const [x, z] = vertexAt(Number(v))
-        // hide the settlement you're about to upgrade while its ghost city shows
-        return b.kind === 'city' ? (
-          <City key={`c${v}`} color={colors[b.owner]} x={x} z={z} />
-        ) : (
-          <Settlement key={`s${v}`} color={colors[b.owner]} x={x} z={z} />
-        )
+        return b.kind === 'city' ? <City key={`c${v}`} color={colors[b.owner]} x={x} z={z} /> : <Settlement key={`s${v}`} color={colors[b.owner]} x={x} z={z} />
       })}
       <Robber x={rx} z={rz} />
       {picking && you >= 0 && <Picker picking={picking} color={colors[you]} onPick={onPick} />}
-    </group>
+      <ShadowsOnChange deps={[JSON.stringify(buildings), JSON.stringify(roads), robber, tiles]} />
+    </>
   )
 }
 
-export { toBoard }
+export function BoardView(props: BoardProps) {
+  return (
+    <Canvas
+      orthographic
+      frameloop="demand"
+      dpr={[1, 2]}
+      shadows={{ type: PCFShadowMap }}
+      camera={{ near: 100, far: 3000, position: [0, 1500, 0], zoom: 1 }}
+      gl={{ antialias: true, toneMapping: NeutralToneMapping, powerPreference: 'low-power' }}
+      onCreated={({ gl }) => {
+        gl.shadowMap.autoUpdate = false
+        gl.shadowMap.needsUpdate = true
+      }}
+    >
+      <color attach="background" args={[PAL.bg]} />
+      <hemisphereLight args={['#e4e0f5', '#c9b49c', 1.5]} />
+      <directionalLight
+        castShadow
+        position={[-260, 900, 380]}
+        intensity={1.7}
+        color="#fff4e8"
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0005}
+        shadow-normalBias={0.8}
+        shadow-camera-left={-380}
+        shadow-camera-right={380}
+        shadow-camera-top={380}
+        shadow-camera-bottom={-380}
+        shadow-camera-near={200}
+        shadow-camera-far={1600}
+      />
+      <Fit />
+      <Contents {...props} />
+      <TestHook />
+    </Canvas>
+  )
+}

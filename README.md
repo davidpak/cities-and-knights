@@ -4,8 +4,12 @@ A 3D hex-island trading and building game for 2–4 players, online with friends
 (*Hearth Isles* is a working title; it lives in `client/src/lib/palette.ts` as `GAME_NAME`.)
 
 Every move is a plain click or button press: the board only shows spots where a move is legal, and the server
-decides every result. The 3D is there to make it look and feel nice: pieces land softly, dice tumble, trees and
-wheat sway. None of it can knock a piece out of place.
+decides every result. The board is 3D seen straight down; pieces drop in when placed and the robber hops between
+tiles. That's all the motion there is.
+
+Built to be fast on any computer: the board draws only when something changes (nothing at all while you think),
+the whole island is two draw calls, shadows are recomputed only when a piece moves, and the home screen loads
+without three.js (it arrives in the background).
 
 ## Layout
 
@@ -15,9 +19,8 @@ wheat sway. None of it can knock a piece out of place.
 | `server/` | Node + socket.io. Rooms, lobby, bots, reconnecting after a refresh. Also serves the built client |
 | `client/` | React + react-three-fiber. The 3D table (`src/three/`), the HUD (`src/ui/`), the connection (`src/net.ts`) |
 
-The 3D follows the toy look from the gf-room playbook: matte Lambert with a wide wrap (`client/src/lib/toy.ts`),
-one warm key light, plum darks, one palette file. Every size is in `client/src/three/spec.ts` (millimetres, each
-tagged with its source), and `checkBoard()` in the same file checks that the parts fit together.
+Every size is in `client/src/three/spec.ts` (millimetres, each tagged with its source), and `checkBoard()` in the
+same file checks that the parts fit together. `client/src/three/island.ts` merges the board into two meshes.
 
 ## Running it
 
@@ -44,7 +47,6 @@ npm run e2e         # two scripted players and a bot play a whole game through a
 
 ## Pages for looking at things alone
 
-- `?part=pieces`: one tile of each terrain, every piece in every colour, harbour signs, dice
 - `?part=board`: a sample game a few turns in (`&seed=`, `&turns=`)
 - `?part=check`: the spec's checks beside a straight-down view of the board
 

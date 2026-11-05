@@ -32,3 +32,12 @@ export function paintIcon(ctx: CanvasRenderingContext2D, r: Resource, x: number,
   ctx.fill(new Path2D(ICON[r]))
   ctx.restore()
 }
+
+/** development card pictures, same 24 x 24 frame */
+export const CARD_ICON: Record<import('../../../shared/rules.ts').Card, string> = {
+  knight: 'M12 2l8 3v6c0 5-3.4 9-8 11c-4.6-2-8-6-8-11V5z',
+  roadBuilding: 'M9.2 3h2l-.7 18H5.6z M12.8 3h2l3.6 18h-4.9z',
+  yearOfPlenty: 'M10.5 3h3v7.5H21v3h-7.5V21h-3v-7.5H3v-3h7.5z',
+  monopoly: 'M3 17.5h18V21H3z M3 15.5l1.6-9.5 4.6 4.6L12 3.5l2.8 7.1 4.6-4.6 1.6 9.5z',
+  victoryPoint: 'M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7.1L12 17.3 5.8 21l1.6-7.1L2 9.2l7.1-.6z',
+}

@@ -35,7 +35,7 @@ export function botAction(s: S, p: number, rnd: () => number): Action | null {
     return { type: 'discard', cards }
   }
 
-  if (s.offer && s.offer.from !== p && ph.kind === 'main' && !s.offer.declined.includes(p)) {
+  if (s.offer && s.offer.from !== p && ph.kind === 'main' && !s.offer.declined.includes(p) && !s.offer.accepted.includes(p)) {
     const o = s.offer
     const fair = handSize(o.give) >= handSize(o.get)
     const can = RESOURCES.every((r) => hand[r] >= o.get[r])
@@ -72,7 +72,7 @@ function pick<T>(xs: T[], rnd: () => number): T {
 
 function mainMove(s: S, p: number, hand: Hand, rnd: () => number): Action {
   const me = s.players[p]
-  if (s.offer?.from === p) return { type: 'cancelOffer' }
+  if (s.offer?.from === p) return s.offer.accepted.length ? { type: 'confirmTrade', with: s.offer.accepted[0] } : { type: 'cancelOffer' }
   if (!s.cardPlayed) {
     if (canPlay(s, p, 'monopoly')) {
       return { type: 'playMonopoly', resource: pick([...RESOURCES], rnd) }

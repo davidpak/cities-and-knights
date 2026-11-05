@@ -15,8 +15,8 @@ import type { Harbor, Tile } from '../../../shared/engine.ts'
 import type { Terrain } from '../../../shared/rules.ts'
 import { PAL, TERRAIN } from '../lib/palette.ts'
 import { atlasUV, cellOf } from './atlas.ts'
-import { frameGeo, hullGeo, sailGeo, seaGeo, signGeo, tileGeo, tokenGeo } from './geometry.ts'
-import { DIORAMA, HARBOR, SEA, TILE, TOKEN, harborFrame, hexAt, pierLine } from './spec.ts'
+import { feltGeo, frameGeo, hullGeo, sailGeo, seaGeo, signGeo, tileGeo, tokenGeo, trayGeo } from './geometry.ts'
+import { DICE, DIORAMA, HARBOR, SEA, TILE, TOKEN, harborFrame, hexAt, pierLine } from './spec.ts'
 
 const UNIT = {
   // (a box is centred; cones and cylinders stand on y 0)
@@ -32,6 +32,12 @@ const UP = new Vector3(0, 1, 0)
 function at(x: number, y: number, z: number, s: number | [number, number, number] = 1, turn = 0) {
   const sc = typeof s === 'number' ? new Vector3(s, s, s) : new Vector3(...s)
   return new Matrix4().compose(new Vector3(x, y, z), new Quaternion().setFromAxisAngle(UP, turn), sc)
+}
+
+/** terrain is toned down a touch (toward a warm grey) so the players' pieces stand out against it */
+const MUTE = new Color('#b9ad99')
+function mute(hex: string, k = 0.18) {
+  return '#' + new Color(hex).lerp(MUTE, k).getHexString()
 }
 
 class Builder {
@@ -82,7 +88,8 @@ function ring(n: number, rnd: () => number, rIn = DIORAMA.clearIn + 4, rOut = DI
 /** what stands on one tile, at its centre (cx, cz), on its top (y) */
 function decorate(b: Builder, terrain: Terrain, seed: number, cx: number, cz: number) {
   const y = TILE.h
-  const c = TERRAIN[terrain]
+  const raw = TERRAIN[terrain]
+  const c = { a: mute(raw.a), b: mute(raw.b), c: mute(raw.c) }
   const rnd = seeded(seed)
   const put = (geo: BufferGeometry, color: string, local: Matrix4, group = new Matrix4()) =>
     b.add(geo, color, new Matrix4().multiplyMatrices(at(cx, y, cz), group).multiply(local))
@@ -217,11 +224,13 @@ export function buildIsland(tiles: Tile[], harbors: Harbor[]) {
 
   b.add(seaGeo(), PAL.sea, new Matrix4())
   b.add(frameGeo(), [PAL.maple, PAL.mapleDeep], new Matrix4())
+  b.add(trayGeo(), [PAL.maple, PAL.mapleDeep], at(DICE.tray.x, 0, DICE.tray.z))
+  b.add(feltGeo(), PAL.felt, at(DICE.tray.x, 0, DICE.tray.z))
 
   const tok = tokenGeo()
   tiles.forEach((t, i) => {
     const [x, z] = hexAt(i)
-    b.add(tileGeo(), [TERRAIN[t.terrain].top, TERRAIN[t.terrain].side], at(x, 0, z))
+    b.add(tileGeo(), [mute(TERRAIN[t.terrain].top), mute(TERRAIN[t.terrain].side)], at(x, 0, z))
     decorate(b, t.terrain, i * 31 + t.terrain.length, x, z)
     if (t.number !== null) {
       b.add(tok.side, PAL.creamDeep, at(x, TILE.h, z))

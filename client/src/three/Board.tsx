@@ -9,13 +9,14 @@ import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, type InstancedMesh, type OrthographicCamera } from 'three'
 import { TOPO } from '../../../shared/board.ts'
-import type { Building, Harbor, Tile } from '../../../shared/engine.ts'
+import type { Building, GameEvent, Harbor, Tile } from '../../../shared/engine.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
-import { PAL } from '../lib/palette.ts'
+import { PAL, PLAYER } from '../lib/palette.ts'
 import '../lib/toy.ts'
 import { getAtlas } from './atlas.ts'
 import { buildIsland } from './island.ts'
-import { City, Road, Robber, Settlement, useRedraw } from './Pieces.tsx'
+import { Dice } from './Dice.tsx'
+import { City, Pulse, Road, Robber, Settlement, useRedraw } from './Pieces.tsx'
 import { CAMERA, SEA, TILE, VIEW, edgeAt, hexAt, vertexAt } from './spec.ts'
 import { TestHook } from './TestHook.tsx'
 
@@ -32,6 +33,12 @@ export type BoardProps = {
   picking?: Picking
   you?: number
   onPick?: (kind: PickKind, id: number) => void
+  /** the last roll and how many there have been (the dice throw when this counts up) */
+  dice?: [number, number] | null
+  rolls?: number
+  onRoll?: () => void
+  /** what happened, so new builds can pulse */
+  events?: GameEvent[]
 }
 
 const islandMat = new MeshLambertMaterial({ vertexColors: true })
@@ -153,7 +160,37 @@ function ShadowsOnChange({ deps }: { deps: unknown[] }) {
   return null
 }
 
-function Contents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick }: BoardProps) {
+/** a pulse under each piece built since you arrived, so you see what just changed */
+function Pulses({ events, colors }: { events: GameEvent[]; colors: PlayerColor[] }) {
+  const seen = useRef<number>(events.length ? events[events.length - 1].n : -1)
+  const [live, setLive] = useState<{ n: number; x: number; z: number; color: string; size: number }[]>([])
+  useEffect(() => {
+    const fresh = events.filter((e) => e.n > seen.current)
+    if (!fresh.length) return
+    seen.current = fresh[fresh.length - 1].n
+    const add = fresh.flatMap((e) => {
+      if (e.k === 'build') {
+        const [x, z] = e.what === 'road' ? edgeAt(e.at) : vertexAt(e.at)
+        return [{ n: e.n, x, z, color: PLAYER[colors[e.p]].ui, size: e.what === 'city' ? 22 : e.what === 'road' ? 20 : 16 }]
+      }
+      if (e.k === 'robber') {
+        const [x, z] = hexAt(e.hex)
+        return [{ n: e.n, x, z, color: PAL.plum, size: 26 }]
+      }
+      return []
+    })
+    if (add.length) setLive((l) => [...l, ...add])
+  }, [events, colors])
+  return (
+    <>
+      {live.map((p) => (
+        <Pulse key={p.n} x={p.x} z={p.z} color={p.color} size={p.size} onDone={() => setLive((l) => l.filter((q) => q.n !== p.n))} />
+      ))}
+    </>
+  )
+}
+
+function Contents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, dice = null, rolls = 0, onRoll, events = [] }: BoardProps) {
   const [rx, rz] = hexAt(robber)
   return (
     <>
@@ -167,6 +204,8 @@ function Contents({ tiles, harbors, buildings, roads, robber, colors, picking, y
         return b.kind === 'city' ? <City key={`c${v}`} color={colors[b.owner]} x={x} z={z} /> : <Settlement key={`s${v}`} color={colors[b.owner]} x={x} z={z} />
       })}
       <Robber x={rx} z={rz} />
+      <Dice dice={dice} rolls={rolls} onRoll={onRoll} />
+      <Pulses events={events} colors={colors} />
       {picking && you >= 0 && <Picker picking={picking} color={colors[you]} onPick={onPick} />}
       <ShadowsOnChange deps={[JSON.stringify(buildings), JSON.stringify(roads), robber, tiles]} />
     </>
@@ -181,13 +220,12 @@ export function BoardView(props: BoardProps) {
       dpr={[1, 2]}
       shadows={{ type: PCFShadowMap }}
       camera={{ near: 100, far: 3000, position: [0, 1500, 0], zoom: 1 }}
-      gl={{ antialias: true, toneMapping: NeutralToneMapping, powerPreference: 'low-power' }}
+      gl={{ antialias: true, alpha: true, toneMapping: NeutralToneMapping, powerPreference: 'low-power' }}
       onCreated={({ gl }) => {
         gl.shadowMap.autoUpdate = false
         gl.shadowMap.needsUpdate = true
       }}
     >
-      <color attach="background" args={[PAL.bg]} />
       <hemisphereLight args={['#e4e0f5', '#c9b49c', 1.5]} />
       <directionalLight
         castShadow

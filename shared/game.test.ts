@@ -291,10 +291,44 @@ test('player trades: offer, decline, accept', () => {
   assert.equal(apply(s, 2, { type: 'acceptOffer' }).ok, false, 'player 2 has no ore')
   s = must(s, 2, { type: 'declineOffer' })
   s = must(s, 1, { type: 'acceptOffer' })
+  assert.equal(s.players[0].hand.ore, 0, 'nothing moves until the offerer picks a partner')
+  assert.deepEqual(s.offer?.accepted, [1])
+  assert.equal(apply(s, 0, { type: 'confirmTrade', with: 2 }).ok, false, 'player 2 said no')
+  assert.equal(apply(s, 1, { type: 'confirmTrade', with: 1 }).ok, false, 'only the offerer confirms')
+  s = must(s, 0, { type: 'confirmTrade', with: 1 })
   assert.equal(s.players[0].hand.ore, 1)
   assert.equal(s.players[1].hand.wool, 2)
   assert.equal(s.offer, null)
+  const last = s.events[s.events.length - 1]
+  assert.deepEqual(last.k === 'trade' && [last.from, last.to, last.give.wool, last.get.ore], [0, 1, 2, 1], 'the trade is told: who, with whom, what for what')
   invariants(s)
+})
+
+test('events tell what happened, and a stolen card is private to the two players', () => {
+  let s = afterSetup(21)
+  const kinds = new Set(s.events.map((e) => e.k))
+  assert.ok(kinds.has('build') && kinds.has('turn'))
+  const rnd = rng(9)
+  // play until someone steals
+  for (let i = 0; i < 4000 && !s.events.some((e) => e.k === 'steal'); i++) {
+    for (let p = 0; p < 3; p++) {
+      const a = botAction(viewFor(s, p), p, rnd)
+      if (a) {
+        s = must(s, p, a)
+        break
+      }
+    }
+  }
+  const st = s.events.find((e) => e.k === 'steal')
+  assert.ok(st && st.k === 'steal' && st.r, 'the full state knows the card')
+  if (!st || st.k !== 'steal') return
+  const other = [0, 1, 2].find((i) => i !== st.thief && i !== st.victim)!
+  const seen = (p: number) => viewFor(s, p).events.find((e) => e.n === st.n)
+  assert.equal((seen(st.thief) as typeof st).r, st.r)
+  assert.equal((seen(st.victim) as typeof st).r, st.r)
+  assert.equal((seen(other) as typeof st).r, undefined)
+  const rolls = s.events.filter((e) => e.k === 'roll')
+  assert.ok(rolls.length > 0 && rolls.every((e) => e.k === 'roll' && e.dice[0] >= 1 && e.dice[1] <= 6))
 })
 
 test('bank trades use harbour ratios', () => {

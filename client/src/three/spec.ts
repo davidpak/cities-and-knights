@@ -71,6 +71,17 @@ export const HARBOR = {
   boat: { u: 24, v: 17, len: 18, beam: 7, h: 4, mast: 16 }, // [D] moored beside the sign
 }
 
+/** two real dice, thrown into a little wooden tray on the table beside the frame (front right) */
+export const DICE = {
+  size: 16, // [STD] an ordinary 16 mm die, opposite faces adding to 7
+  round: 2.6, // [D]
+  tray: { x: 298, z: 228, w: 92, d: 62, rim: 5, h: 9, felt: 2 }, // [D] outside the frame, inside the camera's view
+  throw: 1.0, // [D] seconds from the toss to rest
+}
+
+/** a dark ink line round every piece, so pieces stand out from the board */
+export const OUTLINE = { mm: 1.1 } // [D]
+
 export const SEA = {
   level: 6, // [D] water surface (tiles stand 6 mm proud of it)
   inner: 318, // [D] the frame's inside, centre to corner (flat-topped)
@@ -221,6 +232,21 @@ export function checkBoard(): CheckResult[] {
   // from straight above, a city must look different from a settlement
   add('a city is clearly bigger than a settlement from above', CITY.w * CITY.d > 1.7 * SETTLEMENT.w * SETTLEMENT.d, `${CITY.w * CITY.d} vs ${SETTLEMENT.w * SETTLEMENT.d} mm²`)
   add('a settlement at a corner overhangs no token', TILE.layout - Math.hypot(SETTLEMENT.w, SETTLEMENT.d) / 2 > TOKEN.r + 4, `${f(TILE.layout - Math.hypot(SETTLEMENT.w, SETTLEMENT.d) / 2)} > ${TOKEN.r + 4}`)
+
+  // the dice tray sits on the table, clear of the frame, and holds two dice side by side with room to tumble
+  const T = DICE.tray
+  const frameOut = SEA.inner + SEA.rim
+  const nearest = Math.min(
+    ...[[T.x - T.w / 2, T.z - T.d / 2], [T.x - T.w / 2, T.z + T.d / 2], [T.x + T.w / 2, T.z - T.d / 2]].map(([x, z]) => {
+      // distance outside the frame's slanted lower-right side (flat-topped hexagon)
+      const nx = Math.cos(Math.PI / 6)
+      const nz = Math.sin(Math.PI / 6)
+      return x * nx + z * nz - frameOut * (SQRT3 / 2)
+    }),
+  )
+  add('the dice tray stands clear of the frame', nearest > 2, `${f(nearest)} mm clear`)
+  add('the tray fits two dice with room to spare', T.w - 2 * T.rim > 3 * DICE.size && T.d - 2 * T.rim > 2 * DICE.size, `${T.w - 2 * T.rim} x ${T.d - 2 * T.rim} inside`)
+  add('the tray is inside the camera\'s view', T.x + T.w / 2 < VIEW.w / 2 && T.z + T.d / 2 < (SEA.inner + SEA.rim) * (SQRT3 / 2), `right edge ${f(T.x + T.w / 2)} < ${f(VIEW.w / 2)}`)
 
   // the board's nine harbours each touch two corners and no corner twice
   const hc = new Set(TOPO.harbors.flatMap((e) => [TOPO.edges[e].a, TOPO.edges[e].b]))

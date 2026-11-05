@@ -41,7 +41,34 @@ export type Phase =
   | { kind: 'roadBuilding'; left: number }
   | { kind: 'over'; winner: number }
 
-export type Offer = { from: number; give: Hand; get: Hand; declined: number[] }
+/** a trade put to the table: others say yes or no, then the one who offered picks who to trade with */
+export type Offer = { from: number; give: Hand; get: Hand; accepted: number[]; declined: number[] }
+
+/**
+ * What happened, one thing at a time, so the table can show it plainly: who rolled what, who got which cards, who
+ * traded what with whom. A stolen card's kind is kept only in the thief's and the victim's copies (see viewFor).
+ */
+export type GameEvent = { n: number } & (
+  | { k: 'roll'; p: number; dice: [number, number] }
+  | { k: 'gain'; gains: { p: number; got: Partial<Hand> }[]; short?: Resource[] }
+  | { k: 'build'; p: number; what: 'road' | 'settlement' | 'city'; at: number; free?: boolean }
+  | { k: 'buy'; p: number }
+  | { k: 'play'; p: number; card: Card }
+  | { k: 'monopoly'; p: number; r: Resource; count: number }
+  | { k: 'plenty'; p: number; take: [Resource, Resource] }
+  | { k: 'bank'; p: number; give: Resource; count: number; get: Resource }
+  | { k: 'offer'; p: number; give: Hand; get: Hand }
+  | { k: 'answer'; p: number; yes: boolean }
+  | { k: 'trade'; from: number; to: number; give: Hand; get: Hand }
+  | { k: 'seven'; p: number; discards: Record<number, number> }
+  | { k: 'discard'; p: number; count: number }
+  | { k: 'robber'; p: number; hex: number }
+  | { k: 'steal'; thief: number; victim: number; r?: Resource }
+  | { k: 'award'; what: 'road' | 'army'; p: number | null; was: number | null }
+  | { k: 'turn'; p: number }
+  | { k: 'win'; p: number; points: number }
+)
+type EventBody = GameEvent extends infer E ? (E extends { n: number } ? Omit<E, 'n'> : never) : never
 
 export type LogEntry = { n: number; text: string; player?: number }
 
@@ -67,6 +94,8 @@ export type GameState = {
   largestArmy: number | null
   log: LogEntry[]
   logCount: number
+  events: GameEvent[]
+  eventCount: number
 }
 
 export type Action =
@@ -87,6 +116,7 @@ export type Action =
   | { type: 'cancelOffer' }
   | { type: 'acceptOffer' }
   | { type: 'declineOffer' }
+  | { type: 'confirmTrade'; with: number }
   | { type: 'endTurn' }
 
 export type Result = { ok: true; state: GameState } | { ok: false; error: string }
@@ -136,6 +166,8 @@ export function newGame(seats: Seat[], seed: number): GameState {
     largestArmy: null,
     log: [],
     logCount: 0,
+    events: [],
+    eventCount: 0,
   }
   s.tiles = dealTiles(s)
   s.robber = s.tiles.findIndex((t) => t.terrain === 'desert')
@@ -296,6 +328,11 @@ function log(s: GameState, text: string, player?: number) {
   if (s.log.length > 60) s.log.splice(0, s.log.length - 60)
 }
 
+function ev(s: GameState, e: EventBody) {
+  s.events.push({ ...e, n: s.eventCount++ } as GameEvent)
+  if (s.events.length > 80) s.events.splice(0, s.events.length - 80)
+}
+
 const fail = (error: string): Result => ({ ok: false, error })
 
 function pay(s: GameState, p: number, cost: Partial<Hand>) {
@@ -314,6 +351,7 @@ function updateLongestRoad(s: GameState) {
     s.longestRoad = top.length === 1 ? top[0] : null
   }
   if (s.longestRoad !== before) {
+    ev(s, { k: 'award', what: 'road', p: s.longestRoad, was: before })
     if (s.longestRoad !== null) log(s, `${s.players[s.longestRoad].name} takes Longest Road (${max}).`, s.longestRoad)
     else log(s, 'Nobody holds Longest Road now.')
   }
@@ -325,6 +363,7 @@ function checkWin(s: GameState) {
   if (victoryPoints(s, p) >= WIN_POINTS) {
     s.phase = { kind: 'over', winner: p }
     s.offer = null
+    ev(s, { k: 'win', p, points: victoryPoints(s, p) })
     log(s, `${s.players[p].name} wins with ${victoryPoints(s, p)} points!`, p)
   }
 }
@@ -339,6 +378,7 @@ function produce(s: GameState, roll: number) {
       if (b) owed[b.owner][r] += b.kind === 'city' ? 2 : 1
     }
   })
+  const short: Resource[] = []
   for (const r of RESOURCES) {
     const takers = owed.flatMap((h, i) => (h[r] > 0 ? [i] : []))
     const total = takers.reduce((n, i) => n + owed[i][r], 0)
@@ -349,10 +389,17 @@ function produce(s: GameState, roll: number) {
         s.bank[r] -= owed[i][r]
       }
     } else if (takers.length === 1) {
+      owed[takers[0]][r] = s.bank[r]
       s.players[takers[0]].hand[r] += s.bank[r]
       s.bank[r] = 0
-    } else log(s, `The bank is short of ${r}: nobody gets any.`)
+    } else {
+      for (const i of takers) owed[i][r] = 0
+      short.push(r)
+      log(s, `The bank is short of ${r}: nobody gets any.`)
+    }
   }
+  const gains = owed.flatMap((h, i) => (handSize(h) ? [{ p: i, got: Object.fromEntries(RESOURCES.filter((r) => h[r]).map((r) => [r, h[r]])) as Partial<Hand> }] : []))
+  ev(s, { k: 'gain', gains, ...(short.length ? { short } : {}) })
   const got = owed
     .map((h, i) => ({ i, list: RESOURCES.filter((r) => h[r] > 0).map((r) => `${h[r]} ${r}`) }))
     .filter((x) => x.list.length)
@@ -375,6 +422,7 @@ function steal(s: GameState, victim: number) {
   const r = bag[Math.floor(rand(s) * bag.length)]
   h[r]--
   s.players[s.current].hand[r]++
+  ev(s, { k: 'steal', thief: s.current, victim, r })
   log(s, `${s.players[s.current].name} takes a card from ${s.players[victim].name}.`, s.current)
 }
 
@@ -409,6 +457,7 @@ function step(s: GameState, p: number, a: Action): string | void {
     if (RESOURCES.some((r) => !Number.isInteger(a.cards[r]) || a.cards[r] < 0) || !hasAll(me.hand, a.cards)) return 'You do not have those cards.'
     pay(s, p, a.cards)
     delete ph.owed[p]
+    ev(s, { k: 'discard', p, count: n })
     log(s, `${me.name} discards ${n}.`, p)
     if (Object.keys(ph.owed).length === 0) s.phase = { kind: 'robber', then: 'main' }
     return
@@ -417,18 +466,10 @@ function step(s: GameState, p: number, a: Action): string | void {
     const o = s.offer
     if (!o || ph.kind !== 'main') return 'There is no trade on the table.'
     if (o.from === p) return 'That is your own offer.'
-    if (a.type === 'declineOffer') {
-      if (!o.declined.includes(p)) o.declined.push(p)
-      return
-    }
-    if (!hasAll(me.hand, o.get)) return 'You do not have what they ask for.'
-    if (!hasAll(s.players[o.from].hand, o.give)) return 'They no longer have what they offered.'
-    addTo(s.players[o.from].hand, o.give, -1)
-    addTo(me.hand, o.give, 1)
-    addTo(me.hand, o.get, -1)
-    addTo(s.players[o.from].hand, o.get, 1)
-    log(s, `${s.players[o.from].name} trades with ${me.name}.`, o.from)
-    s.offer = null
+    if (o.accepted.includes(p) || o.declined.includes(p)) return 'You have already answered.'
+    if (a.type === 'acceptOffer' && !hasAll(me.hand, o.get)) return 'You do not have what they ask for.'
+    ;(a.type === 'acceptOffer' ? o.accepted : o.declined).push(p)
+    ev(s, { k: 'answer', p, yes: a.type === 'acceptOffer' })
     return
   }
 
@@ -442,6 +483,7 @@ function step(s: GameState, p: number, a: Action): string | void {
         if (!settlementSpots(s, p).includes(v)) return 'You cannot build there.'
         s.buildings[v] = { owner: p, kind: 'settlement' }
         me.pieces.settlement--
+        ev(s, { k: 'build', p, what: 'settlement', at: v, free: true })
         if (ph.round === 2) {
           for (const h of TOPO.vertices[v].hexes) {
             const r = resourceOf(s.tiles[h])
@@ -461,6 +503,7 @@ function step(s: GameState, p: number, a: Action): string | void {
       pay(s, p, COST.settlement)
       s.buildings[v] = { owner: p, kind: 'settlement' }
       me.pieces.settlement--
+      ev(s, { k: 'build', p, what: 'settlement', at: v })
       log(s, `${me.name} builds a settlement.`, p)
       updateLongestRoad(s)
       return
@@ -472,6 +515,7 @@ function step(s: GameState, p: number, a: Action): string | void {
         if (!roadSpots(s, p).includes(e)) return 'The road must touch the settlement you just placed.'
         s.roads[e] = p
         me.pieces.road--
+        ev(s, { k: 'build', p, what: 'road', at: e, free: true })
         const n = s.players.length
         if (ph.round === 1) {
           if (s.current < n - 1) {
@@ -484,6 +528,7 @@ function step(s: GameState, p: number, a: Action): string | void {
         } else {
           s.turn = 1
           startTurn(s)
+          ev(s, { k: 'turn', p: 0 })
           log(s, `Setup is done. ${s.players[0].name}, roll the dice.`)
           return
         }
@@ -494,6 +539,7 @@ function step(s: GameState, p: number, a: Action): string | void {
         if (!roadSpots(s, p).includes(e)) return 'You cannot build a road there.'
         s.roads[e] = p
         me.pieces.road--
+        ev(s, { k: 'build', p, what: 'road', at: e, free: true })
         const left = ph.left - 1
         s.phase = left > 0 && me.pieces.road > 0 && roadSpots(s, p).length > 0 ? { kind: 'roadBuilding', left } : { kind: 'main' }
         updateLongestRoad(s)
@@ -506,6 +552,7 @@ function step(s: GameState, p: number, a: Action): string | void {
       pay(s, p, COST.road)
       s.roads[e] = p
       me.pieces.road--
+      ev(s, { k: 'build', p, what: 'road', at: e })
       updateLongestRoad(s)
       return
     }
@@ -518,6 +565,7 @@ function step(s: GameState, p: number, a: Action): string | void {
       s.buildings[a.vertex] = { owner: p, kind: 'city' }
       me.pieces.city--
       me.pieces.settlement++
+      ev(s, { k: 'build', p, what: 'city', at: a.vertex })
       log(s, `${me.name} builds a city.`, p)
       return
     }
@@ -527,6 +575,7 @@ function step(s: GameState, p: number, a: Action): string | void {
       const d2 = 1 + Math.floor(rand(s) * 6)
       s.dice = [d1, d2]
       s.rolls++
+      ev(s, { k: 'roll', p, dice: [d1, d2] })
       const total = d1 + d2
       log(s, `${me.name} rolls ${total}.`, p)
       if (total !== 7) {
@@ -539,6 +588,7 @@ function step(s: GameState, p: number, a: Action): string | void {
         const n = handSize(pl.hand)
         if (n > HAND_LIMIT) owed[i] = Math.floor(n / 2)
       })
+      ev(s, { k: 'seven', p, discards: { ...owed } })
       s.phase = Object.keys(owed).length ? { kind: 'discard', owed } : { kind: 'robber', then: 'main' }
       return
     }
@@ -546,6 +596,7 @@ function step(s: GameState, p: number, a: Action): string | void {
       if (ph.kind !== 'robber') return 'You cannot move the robber now.'
       if (!robberSpots(s).includes(a.hex)) return 'Move the robber to a different tile.'
       s.robber = a.hex
+      ev(s, { k: 'robber', p, hex: a.hex })
       log(s, `${me.name} moves the robber.`, p)
       afterRobber(s, a.hex, ph.then)
       return
@@ -563,6 +614,7 @@ function step(s: GameState, p: number, a: Action): string | void {
       if (!affordable(s, p, 'card')) return 'You cannot afford a card.'
       pay(s, p, COST.card)
       me.cards.push({ card: s.pile.pop()!, turn: s.turn })
+      ev(s, { k: 'buy', p })
       log(s, `${me.name} buys a card.`, p)
       return
     }
@@ -585,12 +637,14 @@ function step(s: GameState, p: number, a: Action): string | void {
       if (a.type === 'playRoadBuilding' && (me.pieces.road === 0 || roadSpots(s, p).length === 0)) return 'You have nowhere to build a road.'
       me.cards.splice(me.cards.findIndex((c) => c.card === card && c.turn < s.turn), 1)
       s.cardPlayed = true
+      ev(s, { k: 'play', p, card })
       log(s, `${me.name} plays ${CARD_NAME[card]}.`, p)
       if (a.type === 'playKnight') {
         me.knights++
         const holder = s.largestArmy
         if (me.knights >= LARGEST_ARMY_MIN && holder !== p && (holder === null || me.knights > s.players[holder].knights)) {
           s.largestArmy = p
+          ev(s, { k: 'award', what: 'army', p, was: holder })
           log(s, `${me.name} takes Largest Army (${me.knights}).`, p)
         }
         s.phase = { kind: 'robber', then: ph.kind === 'roll' ? 'roll' : 'main' }
@@ -601,6 +655,7 @@ function step(s: GameState, p: number, a: Action): string | void {
           me.hand[r]++
           s.bank[r]--
         }
+        ev(s, { k: 'plenty', p, take: a.take })
       } else {
         let n = 0
         s.players.forEach((o, i) => {
@@ -609,6 +664,7 @@ function step(s: GameState, p: number, a: Action): string | void {
           me.hand[a.resource] += o.hand[a.resource]
           o.hand[a.resource] = 0
         })
+        ev(s, { k: 'monopoly', p, r: a.resource, count: n })
         log(s, `${me.name} collects ${n} ${a.resource}.`, p)
       }
       return
@@ -623,6 +679,7 @@ function step(s: GameState, p: number, a: Action): string | void {
       s.bank[a.give] += ratio
       me.hand[a.get]++
       s.bank[a.get]--
+      ev(s, { k: 'bank', p, give: a.give, count: ratio, get: a.get })
       log(s, `${me.name} trades ${ratio} ${a.give} for 1 ${a.get} with the bank.`, p)
       return
     }
@@ -633,10 +690,27 @@ function step(s: GameState, p: number, a: Action): string | void {
       if (handSize(a.give) === 0 || handSize(a.get) === 0) return 'Offer something and ask for something.'
       if (RESOURCES.some((r) => a.give[r] > 0 && a.get[r] > 0)) return 'You cannot give and get the same resource.'
       if (!hasAll(me.hand, a.give)) return 'You do not have what you are offering.'
-      s.offer = { from: p, give: { ...a.give }, get: { ...a.get }, declined: [] }
+      s.offer = { from: p, give: { ...a.give }, get: { ...a.get }, accepted: [], declined: [] }
+      ev(s, { k: 'offer', p, give: { ...a.give }, get: { ...a.get } })
       return
     }
     case 'cancelOffer': {
+      s.offer = null
+      return
+    }
+    case 'confirmTrade': {
+      const o = s.offer
+      if (!o || o.from !== p || ph.kind !== 'main') return 'You have no trade on the table.'
+      if (!o.accepted.includes(a.with)) return 'They have not said yes.'
+      const them = s.players[a.with]
+      if (!hasAll(me.hand, o.give)) return 'You no longer have what you offered.'
+      if (!hasAll(them.hand, o.get)) return 'They no longer have what you asked for.'
+      addTo(me.hand, o.give, -1)
+      addTo(them.hand, o.give, 1)
+      addTo(them.hand, o.get, -1)
+      addTo(me.hand, o.get, 1)
+      ev(s, { k: 'trade', from: p, to: a.with, give: { ...o.give }, get: { ...o.get } })
+      log(s, `${me.name} trades with ${them.name}.`, p)
       s.offer = null
       return
     }
@@ -645,6 +719,7 @@ function step(s: GameState, p: number, a: Action): string | void {
       s.current = (s.current + 1) % s.players.length
       s.turn++
       startTurn(s)
+      ev(s, { k: 'turn', p: s.current })
       log(s, `${s.players[s.current].name}'s turn.`, s.current)
       return
     }
@@ -665,8 +740,10 @@ export function viewFor(s: GameState, you: number): View {
   const over = s.phase.kind === 'over'
   const { rng: _r, pile, players, ...rest } = s
   void _r
+  const base = structuredClone(rest)
+  base.events = base.events.map((e) => (e.k === 'steal' && !over && you !== e.thief && you !== e.victim ? { ...e, r: undefined } : e))
   return {
-    ...structuredClone(rest),
+    ...base,
     pile: pile.length,
     you,
     players: players.map((pl, i) => ({

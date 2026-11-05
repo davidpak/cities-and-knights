@@ -11,15 +11,15 @@ import {
   Quaternion, SphereGeometry, Vector3,
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { TOPO } from '../../../shared/board.ts'
 import type { Harbor, Tile } from '../../../shared/engine.ts'
 import type { Terrain } from '../../../shared/rules.ts'
 import { PAL, TERRAIN } from '../lib/palette.ts'
 import { atlasUV, cellOf } from './atlas.ts'
-import { frameGeo, plankGeo, seaGeo, signGeo, tileGeo, tokenGeo } from './geometry.ts'
-import { DIORAMA, HARBOR, SEA, TILE, TOKEN, harborSign, hexAt, vertexAt } from './spec.ts'
+import { frameGeo, hullGeo, sailGeo, seaGeo, signGeo, tileGeo, tokenGeo } from './geometry.ts'
+import { DIORAMA, HARBOR, SEA, TILE, TOKEN, harborFrame, hexAt } from './spec.ts'
 
 const UNIT = {
+  // (a box is centred; cones and cylinders stand on y 0)
   cone: new ConeGeometry(1, 1, 8, 1).translate(0, 0.5, 0),
   peak: new ConeGeometry(1, 1, 7, 1).translate(0, 0.5, 0),
   cyl: new CylinderGeometry(1, 1, 1, 8).translate(0, 0.5, 0),
@@ -151,6 +151,48 @@ function decorate(b: Builder, terrain: Terrain, seed: number, cx: number, cz: nu
   }
 }
 
+const WOOD = ['#e3b384', '#d6a473'] // deck planks, alternating
+const POST = '#8a5e3c'
+
+/** a dock along the coast side, a short pier, the sign at its end, posts in the water, a boat tied up beside */
+function harbor(b: Builder, pictures: BufferGeometry[], h: Harbor, n: number, sign: { side: BufferGeometry }) {
+  const H = HARBOR
+  const { at: on, turn, out } = harborFrame(h.edge)
+  const outTurn = Math.atan2(-out[1], out[0])
+  const box = (u: number, v: number, w: number, d: number, top: number, hgt: number, color: string) => {
+    const [x, z] = on(u, v)
+    b.add(UNIT.brick, color, at(x, top - hgt / 2, z, [w, hgt, d], turn))
+  }
+  const post = (u: number, v: number, top: number) => {
+    const [x, z] = on(u, v)
+    b.add(UNIT.cyl, POST, at(x, 0, z, [H.post.r, top, H.post.r]))
+  }
+  // the dock: planks laid across it, side by side along the coast, a darker beam along its sea edge
+  const { len, from, to, planks, gap, h: ph, top, beam } = H.deck
+  const w = (len - gap * (planks - 1)) / planks
+  for (let i = 0; i < planks; i++) box(-len / 2 + w / 2 + i * (w + gap), (from + to) / 2, w, to - from, top, ph, WOOD[i % 2])
+  box(0, to - beam / 2, len + 1, beam, top + 0.4, ph + 1, POST)
+  for (const u of [-len / 2 + 1.6, len / 2 - 1.6]) {
+    post(u, from + 1.5, top - ph)
+    post(u, to - beam / 2, top + H.post.above) // stands proud of the deck at the sea corners
+  }
+  // the pier: a walkway of cross planks from the dock into the sign
+  const P_ = H.pier
+  for (let i = 0; i < P_.planks; i++) box(0, P_.from + P_.plank / 2 + i * (P_.plank + P_.gap), P_.w, P_.plank, top, ph, WOOD[(i + 1) % 2])
+  for (const s of [-1, 1]) box((s * (P_.w + 1.2)) / 2, (P_.from + H.out - H.signR + 1) / 2, 1.2, H.out - H.signR + 1 - P_.from, top - 0.6, ph, POST)
+  // the sign, flush with the deck
+  const [sx, sz] = on(0, H.out)
+  b.add(sign.side, PAL.creamDeep, at(sx, top - H.signH, sz))
+  pictures.push(pictureDisc(H.signR - 1.2, cellOf({ harbor: h.kind })).translate(sx, top, sz))
+  // a boat on one side or the other, sitting in the water
+  const side = n % 2 ? 1 : -1
+  const [bx, bz] = on(side * H.boat.u, H.boat.v)
+  const hullAt = at(bx, SEA.level - 1.2, bz, 1, outTurn)
+  b.add(hullGeo(), ['#d6a473', '#f4efe6'], hullAt) // wooden inside, white sides
+  b.add(UNIT.cyl, POST, new Matrix4().multiplyMatrices(hullAt, at(-1, 1, 0, [0.6, H.boat.mast, 0.6])))
+  b.add(sailGeo(), '#ffffff', new Matrix4().multiplyMatrices(hullAt, at(-0.4, 3.2, 0)))
+}
+
 /** a disc whose uvs point at one picture in the atlas */
 function pictureDisc(r: number, cell: number) {
   const g = new CircleGeometry(r, 40)
@@ -182,18 +224,7 @@ export function buildIsland(tiles: Tile[], harbors: Harbor[]) {
   })
 
   const sign = signGeo()
-  for (const h of harbors) {
-    const [sx, sz] = harborSign(h.edge)
-    const e = TOPO.edges[h.edge]
-    for (const v of [e.a, e.b]) {
-      const [vx, vz] = vertexAt(v)
-      const len = Math.hypot(sx - vx, sz - vz) - HARBOR.signR + 2
-      const ang = Math.atan2(sz - vz, sx - vx)
-      b.add(plankGeo(), PAL.mapleDeep, at(vx + (Math.cos(ang) * len) / 2, SEA.level - 0.5, vz + (Math.sin(ang) * len) / 2, [len, 1, 1], -ang))
-    }
-    b.add(sign.side, PAL.creamDeep, at(sx, SEA.level - 1, sz))
-    pictures.push(pictureDisc(HARBOR.signR - 1.2, cellOf({ harbor: h.kind })).translate(sx, SEA.level - 1 + HARBOR.signH, sz))
-  }
+  harbors.forEach((h, n) => harbor(b, pictures, h, n, sign))
 
   const painted = mergeGeometries(pictures.map((g) => {
     const out = new BufferGeometry()

@@ -16,7 +16,7 @@ import '../lib/toy.ts'
 import { getAtlas } from './atlas.ts'
 import { buildIsland } from './island.ts'
 import { City, Road, Robber, Settlement, useRedraw } from './Pieces.tsx'
-import { SEA, TILE, VIEW, edgeAt, hexAt, vertexAt } from './spec.ts'
+import { CAMERA, SEA, TILE, VIEW, edgeAt, hexAt, vertexAt } from './spec.ts'
 import { TestHook } from './TestHook.tsx'
 
 export type PickKind = 'settlement' | 'city' | 'road' | 'robber'
@@ -38,15 +38,16 @@ const islandMat = new MeshLambertMaterial({ vertexColors: true })
 const MARK = new MeshLambertMaterial({ color: PAL.cream })
 const dummy = new Object3D()
 
-/** the camera looks straight down, zoomed so the whole board fits the box */
+/** the camera looks down, tipped toward you a little (spec CAMERA), zoomed so the whole board fits the box */
 function Fit() {
   const { camera, size, invalidate } = useThree()
   useLayoutEffect(() => {
     const cam = camera as OrthographicCamera
+    const d = 1500
     cam.zoom = Math.min(size.width / VIEW.w, size.height / VIEW.h)
-    cam.position.set(0, 1500, 0)
-    cam.up.set(0, 0, -1)
-    cam.lookAt(0, 0, 0)
+    cam.position.set(0, d * Math.cos(CAMERA.tilt), d * Math.sin(CAMERA.tilt))
+    cam.up.set(0, 1, 0)
+    cam.lookAt(0, 6, 0)
     cam.updateProjectionMatrix()
     invalidate()
   }, [camera, size.width, size.height, invalidate])

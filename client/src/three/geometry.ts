@@ -116,5 +116,11 @@ export const seaGeo = memo(() => {
   return g
 })
 
-/** a short plank for a harbour pier, along +x */
-export const plankGeo = memo(() => slab((s) => roundedRect(1, HARBOR.plank.w - 1, 0.4, s), HARBOR.plank.h, 0.5))
+/** a little boat's hull, pointing along +x, its inside (the top) a separate group from its sides */
+export const hullGeo = memo(() => {
+  const { len: L, beam: B, h } = HARBOR.boat
+  return slab((s) => roundedPolygon([P(-L / 2, -B / 2), P(L * 0.18, -B / 2), P(L / 2, 0), P(L * 0.18, B / 2), P(-L / 2, B / 2)], [1.5, 2.5, 1.2, 2.5, 1.5], s), h, 0.8)
+})
+
+/** a triangular sail, standing up, its face across the boat's length */
+export const sailGeo = memo(() => upright([[0, 0], [10, 0], [0, 15]], 1, 0.35))

@@ -48,11 +48,19 @@ export const CITY = { w: 30, d: 19, wall: 11, peak: 17, towerW: 13, tower: 22, t
 export const ROAD = { len: 32, w: 8, h: 6, round: 1.8 } // [D]
 export const ROBBER = { r: 11, h: 30 } // [D]
 
+/**
+ * A harbour: a little wooden dock along the coast side it serves (so it plainly belongs to that side's two corners),
+ * a short pier out from its middle, the sign at the end of the pier, posts in the water, and a boat tied up beside.
+ * Measured in the harbour's own frame: u along the coast (0 = the side's middle), v straight out to sea from it.
+ */
 export const HARBOR = {
-  out: 30, // [D] how far the sign stands out to sea from the coast side
-  signR: 19, // [D] big enough to read the rate
+  deck: { len: 40, from: 1.5, to: 13, planks: 7, gap: 0.7, h: 2.2, top: 9.5, beam: 1.8 }, // [D] stands just off the tile, over water; a darker beam along its sea edge
+  pier: { w: 10, from: 13.5, planks: 3, plank: 2.4, gap: 0.6 }, // [D] a walkway of cross planks from the dock into the sign
+  post: { r: 1.5, above: 2.6 }, // [D] the dock's sea-side posts stand a little above the deck
+  out: 30, // [D] the sign's centre, from the side's middle
+  signR: 14, // [D] big enough to read the rate, small enough to sit in the water
   signH: 4, // [D]
-  plank: { w: 5, h: 2.5 }, // [D]
+  boat: { u: 18, v: 23, len: 20, beam: 7.5, h: 4, mast: 18 }, // [D] moored beside the pier
 }
 
 export const SEA = {
@@ -62,13 +70,20 @@ export const SEA = {
   rimH: 16, // [D]
 }
 
-/** what the top-down camera must show: the frame, flat-topped, plus a margin */
+/** the camera: looking down, tipped toward you a little so pieces show their shape */
+export const CAMERA = {
+  tilt: (28 * Math.PI) / 180, // [D] from straight down
+  margin: 1.03, // [D]
+}
+
+/** what the camera must show: the frame (flat-topped), tipped by the tilt, plus room for the tallest pieces */
 export const VIEW = {
   get w() {
-    return 2 * (SEA.inner + SEA.rim) * 1.03
+    return 2 * (SEA.inner + SEA.rim) * CAMERA.margin
   },
   get h() {
-    return 2 * (SEA.inner + SEA.rim) * (Math.sqrt(3) / 2) * 1.04
+    const deep = 2 * (SEA.inner + SEA.rim) * (Math.sqrt(3) / 2)
+    return (deep * Math.cos(CAMERA.tilt) + 40 * Math.sin(CAMERA.tilt)) * CAMERA.margin
   },
 }
 
@@ -79,14 +94,49 @@ export const hexAt = (h: number) => toBoard(TOPO.hexes[h].x, TOPO.hexes[h].y)
 export const vertexAt = (v: number) => toBoard(TOPO.vertices[v].x, TOPO.vertices[v].y)
 export const edgeAt = (e: number) => toBoard(TOPO.edges[e].x, TOPO.edges[e].y)
 
-/** where a harbour's sign stands */
-export function harborSign(edge: number): [number, number] {
+/** a harbour's frame: the side's middle, the way along the coast, the way out to sea */
+export function harborFrame(edge: number) {
   const e = TOPO.edges[edge]
   const h = TOPO.hexes[e.hexes[0]]
   const [mx, mz] = toBoard(e.x, e.y)
   const [hx, hz] = toBoard(h.x, h.y)
   const l = Math.hypot(mx - hx, mz - hz)
-  return [mx + ((mx - hx) / l) * HARBOR.out, mz + ((mz - hz) / l) * HARBOR.out]
+  const out: [number, number] = [(mx - hx) / l, (mz - hz) / l]
+  const along: [number, number] = [-out[1], out[0]]
+  /** a point in the harbour's frame, on the board */
+  const at = (u: number, v: number): [number, number] => [mx + along[0] * u + out[0] * v, mz + along[1] * u + out[1] * v]
+  /** the turn about the vertical that lays a shape's +x along the coast and its -z out to sea */
+  const turn = Math.atan2(-along[1], along[0])
+  return { at, turn, along, out }
+}
+
+/** where a harbour's sign stands */
+export function harborSign(edge: number): [number, number] {
+  return harborFrame(edge).at(0, HARBOR.out)
+}
+
+/** points round everything a harbour puts in the water, for the checks */
+export function harborFootprint(edge: number): [number, number][] {
+  const { at } = harborFrame(edge)
+  const H = HARBOR
+  const pts: [number, number][] = []
+  for (const u of [-H.deck.len / 2, H.deck.len / 2]) for (const v of [H.deck.from, H.deck.to]) pts.push(at(u, v))
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2
+    pts.push(at(Math.cos(a) * H.signR, H.out + Math.sin(a) * H.signR))
+  }
+  for (const s of [-1, 1]) for (const dv of [-H.boat.len / 2, H.boat.len / 2]) for (const du of [-H.boat.beam / 2, H.boat.beam / 2]) pts.push(at(s * H.boat.u + du, H.boat.v + dv))
+  return pts
+}
+
+/** is a board point on a land tile? (pointy-topped hexes) */
+export function onLand(x: number, z: number) {
+  return TOPO.hexes.some((h) => {
+    const [hx, hz] = toBoard(h.x, h.y)
+    const dx = Math.abs(x - hx)
+    const dz = Math.abs(z - hz)
+    return dx <= TILE.flat && dz <= TILE.r - dx / SQRT3
+  })
 }
 
 export type CheckResult = { what: string; ok: boolean; value: string }
@@ -117,14 +167,18 @@ export function checkBoard(): CheckResult[] {
   add('dioramas stay clear of roads on the sides', DIORAMA.clearOut < TILE.flat - ROAD.w / 2, `${DIORAMA.clearOut} < ${f(TILE.flat - ROAD.w / 2)}`)
   add('the robber\'s base fits on a token', ROBBER.r < TOKEN.r, `${ROBBER.r} < ${TOKEN.r}`)
 
-  // harbours sit in open water inside the frame and don't touch each other
+  // harbours sit in open water inside the frame and don't touch each other or the land
   const apothem = (SEA.inner * SQRT3) / 2
+  const prints = TOPO.harbors.map(harborFootprint)
+  const farthest = Math.max(...prints.flat().map(([x, z]) => Math.hypot(x, z)))
+  add('every harbour (dock, pier, sign, boat) is inside the frame', farthest < apothem - 2, `${f(farthest)} < ${f(apothem - 2)}`)
+  const wet = prints.flat().filter(([x, z]) => onLand(x, z)).length
+  add('no part of a harbour stands on a tile', wet === 0, `${wet} points on land`)
   const signs = TOPO.harbors.map(harborSign)
-  const farthest = Math.max(...signs.map(([x, z]) => Math.hypot(x, z)))
-  add('every harbour sign is inside the frame', farthest + HARBOR.signR < apothem, `${f(farthest + HARBOR.signR)} < ${f(apothem)}`)
   let closest = Infinity
   signs.forEach((a, i) => signs.forEach((b, j) => j > i && (closest = Math.min(closest, Math.hypot(a[0] - b[0], a[1] - b[1])))))
-  add('harbour signs never overlap', closest > 2 * HARBOR.signR, `${f(closest)} mm apart`)
+  add('harbours never touch each other', closest > 2 * (HARBOR.boat.u + HARBOR.boat.beam), `${f(closest)} mm apart`)
+  add('the dock fits along its side, short of the corners', HARBOR.deck.len < TILE.layout - 2 * 8, `${HARBOR.deck.len} < ${f(TILE.layout - 16)}`)
   const landR = Math.max(...TOPO.vertices.map((v) => Math.hypot(...toBoard(v.x, v.y))))
   add('the frame clears the land', landR < apothem - 10, `${f(landR)} < ${f(apothem - 10)}`)
 

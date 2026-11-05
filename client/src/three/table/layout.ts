@@ -9,6 +9,8 @@ export type Spot = [number, number]
 export type Box = { what: string; x: number; z: number; w: number; d: number; hex?: number }
 
 export const CARD = { w: 64, d: 90, t: 0.9, small: 0.6 } // [D] a card lying flat; small ones (on the tray, and everyone else's on a tall screen) are 60%
+/** your hand's stacks lie side by side, nearly touching */
+export const HAND_STEP = CARD.w + 2
 export const TRAY = { w: 200, d: 150, rim: 6, h: 7 } // [D] the trade tray: near half is what you give, far half what you get
 export const DICE_TRAY = { w: 92, d: 62 } // [D] (matches spec DICE.tray)
 /** your pieces waiting to be built: a pile of roads, a cluster of houses, a group of cities */
@@ -145,7 +147,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
     const xs = spread(others.length, others.length === 2 ? 300 : 430)
     L = {
       portrait,
-      hand: Array.from({ length: 5 }, (_, i): Spot => [-300 + i * 78, 392]),
+      hand: Array.from({ length: 5 }, (_, i): Spot => [-300 + i * HAND_STEP, 392]),
       dev: (i) => [84 + i * 74, 392],
       supply: { road: [-590, 190], settlement: [-515, 190], city: [-428, 190] },
       awardsMine: [-560, 318],
@@ -170,8 +172,8 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       L = {
         ...L,
         seats: others.map((p, i) => ({ p, at: [xs3[i], -395] as Spot })),
-        hand: Array.from({ length: 8 }, (_, i): Spot => [-600 + i * 72, 392]),
-        dev: (i, held = 8) => [-600 + held * 72 + 26 + i * 66, 392],
+        hand: Array.from({ length: 8 }, (_, i): Spot => [-600 + i * HAND_STEP, 392]),
+        dev: (i, held = 8) => [-600 + held * HAND_STEP + 22 + i * HAND_STEP, 392],
         meLabel: [-560, 312],
         supply: { road: [-614, 160], settlement: [-540, 160], city: [-455, 160] },
         awardsMine: [412, 392],
@@ -199,7 +201,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
     const xs = spread(others.length, others.length === 2 ? 180 : 268)
     L = {
       portrait,
-      hand: Array.from({ length: 5 }, (_, i): Spot => [(i - 2) * 76, 620]),
+      hand: Array.from({ length: 5 }, (_, i): Spot => [-150 + i * HAND_STEP, 620]),
       dev: (i) => [40 + i * 70, 724],
       supply: { road: [-330, 724], settlement: [-255, 724], city: [-170, 724] },
       awardsMine: [-300, 620],
@@ -224,7 +226,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       L = {
         ...L,
         seats: others.map((p, i) => ({ p, at: [xs[i], -700] as Spot })),
-        hand: Array.from({ length: 8 }, (_, i): Spot => [-266 + i * 76, 560]),
+        hand: Array.from({ length: 8 }, (_, i): Spot => [-300 + i * HAND_STEP, 560]),
         dev: (i) => [-80 + i * 70, 660],
         supply: { road: [-330, 660], settlement: [-255, 660], city: [-170, 660] },
         meLabel: [-262, 462],

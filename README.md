@@ -34,8 +34,8 @@ it; if it needs a target, the line at the top says what to click.
 Every move is a plain click or button press: the board only shows spots where a move is legal, and the server
 decides every result. The board is 3D, tipped a little toward you; two real dice are thrown into a tray beside it.
 
-**Everything is on the table.** Your cards lie in front of you in stacks, only the kinds you hold, packed from the
-left (no empty places), with your development cards right after them and your pieces waiting to be built. The bank sits at the side as one card of each kind, fanned like a hand of cards (a kind's count shows only when it
+**Everything is on the table.** Your cards lie in front of you in stacks, only the kinds you hold, side by side from
+the left in the usual order (no empty places, no gaps), with your development cards right after them and your pieces waiting to be built. The bank sits at the side as one card of each kind, fanned like a hand of cards (a kind's count shows only when it
 runs low), with its development deck (or the three progress piles), next to the dice
 in their tray. Everyone else's cards lie face down at their places. To do something, you do it to the thing:
 

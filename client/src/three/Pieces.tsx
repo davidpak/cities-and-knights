@@ -76,7 +76,6 @@ export function Settlement({ color, ghost, x, z }: PieceProps) {
     <group position={[x, TILE.h, z]}>
       <Drop ghost={ghost}>
         <mesh geometry={settlementGeo()} material={body(color, ghost)} castShadow={!ghost} />
-        {!ghost && <Outline geometry={settlementGeo()} />}
       </Drop>
     </group>
   )
@@ -87,7 +86,6 @@ export function City({ color, ghost, x, z }: PieceProps) {
     <group position={[x, TILE.h, z]}>
       <Drop ghost={ghost}>
         <mesh geometry={cityGeo()} material={body(color, ghost)} castShadow={!ghost} />
-        {!ghost && <Outline geometry={cityGeo()} />}
       </Drop>
     </group>
   )
@@ -98,7 +96,6 @@ export function Road({ color, ghost, x, z, angle }: PieceProps & { angle: number
     <group position={[x, TILE.h - 1.5, z]} rotation={[0, -angle, 0]}>
       <Drop ghost={ghost}>
         <mesh geometry={roadGeo()} material={body(color, ghost)} castShadow={!ghost} />
-        {!ghost && <Outline geometry={roadGeo()} />}
       </Drop>
     </group>
   )
@@ -132,7 +129,6 @@ export function Robber({ x, z, ghost }: { x: number; z: number; ghost?: boolean 
   return (
     <group ref={g} position={[x, TILE.h + TOKEN.h, z]}>
       <mesh geometry={robberGeo()} material={mat(PAL.plum, { opacity: ghost ? 0.55 : 1 })} castShadow={!ghost} />
-      {!ghost && <Outline geometry={robberGeo()} />}
     </group>
   )
 }

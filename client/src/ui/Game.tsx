@@ -206,12 +206,18 @@ export function Game({ view }: { view: View }) {
     return () => window.removeEventListener('keydown', f)
   }, [mine, ph.kind, myOffer])
 
+  // labels and buttons scale with the table (so they keep their places on it, on any screen)
+  const project = useProjector()
+  const [ax] = project(0, 0, 0)
+  const [bx] = project(100, 0, 0)
+  const k = Math.min(1.2, Math.max(0.5, Math.abs(bx - ax) / 100 || 1))
+
   const lastRoll = [...view.events].reverse().find((e) => e.k === 'roll')
   const dice = view.dice ?? (lastRoll?.k === 'roll' ? lastRoll.dice : null)
   const devs = view.players[me]?.cards ?? []
 
   return (
-    <div className="game">
+    <div className="game" style={{ ['--k' as string]: k }}>
       <TableView
         tiles={view.tiles}
         harbors={view.harbors}

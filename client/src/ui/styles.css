@@ -216,50 +216,71 @@ input:focus {
   position: absolute !important;
   inset: 0;
 }
-/* the two lines at the top: what to do, what just happened */
+/*
+ * Everything over the table is one kind of label: cream card stock, a thin ink edge, the slab serif. Sizes follow
+ * --k (pixels per millimetre of table, set by the game), so each label keeps its place on the table on any screen.
+ */
+.game {
+  --u: calc(var(--k, 1) * 1px);
+}
+.tag-ui,
+.todo,
+.happened,
+.name,
+.history-btn,
+.corner .stamp-btn {
+  background: var(--paper);
+  border: calc(var(--u) * 1.6) solid var(--ink);
+  border-radius: calc(var(--u) * 6);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: none;
+}
+/* the two lines at the top: whose turn, what just happened */
 .lines {
   position: absolute;
-  top: 10px;
+  top: calc(var(--u) * 10);
   left: 50%;
   transform: translateX(-50%);
   display: grid;
   justify-items: center;
-  gap: 5px;
+  gap: calc(var(--u) * 6);
   pointer-events: none;
-  max-width: calc(100vw - 200px);
   z-index: 3;
 }
 .todo {
-  font-weight: 700;
-  font-size: 17px;
-  background: var(--paper);
-  border: var(--line);
-  border-radius: 6px;
-  box-shadow: var(--lift);
-  padding: 4px 14px;
+  font-size: calc(var(--u) * 17);
+  padding: calc(var(--u) * 3) calc(var(--u) * 14);
   white-space: nowrap;
-}
-.todo.mine {
-  background: var(--gold);
 }
 .happened {
-  font-size: 14px;
-  color: #f6ecd5;
-  background: rgba(42, 29, 19, 0.72);
-  border-radius: 5px;
-  padding: 3px 10px;
-  animation: fade-in 0.3s ease-out;
+  font-size: calc(var(--u) * 13.5);
+  font-weight: 500;
+  padding: calc(var(--u) * 2) calc(var(--u) * 10);
   white-space: nowrap;
+  max-width: calc(var(--u) * 460);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: rgba(246, 236, 213, 0.88);
+  border-color: rgba(42, 29, 19, 0.55);
+  animation: fade-in 0.3s ease-out;
 }
-.happened .who {
-  font-size: 13px;
+.happened .who,
+.todo .who {
+  font-size: 0.95em;
+  padding: 0 0.35em;
+  border-width: 1px;
+}
+.happened .icon {
+  width: 1.1em;
+  height: 1.1em;
 }
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }
 }
 
-/* labels pinned to the table */
+/* pinned to the table */
 .labels {
   position: absolute;
   inset: 0;
@@ -269,127 +290,129 @@ input:focus {
 .count {
   position: absolute;
   transform: translate(-50%, -50%);
-  min-width: 22px;
-  height: 22px;
-  padding: 0 5px;
-  border-radius: 11px;
-  background: var(--red);
-  color: #fff;
-  border: 2px solid var(--ink);
+  min-width: calc(var(--u) * 20);
+  height: calc(var(--u) * 20);
+  padding: 0 calc(var(--u) * 5);
+  border-radius: calc(var(--u) * 10);
+  background: var(--ink);
+  color: var(--paper);
   font-weight: 700;
-  font-size: 13px;
+  font-size: calc(var(--u) * 12);
   display: grid;
   place-items: center;
-}
-.count.bank {
-  background: var(--paper);
-  color: var(--ink);
 }
 .name {
   position: absolute;
   transform: translate(-50%, -50%);
   white-space: nowrap;
-  font-weight: 700;
-  font-size: 15px;
-  background: var(--paper);
-  border: var(--line);
-  border-left: 7px solid var(--pc);
-  border-radius: 5px;
-  padding: 2px 9px;
-  box-shadow: var(--lift);
+  font-size: calc(var(--u) * 14);
+  padding: calc(var(--u) * 1) calc(var(--u) * 9) calc(var(--u) * 1) calc(var(--u) * 7);
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 6);
+}
+.name::before {
+  content: '';
+  width: calc(var(--u) * 10);
+  height: calc(var(--u) * 10);
+  border-radius: 50%;
+  background: var(--pc);
+  border: 1px solid var(--ink);
 }
 .name b {
-  margin-left: 6px;
-  background: var(--gold);
-  border: 1.5px solid var(--ink);
-  border-radius: 10px;
-  padding: 0 7px;
+  font-weight: 700;
+  color: var(--ink-2);
 }
 .name.turn {
-  outline: 3px solid var(--pc);
-  outline-offset: 1px;
+  box-shadow: 0 calc(var(--u) * 3) 0 var(--pc);
 }
-.steal-tag {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  background: var(--red);
+.name .mark {
+  font-style: normal;
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--u) * 18);
+  height: calc(var(--u) * 18);
+  border-radius: 50%;
   color: #fff;
-  border: var(--line);
-  border-radius: 4px;
-  padding: 0 7px;
-  font-weight: 700;
-  animation: bob 0.9s ease-in-out infinite alternate;
+  font-size: calc(var(--u) * 11);
 }
-@keyframes bob {
-  to { transform: translate(-50%, calc(-100% - 4px)); }
+.name .mark.ok {
+  background: #2f9e57;
 }
-.supply-tag {
-  position: absolute;
-  transform: translate(-50%, 0);
-  opacity: 0.85;
+.name .mark.no {
+  background: #d2452f;
 }
 
-/* the tray's buttons, just below it */
-.tray-ui {
+/* the tray's check and cross */
+.marks {
   position: absolute;
+  transform: translate(0, -50%);
   display: grid;
-  justify-items: start;
-  gap: 6px;
+  gap: calc(var(--u) * 10);
   z-index: 3;
-  background: rgba(42, 29, 19, 0.55);
-  padding: 6px 8px;
-  border-radius: 8px;
-  color: #fff8ea;
-  max-width: 96vw;
 }
-.tray-row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+.mark-btn {
+  width: calc(var(--u) * 44);
+  height: calc(var(--u) * 44);
+  border-radius: 50%;
+  border: calc(var(--u) * 1.6) solid var(--ink);
+  font-size: calc(var(--u) * 22);
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  transition: transform 0.06s;
 }
-.tray-ui .stamp-btn {
-  color: var(--ink);
-  font-size: 14px;
-  padding: 5px 10px;
+.mark-btn.ok {
+  background: #2f9e57;
 }
-.tray-ui .stamp-btn.go {
-  color: #fff8ea;
+.mark-btn.no {
+  background: #d2452f;
 }
-.who-btn:not(.go) {
-  border-left: 6px solid var(--pc);
+.mark-btn:hover:not(:disabled) {
+  transform: scale(1.06);
 }
-.why {
-  font-size: 12.5px;
-  color: #f3e3c3;
+.mark-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.mark-btn:disabled {
+  opacity: 0.35;
 }
 
-/* the one button for the turn, and the history */
+/* the turn button, and the history */
 .corner {
   position: absolute;
-  right: 14px;
-  bottom: 14px;
-  display: flex;
-  gap: 8px;
+  right: calc(var(--u) * 14);
+  bottom: calc(var(--u) * 14);
   z-index: 3;
+}
+.corner .stamp-btn {
+  font-size: calc(var(--u) * 17);
+  padding: calc(var(--u) * 7) calc(var(--u) * 18);
+}
+.corner .stamp-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .history-btn {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  top: calc(var(--u) * 10);
+  right: calc(var(--u) * 12);
   z-index: 4;
-  font-size: 13px !important;
-  padding: 4px 10px !important;
+  font-size: calc(var(--u) * 13);
+  padding: calc(var(--u) * 3) calc(var(--u) * 10);
 }
 .drawer {
   position: absolute;
-  top: 50px;
-  right: 12px;
-  bottom: 12px;
+  top: calc(var(--u) * 46);
+  right: calc(var(--u) * 12);
+  bottom: calc(var(--u) * 12);
   width: min(330px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
   z-index: 4;
   animation: fade-in 0.15s ease-out;
+  box-shadow: none;
 }
 .chronicle {
   flex: 1;
@@ -406,14 +429,10 @@ input:focus {
 .entry .gains {
   display: inline-flex;
 }
-.entry.e-trade {
-  background: #d9ead7;
-  padding: 4px 6px;
-  border-radius: 4px;
-}
+.entry.e-trade,
 .entry.e-steal,
 .entry.e-seven {
-  background: #f5ddd4;
+  background: rgba(106, 85, 65, 0.1);
   padding: 4px 6px;
   border-radius: 4px;
 }
@@ -434,7 +453,7 @@ input:focus {
 .turn-rule::after {
   content: '';
   flex: 1;
-  height: 3px;
+  height: 2px;
   background: var(--pc);
   border-radius: 2px;
 }
@@ -482,13 +501,12 @@ input:focus {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 70px;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
   padding: 7px 14px;
   background: var(--paper);
-  border: var(--line);
+  border: 1.6px solid var(--ink);
   border-radius: 6px;
-  box-shadow: var(--lift);
   z-index: 30;
   font-weight: 700;
 }
@@ -641,85 +659,5 @@ input:focus {
   .check {
     grid-template-columns: 1fr;
   }
-  .lines {
-    max-width: calc(100vw - 90px);
-    top: 8px;
-  }
-  .todo {
-    font-size: 14px;
-    white-space: normal;
-    text-align: center;
-  }
-  .happened {
-    font-size: 12px;
-    white-space: normal;
-  }
-  .name {
-    font-size: 12px;
-    padding: 1px 6px;
-  }
-  .count {
-    min-width: 18px;
-    height: 18px;
-    font-size: 11px;
-  }
 }
 
-/* the tray's check and cross */
-.marks {
-  position: absolute;
-  transform: translate(0, -50%);
-  display: grid;
-  gap: 10px;
-  z-index: 3;
-}
-.mark-btn {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  border: var(--line);
-  box-shadow: var(--lift);
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  transition: transform 0.06s, box-shadow 0.06s;
-}
-.mark-btn.ok {
-  background: #2f9e57;
-}
-.mark-btn.no {
-  background: #d2452f;
-}
-.mark-btn:hover:not(:disabled) {
-  transform: scale(1.06);
-}
-.mark-btn:active:not(:disabled) {
-  transform: translate(2px, 2px);
-  box-shadow: none;
-}
-.mark-btn:disabled {
-  opacity: 0.35;
-  box-shadow: none;
-}
-/* a yes or no beside a name, while your offer is out */
-.name .mark {
-  font-style: normal;
-  margin-left: 6px;
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 1.5px solid var(--ink);
-  color: #fff;
-  font-size: 12px;
-}
-.name .mark.ok {
-  background: #2f9e57;
-}
-.name .mark.no {
-  background: #d2452f;
-}

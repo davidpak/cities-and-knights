@@ -10,7 +10,7 @@
  */
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BoxGeometry, Matrix4, MeshBasicMaterial, MeshLambertMaterial, Quaternion, Vector3, BackSide, type BufferGeometry, type InstancedMesh, type Material, type Texture } from 'three'
+import { BoxGeometry, Matrix4, MeshLambertMaterial, Quaternion, Vector3, type BufferGeometry, type InstancedMesh, type Material, type Texture } from 'three'
 import type { View } from '../../../../shared/engine.ts'
 import { CARDS, RESOURCES, type Card, type Hand, type PlayerColor, type Resource } from '../../../../shared/rules.ts'
 import { PAL, PLAYER } from '../../lib/palette.ts'
@@ -20,14 +20,13 @@ import { Dice } from '../Dice.tsx'
 import { cityGeo, roadGeo, settlementGeo } from '../geometry.ts'
 import { setProjector } from '../labels.ts'
 import { useRedraw } from '../Pieces.tsx'
-import { CAMERA, OUTLINE } from '../spec.ts'
+import { CAMERA } from '../spec.ts'
 import { TestHook } from '../TestHook.tsx'
 import { awardFace, devBack, devFace, resourceBack, resourceFace, trayFace } from './faces.ts'
 import { CARD, TRAY, seatParts, type Layout, type Spot } from './layout.ts'
 
 const BOX = new BoxGeometry(1, 1, 1)
 const EDGE = new MeshLambertMaterial({ color: '#efe2c4' })
-const INK = new MeshBasicMaterial({ color: PAL.ink, side: BackSide })
 const faceMats = new Map<Texture, Material>()
 const faceMat = (t: Texture) => {
   let m = faceMats.get(t)
@@ -239,28 +238,17 @@ function supplySpots(what: Build, n: number): { x: number; y: number; z: number;
 
 function Supply({ what, at, n, color, enabled, up, ready, onClick }: { what: Build; at: Spot; n: number; color: PlayerColor; enabled: boolean; up: boolean; ready: boolean; onClick: () => void }) {
   const body = useRef<InstancedMesh>(null)
-  const line = useRef<InstancedMesh>(null)
   const [hover, setHover] = useState(false)
   const geo = PIECE_GEO[what]()
   const materials = useMemo(() => [mat(PLAYER[color].body), mat(PLAYER[color].roof)], [color])
   const redraw = useRedraw()
-  const outline = useMemo(() => {
-    geo.computeBoundingBox()
-    const b = geo.boundingBox!
-    const t = OUTLINE.mm
-    const size = new Vector3().subVectors(b.max, b.min)
-    const s = new Vector3((size.x + 2 * t) / size.x, (size.y + 2 * t) / size.y, (size.z + 2 * t) / size.z)
-    const c = new Vector3().addVectors(b.max, b.min).multiplyScalar(0.5)
-    return new Matrix4().compose(new Vector3(c.x * (1 - s.x), c.y * (1 - s.y), c.z * (1 - s.z)), new Quaternion(), s)
-  }, [geo])
   useLayoutEffect(() => {
     const lift = up ? 12 : hover && enabled ? 5 : 0
     supplySpots(what, n).forEach((p, i) => {
       tmpM.compose(tmpP.set(at[0] + p.x, p.y + lift, at[1] + p.z), tmpQ.setFromAxisAngle(UP, p.turn), tmpS.set(1, 1, 1))
       body.current?.setMatrixAt(i, tmpM)
-      line.current?.setMatrixAt(i, tmpM.clone().multiply(outline))
     })
-    for (const m of [body.current, line.current]) {
+    for (const m of [body.current]) {
       if (!m) continue
       m.count = n
       m.instanceMatrix.needsUpdate = true
@@ -290,7 +278,6 @@ function Supply({ what, at, n, color, enabled, up, ready, onClick }: { what: Bui
       {/* a mat under the pieces you can build right now */}
       {(ready || up) && <mesh geometry={BOX} material={mat(up ? '#e3a72c' : PAL.cream)} scale={[what === 'road' ? 44 : what === 'city' ? 66 : 62, 0.6, 44]} position={[at[0], 0.3, at[1]]} receiveShadow {...handlers} />}
       <instancedMesh ref={body} args={[geo, materials, 16]} castShadow receiveShadow {...handlers} />
-      <instancedMesh ref={line} args={[geo, INK, 16]} />
     </group>
   )
 }

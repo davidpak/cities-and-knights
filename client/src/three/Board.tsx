@@ -7,7 +7,7 @@
  */
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, type InstancedMesh, type OrthographicCamera } from 'three'
+import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, PCFSoftShadowMap, type InstancedMesh, type OrthographicCamera } from 'three'
 import { TOPO } from '../../../shared/board.ts'
 import type { Building, GameEvent, Harbor, Tile } from '../../../shared/engine.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
@@ -225,11 +225,11 @@ export function BoardContents({ tiles, harbors, buildings, roads, robber, colors
 export function Lights({ extent = 380 }: { extent?: number }) {
   return (
     <>
-      <hemisphereLight args={['#e4e0f5', '#c9b49c', 1.5]} />
+      <hemisphereLight args={['#e4e0f5', '#c9b49c', 1.8]} />
       <directionalLight
         castShadow
         position={[-260, 900, 380]}
-        intensity={1.7}
+        intensity={1.35}
         color="#fff4e8"
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0005}
@@ -250,7 +250,7 @@ export function canvasProps() {
     orthographic: true,
     frameloop: 'demand' as const,
     dpr: [1, 2] as [number, number],
-    shadows: { type: PCFShadowMap },
+    shadows: { type: PCFSoftShadowMap },
     camera: { near: 100, far: 4000, position: [0, 1500, 0] as [number, number, number], zoom: 1 },
     gl: { antialias: true, alpha: true, toneMapping: NeutralToneMapping, powerPreference: 'low-power' as const },
     onCreated: ({ gl }: { gl: { shadowMap: { autoUpdate: boolean; needsUpdate: boolean } } }) => {
@@ -276,11 +276,11 @@ export function BoardView(props: BoardProps) {
         gl.shadowMap.needsUpdate = true
       }}
     >
-      <hemisphereLight args={['#e4e0f5', '#c9b49c', 1.5]} />
+      <hemisphereLight args={['#e4e0f5', '#c9b49c', 1.8]} />
       <directionalLight
         castShadow
         position={[-260, 900, 380]}
-        intensity={1.7}
+        intensity={1.35}
         color="#fff4e8"
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0005}

@@ -38,10 +38,10 @@ export const TERRAIN: Record<Terrain, { top: string; side: string; a: string; b:
 
 /** pieces: clear and distinct first, still matte and warm */
 export const PLAYER: Record<PlayerColor, { body: string; roof: string; ui: string }> = {
-  red: { body: '#e8402f', roof: '#a82a1f', ui: '#e8402f' },
-  blue: { body: '#2f6be6', roof: '#1f4aa8', ui: '#2f6be6' },
-  orange: { body: '#ff9a1a', roof: '#c96a00', ui: '#f08a00' },
-  white: { body: '#fbf8f1', roof: '#c9c0b4', ui: '#f4efe6' },
+  red: { body: '#e0574c', roof: '#b23e37', ui: '#d9534a' },
+  blue: { body: '#4f7fd8', roof: '#3a62b0', ui: '#4a78cf' },
+  orange: { body: '#f2a43a', roof: '#d07f22', ui: '#e8952c' },
+  white: { body: '#f4efe6', roof: '#cfc6d8', ui: '#d8d0c4' },
 }
 
 export const RESOURCE_COLOR: Record<Resource, string> = {

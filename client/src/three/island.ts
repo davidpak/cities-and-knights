@@ -36,7 +36,7 @@ function at(x: number, y: number, z: number, s: number | [number, number, number
 
 /** terrain is toned down a touch (toward a warm grey) so the players' pieces stand out against it */
 const MUTE = new Color('#b9ad99')
-function mute(hex: string, k = 0.18) {
+function mute(hex: string, k = 0) {
   return '#' + new Color(hex).lerp(MUTE, k).getHexString()
 }
 

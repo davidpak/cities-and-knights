@@ -41,8 +41,11 @@ export type Phase =
   | { kind: 'roadBuilding'; left: number }
   | { kind: 'over'; winner: number }
 
-/** a trade put to the table: others say yes or no, then the one who offered picks who to trade with */
-export type Offer = { from: number; give: Hand; get: Hand; accepted: number[]; declined: number[] }
+/**
+ * A trade put to another player (`to`): they say yes, and it happens; they say no, and it's gone.
+ * Without `to` it's put to the whole table: others say yes or no, then the one who offered picks who to trade with.
+ */
+export type Offer = { from: number; to?: number; give: Hand; get: Hand; accepted: number[]; declined: number[] }
 
 /**
  * What happened, one thing at a time, so the table can show it plainly: who rolled what, who got which cards, who
@@ -57,7 +60,7 @@ export type GameEvent = { n: number } & (
   | { k: 'monopoly'; p: number; r: Resource; count: number }
   | { k: 'plenty'; p: number; take: [Resource, Resource] }
   | { k: 'bank'; p: number; give: Resource; count: number; get: Resource }
-  | { k: 'offer'; p: number; give: Hand; get: Hand }
+  | { k: 'offer'; p: number; to?: number; give: Hand; get: Hand }
   | { k: 'answer'; p: number; yes: boolean }
   | { k: 'trade'; from: number; to: number; give: Hand; get: Hand }
   | { k: 'seven'; p: number; discards: Record<number, number> }
@@ -112,7 +115,7 @@ export type Action =
   | { type: 'playYearOfPlenty'; take: [Resource, Resource] }
   | { type: 'playMonopoly'; resource: Resource }
   | { type: 'bankTrade'; give: Resource; get: Resource }
-  | { type: 'offerTrade'; give: Hand; get: Hand }
+  | { type: 'offerTrade'; give: Hand; get: Hand; to?: number }
   | { type: 'cancelOffer' }
   | { type: 'acceptOffer' }
   | { type: 'declineOffer' }
@@ -466,10 +469,28 @@ function step(s: GameState, p: number, a: Action): string | void {
     const o = s.offer
     if (!o || ph.kind !== 'main') return 'There is no trade on the table.'
     if (o.from === p) return 'That is your own offer.'
+    if (o.to !== undefined && o.to !== p) return 'That offer is not to you.'
     if (o.accepted.includes(p) || o.declined.includes(p)) return 'You have already answered.'
     if (a.type === 'acceptOffer' && !hasAll(me.hand, o.get)) return 'You do not have what they ask for.'
-    ;(a.type === 'acceptOffer' ? o.accepted : o.declined).push(p)
     ev(s, { k: 'answer', p, yes: a.type === 'acceptOffer' })
+    if (o.to === undefined) {
+      ;(a.type === 'acceptOffer' ? o.accepted : o.declined).push(p)
+      return
+    }
+    // an offer made to you alone: no closes it, yes makes the trade there and then
+    if (a.type === 'declineOffer') {
+      s.offer = null
+      return
+    }
+    const them = s.players[o.from]
+    if (!hasAll(them.hand, o.give)) return 'They no longer have what they offered.'
+    addTo(them.hand, o.give, -1)
+    addTo(me.hand, o.give, 1)
+    addTo(me.hand, o.get, -1)
+    addTo(them.hand, o.get, 1)
+    ev(s, { k: 'trade', from: o.from, to: p, give: { ...o.give }, get: { ...o.get } })
+    log(s, `${them.name} trades with ${me.name}.`, o.from)
+    s.offer = null
     return
   }
 
@@ -690,8 +711,9 @@ function step(s: GameState, p: number, a: Action): string | void {
       if (handSize(a.give) === 0 || handSize(a.get) === 0) return 'Offer something and ask for something.'
       if (RESOURCES.some((r) => a.give[r] > 0 && a.get[r] > 0)) return 'You cannot give and get the same resource.'
       if (!hasAll(me.hand, a.give)) return 'You do not have what you are offering.'
-      s.offer = { from: p, give: { ...a.give }, get: { ...a.get }, accepted: [], declined: [] }
-      ev(s, { k: 'offer', p, give: { ...a.give }, get: { ...a.get } })
+      if (a.to !== undefined && (a.to === p || !s.players[a.to])) return 'Pick another player to trade with.'
+      s.offer = { from: p, ...(a.to !== undefined ? { to: a.to } : {}), give: { ...a.give }, get: { ...a.get }, accepted: [], declined: [] }
+      ev(s, { k: 'offer', p, ...(a.to !== undefined ? { to: a.to } : {}), give: { ...a.give }, get: { ...a.get } })
       return
     }
     case 'cancelOffer': {

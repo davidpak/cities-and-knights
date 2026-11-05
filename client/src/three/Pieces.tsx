@@ -49,7 +49,7 @@ const INK = new MeshBasicMaterial({ color: PAL.ink, side: BackSide })
  * A dark line round a piece: the same shape, a little bigger, drawn from the inside (back faces only), so only a rim
  * shows. Grown by the same number of millimetres on every side, whatever the piece's proportions.
  */
-function Outline({ geometry }: { geometry: BufferGeometry }) {
+export function Outline({ geometry }: { geometry: BufferGeometry }) {
   const [scale, offset] = useMemo(() => {
     geometry.computeBoundingBox()
     const b = geometry.boundingBox!

@@ -7,7 +7,8 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import { CanvasTexture, Group, Quaternion, SRGBColorSpace, Vector3 } from 'three'
 import { mat } from '../lib/toy.ts'
-import { DIE_FACES, dieGeo } from './geometry.ts'
+import { PAL } from '../lib/palette.ts'
+import { DIE_FACES, dieGeo, feltGeo, trayGeo } from './geometry.ts'
 import { useRedraw } from './Pieces.tsx'
 import { DICE } from './spec.ts'
 
@@ -59,13 +60,13 @@ function seeded(n: number) {
   }
 }
 
-function Die({ value, roll, index, onClick }: { value: number; roll: number; index: number; onClick?: () => void }) {
+function Die({ value, roll, index, onClick, at }: { value: number; roll: number; index: number; onClick?: () => void; at: [number, number] }) {
   const g = useRef<Group>(null)
   const materials = useMemo(() => DIE_FACES.map((v) => mat('#ffffff', { map: face(v) })), [])
   const shown = useRef(roll)
   const t0 = useRef<number | null>(null)
   const redraw = useRedraw()
-  const T = DICE.tray
+  const T = { ...DICE.tray, x: at[0], z: at[1] }
 
   const plan = useMemo(() => {
     const rnd = seeded(roll * 2 + index + 1)
@@ -74,7 +75,8 @@ function Die({ value, roll, index, onClick }: { value: number; roll: number; ind
     const axis = new Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize()
     const spin = Math.PI * (4 + 2 * Math.floor(rnd() * 2))
     return { rest, from, axis, spin, final: restingOn(value, rnd() * Math.PI * 2) }
-  }, [roll, index, value, T])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roll, index, value, at[0], at[1]])
 
   useFrame(({ clock }) => {
     const o = g.current
@@ -119,12 +121,15 @@ function Die({ value, roll, index, onClick }: { value: number; roll: number; ind
   )
 }
 
-export function Dice({ dice, rolls, onRoll }: { dice: [number, number] | null; rolls: number; onRoll?: () => void }) {
+/** the dice in their tray, at `at` on the table (the tray's centre) */
+export function Dice({ dice, rolls, onRoll, at = [DICE.tray.x, DICE.tray.z] }: { dice: [number, number] | null; rolls: number; onRoll?: () => void; at?: [number, number] }) {
   const [a, b] = dice ?? [6, 6]
   return (
     <group>
-      <Die value={a} roll={rolls} index={0} onClick={onRoll} />
-      <Die value={b} roll={rolls} index={1} onClick={onRoll} />
+      <mesh geometry={trayGeo()} material={[mat(PAL.maple), mat(PAL.mapleDeep)]} position={[at[0], 0, at[1]]} castShadow receiveShadow />
+      <mesh geometry={feltGeo()} material={mat(PAL.felt)} position={[at[0], 0, at[1]]} receiveShadow onClick={onRoll} />
+      <Die value={a} roll={rolls} index={0} onClick={onRoll} at={at} />
+      <Die value={b} roll={rolls} index={1} onClick={onRoll} at={at} />
     </group>
   )
 }

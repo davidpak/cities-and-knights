@@ -6,14 +6,19 @@ A 3D hex-island trading and building game for 2–4 players, online with friends
 Every move is a plain click or button press: the board only shows spots where a move is legal, and the server
 decides every result. The board is 3D, tipped a little toward you; real dice tumble in a tray beside it.
 
-**The table.** The other players sit across the top on plaques (points, cards in hand, a "+2 grain" that pops up when
-they collect). Your seat is along the bottom: what to do now, your hand fanned out, your moves. The big moments are
-announced across the top of the board for a moment, and the whole story is told down the side, line by line, with
-everyone's colours and the actual cards: who rolled what, who got what, who traded what with whom.
+**Everything is on the table.** Your cards lie in front of you in stacks, with your development cards beside them
+and your pieces waiting to be built. The bank's five stacks and its development deck sit at the side, next to the dice
+in their tray. Everyone else's cards lie face down at their places. To do something, you do it to the thing:
 
-**Trading** happens on one mat, right above your hand: click cards in your hand to give them, pick what you want on
-the mat. "Trade with the bank" is ready as soon as the cards fit your rates (harbours included). "Ask everyone" puts
-the offer to the table; each player's yes or no shows on the mat, and you pick who to trade with.
+- **Build:** click a piece in your supply (the ones you can afford stand on a little mat), then click a white spot.
+- **Buy a development card:** click the deck. **Play one:** click it.
+- **Trade:** click cards in your hand and they go onto the near half of the trade tray. Click what you want, either
+  the cards behind the tray or the bank's stacks, and it goes on the far half. Then "Trade with the bank", or "Offer"
+  a player (or tap their cards first). They see the tray on their side and answer Accept or No thanks.
+- **Roll:** click the dice. **Rob:** click a tile, then the cards of the player to steal from.
+
+On screen there's only one line saying what to do, one saying what just happened, the turn button, a few buttons by
+the tray, counts on the stacks, everyone's name and points, and a History panel you can open.
 
 **Fast on any computer:** the board draws only when something moves (nothing at all while you think), the whole
 island is two draw calls, shadows are recomputed only when a piece moves, and the home screen loads without three.js.
@@ -46,8 +51,8 @@ without the server.
 ## Checks
 
 ```sh
-npm test            # rules: 14 tests, including 120 whole bot games checked after every move
-npm run check       # the 3D spec's fit checks
+npm test            # rules: 15 tests, including 120 whole bot games checked after every move
+npm run check       # the 3D spec's fit checks, and that nothing on the table overlaps (2-4 players, wide and tall)
 npm run typecheck   # shared, server and client
 npm run e2e         # two scripted players and a bot play a whole game through a running server
 ```

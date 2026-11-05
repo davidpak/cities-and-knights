@@ -35,7 +35,7 @@ export function botAction(s: S, p: number, rnd: () => number): Action | null {
     return { type: 'discard', cards }
   }
 
-  if (s.offer && s.offer.from !== p && ph.kind === 'main' && !s.offer.declined.includes(p) && !s.offer.accepted.includes(p)) {
+  if (s.offer && s.offer.from !== p && (s.offer.to === undefined || s.offer.to === p) && ph.kind === 'main' && !s.offer.declined.includes(p) && !s.offer.accepted.includes(p)) {
     const o = s.offer
     const fair = handSize(o.give) >= handSize(o.get)
     const can = RESOURCES.every((r) => hand[r] >= o.get[r])

@@ -25,6 +25,11 @@ export function TestHook() {
       const r = gl.domElement.getBoundingClientRect()
       return [r.left + ((v.x + 1) / 2) * size.width, r.top + ((1 - v.y) / 2) * size.height]
     }
+    w.__project = (x: number, y: number, z: number) => {
+      const v = new Vector3(x, y, z).project(camera)
+      const r = gl.domElement.getBoundingClientRect()
+      return [r.left + ((v.x + 1) / 2) * size.width, r.top + ((1 - v.y) / 2) * size.height]
+    }
     w.__frames = 0
     gl.info.autoReset = true
     const orig = gl.render.bind(gl)

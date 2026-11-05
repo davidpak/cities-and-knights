@@ -45,19 +45,28 @@ const islandMat = new MeshLambertMaterial({ vertexColors: true })
 const MARK = new MeshLambertMaterial({ color: PAL.cream })
 const dummy = new Object3D()
 
-/** the camera looks down, tipped toward you a little (spec CAMERA), zoomed so the whole board fits the box */
-function Fit() {
+export type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number }
+const BOARD_BOUNDS: Bounds = { minX: -VIEW.w / 2, maxX: VIEW.w / 2, minZ: -(SEA.inner + SEA.rim) * 0.9, maxZ: (SEA.inner + SEA.rim) * 0.9 }
+
+/** the camera looks down, tipped toward you (spec CAMERA), zoomed so everything in `bounds` fits the box */
+export function Fit({ bounds = BOARD_BOUNDS, tilt = CAMERA.tilt }: { bounds?: Bounds; tilt?: number }) {
   const { camera, size, invalidate } = useThree()
+  const key = `${bounds.minX},${bounds.maxX},${bounds.minZ},${bounds.maxZ},${tilt}`
   useLayoutEffect(() => {
     const cam = camera as OrthographicCamera
-    const d = 1500
-    cam.zoom = Math.min(size.width / VIEW.w, size.height / VIEW.h)
-    cam.position.set(0, d * Math.cos(CAMERA.tilt), d * Math.sin(CAMERA.tilt))
+    const d = 2000
+    const cx = (bounds.minX + bounds.maxX) / 2
+    const cz = (bounds.minZ + bounds.maxZ) / 2
+    const w = bounds.maxX - bounds.minX
+    const h = (bounds.maxZ - bounds.minZ) * Math.cos(tilt) + 40 * Math.sin(tilt)
+    cam.zoom = Math.min(size.width / w, size.height / h)
+    cam.position.set(cx, d * Math.cos(tilt), cz + d * Math.sin(tilt))
     cam.up.set(0, 1, 0)
-    cam.lookAt(0, 6, 0)
+    cam.lookAt(cx, 6, cz)
     cam.updateProjectionMatrix()
     invalidate()
-  }, [camera, size.width, size.height, invalidate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera, size.width, size.height, invalidate, key])
   return null
 }
 
@@ -141,7 +150,7 @@ function Picker({ picking, color, onPick }: { picking: NonNullable<Picking>; col
           onPick?.(kind, n)
         }}
       >
-        <planeGeometry args={[SEA.inner * 2.2, SEA.inner * 2.2]} />
+        <circleGeometry args={[SEA.inner * 0.95, 48]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
       {hover !== null && kind === 'settlement' && <Settlement ghost color={color} x={hx} z={hz} />}
@@ -190,7 +199,8 @@ function Pulses({ events, colors }: { events: GameEvent[]; colors: PlayerColor[]
   )
 }
 
-function Contents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, dice = null, rolls = 0, onRoll, events = [] }: BoardProps) {
+/** the board and everything on it (not the dice: they sit wherever the table puts them) */
+export function BoardContents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, events = [] }: BoardProps) {
   const [rx, rz] = hexAt(robber)
   return (
     <>
@@ -204,7 +214,6 @@ function Contents({ tiles, harbors, buildings, roads, robber, colors, picking, y
         return b.kind === 'city' ? <City key={`c${v}`} color={colors[b.owner]} x={x} z={z} /> : <Settlement key={`s${v}`} color={colors[b.owner]} x={x} z={z} />
       })}
       <Robber x={rx} z={rz} />
-      <Dice dice={dice} rolls={rolls} onRoll={onRoll} />
       <Pulses events={events} colors={colors} />
       {picking && you >= 0 && <Picker picking={picking} color={colors[you]} onPick={onPick} />}
       <ShadowsOnChange deps={[JSON.stringify(buildings), JSON.stringify(roads), robber, tiles]} />
@@ -212,7 +221,48 @@ function Contents({ tiles, harbors, buildings, roads, robber, colors, picking, y
   )
 }
 
+/** one soft key light (its shadows only redrawn when asked) and a warm sky light */
+export function Lights({ extent = 380 }: { extent?: number }) {
+  return (
+    <>
+      <hemisphereLight args={['#e4e0f5', '#c9b49c', 1.5]} />
+      <directionalLight
+        castShadow
+        position={[-260, 900, 380]}
+        intensity={1.7}
+        color="#fff4e8"
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0005}
+        shadow-normalBias={0.8}
+        shadow-camera-left={-extent}
+        shadow-camera-right={extent}
+        shadow-camera-top={extent}
+        shadow-camera-bottom={-extent}
+        shadow-camera-near={200}
+        shadow-camera-far={2000}
+      />
+    </>
+  )
+}
+
+export function canvasProps() {
+  return {
+    orthographic: true,
+    frameloop: 'demand' as const,
+    dpr: [1, 2] as [number, number],
+    shadows: { type: PCFShadowMap },
+    camera: { near: 100, far: 4000, position: [0, 1500, 0] as [number, number, number], zoom: 1 },
+    gl: { antialias: true, alpha: true, toneMapping: NeutralToneMapping, powerPreference: 'low-power' as const },
+    onCreated: ({ gl }: { gl: { shadowMap: { autoUpdate: boolean; needsUpdate: boolean } } }) => {
+      gl.shadowMap.autoUpdate = false
+      gl.shadowMap.needsUpdate = true
+    },
+  }
+}
+
+/** the board alone (for the ?part= pages) */
 export function BoardView(props: BoardProps) {
+  const { dice = null, rolls = 0, onRoll } = props
   return (
     <Canvas
       orthographic
@@ -243,7 +293,8 @@ export function BoardView(props: BoardProps) {
         shadow-camera-far={1600}
       />
       <Fit />
-      <Contents {...props} />
+      <BoardContents {...props} />
+      <Dice dice={dice} rolls={rolls} onRoll={onRoll} />
       <TestHook />
     </Canvas>
   )

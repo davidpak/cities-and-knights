@@ -304,6 +304,38 @@ test('player trades: offer, decline, accept', () => {
   invariants(s)
 })
 
+test('a trade offered to one player: only they answer, and yes trades at once', () => {
+  let s = afterSetup()
+  s = must(s, 0, { type: 'roll' })
+  while (s.phase.kind !== 'main') {
+    const p = s.phase.kind === 'discard' ? Number(Object.keys(s.phase.owed)[0]) : 0
+    s = must(s, p, botAction(s, p, rng(8))!)
+  }
+  const set = (p: number, h: Partial<Record<(typeof RESOURCES)[number], number>>) => {
+    for (const r of RESOURCES) {
+      s.bank[r] += s.players[p].hand[r] - (h[r] ?? 0)
+      s.players[p].hand[r] = h[r] ?? 0
+    }
+  }
+  set(0, { grain: 2 })
+  set(1, { ore: 1 })
+  set(2, { ore: 3 })
+  const give = { ...emptyHand(), grain: 2 }
+  const get = { ...emptyHand(), ore: 1 }
+  assert.equal(apply(s, 0, { type: 'offerTrade', give, get, to: 0 }).ok, false, 'not to yourself')
+  s = must(s, 0, { type: 'offerTrade', give, get, to: 1 })
+  assert.equal(apply(s, 2, { type: 'acceptOffer' }).ok, false, 'player 2 was not asked')
+  const no = must(s, 1, { type: 'declineOffer' })
+  assert.equal(no.offer, null, 'a no closes it')
+  s = must(s, 1, { type: 'acceptOffer' })
+  assert.equal(s.offer, null)
+  assert.equal(s.players[0].hand.ore, 1)
+  assert.equal(s.players[1].hand.grain, 2)
+  const last = s.events[s.events.length - 1]
+  assert.ok(last.k === 'trade' && last.from === 0 && last.to === 1)
+  invariants(s)
+})
+
 test('events tell what happened, and a stolen card is private to the two players', () => {
   let s = afterSetup(21)
   const kinds = new Set(s.events.map((e) => e.k))

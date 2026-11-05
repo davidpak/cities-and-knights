@@ -91,7 +91,8 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'offer':
       return (
         <>
-          {W(e.p)} offers <Bundle of={e.give} /> for <Bundle of={e.get} />
+          {W(e.p)} offered <Bundle of={e.give} /> for <Bundle of={e.get} />
+          {e.to !== undefined && <> to {W(e.to)}</>}
         </>
       )
     case 'answer':

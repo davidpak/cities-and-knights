@@ -15,8 +15,8 @@ import type { Harbor, Tile } from '../../../shared/engine.ts'
 import type { Terrain } from '../../../shared/rules.ts'
 import { PAL, TERRAIN } from '../lib/palette.ts'
 import { atlasUV, cellOf } from './atlas.ts'
-import { feltGeo, frameGeo, hullGeo, sailGeo, seaGeo, signGeo, tileGeo, tokenGeo, trayGeo } from './geometry.ts'
-import { DICE, DIORAMA, HARBOR, SEA, TILE, TOKEN, harborFrame, hexAt, pierLine } from './spec.ts'
+import { frameGeo, hullGeo, sailGeo, seaGeo, signGeo, tileGeo, tokenGeo } from './geometry.ts'
+import { DIORAMA, HARBOR, SEA, TILE, TOKEN, harborFrame, hexAt, pierLine } from './spec.ts'
 
 const UNIT = {
   // (a box is centred; cones and cylinders stand on y 0)
@@ -224,8 +224,6 @@ export function buildIsland(tiles: Tile[], harbors: Harbor[]) {
 
   b.add(seaGeo(), PAL.sea, new Matrix4())
   b.add(frameGeo(), [PAL.maple, PAL.mapleDeep], new Matrix4())
-  b.add(trayGeo(), [PAL.maple, PAL.mapleDeep], at(DICE.tray.x, 0, DICE.tray.z))
-  b.add(feltGeo(), PAL.felt, at(DICE.tray.x, 0, DICE.tray.z))
 
   const tok = tokenGeo()
   tiles.forEach((t, i) => {

@@ -19,7 +19,7 @@ type Build = 'road' | 'settlement' | 'city'
 type Deal = { give: Hand; get: Hand; to: 'bank' | number | null }
 
 const add = (h: Hand, r: Resource, d = 1): Hand => ({ ...h, [r]: Math.max(0, h[r] + d) })
-const minus = (a: Hand, b: Partial<Hand>): Hand => Object.fromEntries(RESOURCES.map((r) => [r, a[r] - (b[r] ?? 0)])) as Hand
+const minus = (a: Hand, b: Partial<Hand>): Hand => Object.fromEntries(RESOURCES.map((r) => [r, Math.max(0, a[r] - (b[r] ?? 0))])) as Hand
 
 function useAspect() {
   const [a, setA] = useState(() => window.innerWidth / window.innerHeight)
@@ -125,7 +125,9 @@ export function Game({ view }: { view: View }) {
   else if (myOffer) tray = { mode: 'trade', give: myOffer.give, get: myOffer.get, locked: true }
   else if (owe) tray = { mode: 'discard', give: drop, get: {} }
   else if (deal) tray = { mode: 'trade', give: deal.give, get: deal.get }
-  const shownHand = hand ? minus(hand, owe ? drop : deal && !myOffer ? deal.give : {}) : null
+  // what's on the tray came out of your hand (an offer to you shows what you'd hand over)
+  const onTray = owe ? drop : myOffer ? myOffer.give : toMe ? toMe.get : deal ? deal.give : {}
+  const shownHand = hand ? minus(hand, onTray) : null
 
   const on = {
     hand: (r: Resource) => {

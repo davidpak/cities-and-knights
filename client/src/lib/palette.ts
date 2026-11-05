@@ -5,10 +5,11 @@
  */
 import type { PlayerColor, Resource, Terrain } from '../../../shared/rules.ts'
 
-export const GAME_NAME = 'Hearth Isles'
+export const GAME_NAME = 'Towns and Peasants'
 
 export const PAL = {
-  plum: '#3d3656', // the darks: robber, text on tokens
+  plum: '#3d3656', // the darks: text on tokens
+  robber: '#55505c', // a dark grey pawn
   ink: '#22170f', // outlines round pieces
   felt: '#2f5a4a', // the dice tray's floor
   plumDeep: '#2b2538', // UI plates

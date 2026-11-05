@@ -4,12 +4,12 @@
  */
 import { useFrame, useThree } from '@react-three/fiber'
 import { useMemo, useRef, type ReactNode } from 'react'
-import { BackSide, MeshBasicMaterial, RingGeometry, type BufferGeometry, type Group, type Mesh } from 'three'
+import { MeshBasicMaterial, RingGeometry, type Group, type Mesh } from 'three'
 import type { PlayerColor } from '../../../shared/rules.ts'
 import { PAL, PLAYER } from '../lib/palette.ts'
-import { mat } from '../lib/toy.ts'
 import { cityGeo, roadGeo, robberGeo, settlementGeo } from './geometry.ts'
-import { OUTLINE, TILE, TOKEN } from './spec.ts'
+import { TILE, TOKEN } from './spec.ts'
+import { wood } from './wood.ts'
 
 const DROP = 0.2 // seconds
 const FROM = 30 // mm
@@ -43,33 +43,8 @@ function Drop({ children, ghost }: { children: ReactNode; ghost?: boolean }) {
   )
 }
 
-const INK = new MeshBasicMaterial({ color: PAL.ink, side: BackSide })
-
-/**
- * A dark line round a piece: the same shape, a little bigger, drawn from the inside (back faces only), so only a rim
- * shows. Grown by the same number of millimetres on every side, whatever the piece's proportions.
- */
-export function Outline({ geometry }: { geometry: BufferGeometry }) {
-  const [scale, offset] = useMemo(() => {
-    geometry.computeBoundingBox()
-    const b = geometry.boundingBox!
-    const t = OUTLINE.mm
-    const sx = b.max.x - b.min.x
-    const sy = b.max.y - b.min.y
-    const sz = b.max.z - b.min.z
-    const s: [number, number, number] = [(sx + 2 * t) / sx, (sy + 2 * t) / sy, (sz + 2 * t) / sz]
-    // grow about the shape's middle, not about its origin
-    const cx = (b.max.x + b.min.x) / 2
-    const cy = (b.max.y + b.min.y) / 2
-    const cz = (b.max.z + b.min.z) / 2
-    const o: [number, number, number] = [cx * (1 - s[0]), cy * (1 - s[1]), cz * (1 - s[2])]
-    return [s, o]
-  }, [geometry])
-  return <mesh geometry={geometry} material={INK} scale={scale} position={offset} />
-}
-
 type PieceProps = { color: PlayerColor; ghost?: boolean; x: number; z: number }
-const body = (c: PlayerColor, ghost?: boolean) => [mat(PLAYER[c].body, { opacity: ghost ? 0.7 : 1 }), mat(PLAYER[c].roof, { opacity: ghost ? 0.7 : 1 })]
+const body = (c: PlayerColor, ghost?: boolean) => wood(PLAYER[c].body, ghost ? 0.7 : 1)
 
 export function Settlement({ color, ghost, x, z }: PieceProps) {
   return (
@@ -93,7 +68,7 @@ export function City({ color, ghost, x, z }: PieceProps) {
 
 export function Road({ color, ghost, x, z, angle }: PieceProps & { angle: number }) {
   return (
-    <group position={[x, TILE.h - 1.5, z]} rotation={[0, -angle, 0]}>
+    <group position={[x, TILE.h - 1, z]} rotation={[0, -angle, 0]}>
       <Drop ghost={ghost}>
         <mesh geometry={roadGeo()} material={body(color, ghost)} castShadow={!ghost} />
       </Drop>
@@ -128,7 +103,7 @@ export function Robber({ x, z, ghost }: { x: number; z: number; ghost?: boolean 
   })
   return (
     <group ref={g} position={[x, TILE.h + TOKEN.h, z]}>
-      <mesh geometry={robberGeo()} material={mat(PAL.plum, { opacity: ghost ? 0.55 : 1 })} castShadow={!ghost} />
+      <mesh geometry={robberGeo()} material={wood(PAL.robber, ghost ? 0.55 : 1)} castShadow={!ghost} />
     </group>
   )
 }

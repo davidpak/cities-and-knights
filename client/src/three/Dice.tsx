@@ -1,16 +1,18 @@
 /**
- * Two real dice in the tray beside the board. The server decides the roll; the dice then tumble into the tray along a
- * path seeded by the roll's number, so everyone at the table sees the same throw land on the same faces. They draw
- * only while they move. Clicking them rolls, when it's yours to roll.
+ * Two real dice in the tray beside the board. The server decides the roll; the dice are then thrown for real (a
+ * physics throw seeded by the roll's number, see diceSim), so everyone at the table sees the same throw land on the
+ * same faces. They draw only while they move. Clicking them rolls, when it's yours to roll.
  */
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { CanvasTexture, Group, Quaternion, SRGBColorSpace, Vector3 } from 'three'
 import { mat } from '../lib/toy.ts'
 import { PAL } from '../lib/palette.ts'
 import { DIE_FACES, dieGeo, feltGeo, trayGeo } from './geometry.ts'
 import { useRedraw } from './Pieces.tsx'
 import { DICE } from './spec.ts'
+import { FPS, throwDice, type Throw } from './diceSim.ts'
+import { useRapier } from './physics.ts'
 
 const NORMALS = [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, -1, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)]
 const UP = new Vector3(0, 1, 0)
@@ -50,74 +52,76 @@ function restingOn(v: number, yaw: number) {
   return new Quaternion().setFromAxisAngle(UP, yaw).multiply(q)
 }
 
-function seeded(n: number) {
-  let t = (n * 2654435761) | 0
-  return () => {
-    t = (t + 0x6d2b79f5) | 0
-    let x = Math.imul(t ^ (t >>> 15), t | 1)
-    x ^= x + Math.imul(x ^ (x >>> 7), x | 61)
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296
-  }
-}
+const tmpA = new Vector3()
+const tmpB = new Vector3()
+const tmpQa = new Quaternion()
+const tmpQb = new Quaternion()
 
-function Die({ value, roll, index, onClick, at }: { value: number; roll: number; index: number; onClick?: () => void; at: [number, number] }) {
-  const g = useRef<Group>(null)
+/** both dice: a real throw (diceSim) played back each time the roll count goes up; still otherwise */
+function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: number; onClick?: () => void; at: [number, number] }) {
+  const R = useRapier()
+  const g = [useRef<Group>(null), useRef<Group>(null)]
   const materials = useMemo(() => DIE_FACES.map((v) => mat('#ffffff', { map: face(v) })), [])
-  const shown = useRef(roll)
-  const t0 = useRef<number | null>(null)
   const redraw = useRedraw()
-  const T = { ...DICE.tray, x: at[0], z: at[1] }
+  const seen = useRef<number | null>(null)
+  const play = useRef<{ t: Throw; t0: number } | null>(null)
+  const key = `${values[0]}${values[1]}${roll}${at[0]},${at[1]}`
 
-  const plan = useMemo(() => {
-    const rnd = seeded(roll * 2 + index + 1)
-    const rest = new Vector3(T.x + (index - 0.5) * 30 + (rnd() - 0.5) * 8, T.felt + DICE.size / 2, T.z + (rnd() - 0.5) * 12)
-    const from = new Vector3(T.x - T.w / 2 - 30 - rnd() * 20, 70 + rnd() * 20, T.z - T.d / 2 - 30)
-    const axis = new Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize()
-    const spin = Math.PI * (4 + 2 * Math.floor(rnd() * 2))
-    return { rest, from, axis, spin, final: restingOn(value, rnd() * Math.PI * 2) }
+  // a new roll: throw it (a rejoin or a resize just shows how the last one lies)
+  useLayoutEffect(() => {
+    if (!R) return
+    const t = throwDice(R, roll, at, values)
+    play.current = { t, t0: seen.current !== null && seen.current !== roll ? performance.now() / 1000 : -1e9 }
+    seen.current = roll
+    redraw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roll, index, value, at[0], at[1]])
+  }, [R, key])
 
-  useFrame(({ clock }) => {
-    const o = g.current
-    if (!o) return
-    if (shown.current !== roll) {
-      shown.current = roll
-      t0.current = clock.elapsedTime
-    }
-    const { rest, from, axis, spin, final } = plan
-    if (t0.current === null) {
-      o.position.copy(rest)
-      o.quaternion.copy(final)
+  useFrame(() => {
+    const pl = play.current
+    if (!pl) {
+      // the engine isn't here yet: the dice lie side by side, the roll on top
+      g.forEach((r, i) => {
+        r.current?.position.set(at[0] + (i - 0.5) * 30, DICE.tray.felt + DICE.size / 2, at[1])
+        r.current?.quaternion.copy(restingOn(values[i], 0.3 + i * 0.5))
+      })
       return
     }
-    const t = Math.min(1, (clock.elapsedTime - t0.current) / DICE.throw)
-    const e = 1 - Math.pow(1 - t, 3)
-    o.position.lerpVectors(from, rest, e)
-    // a drop into the tray, then two small bounces
-    const fall = (1 - Math.min(1, t / 0.45)) ** 2 * (from.y - rest.y)
-    const bounce = t < 0.45 ? 0 : t < 0.75 ? Math.sin(((t - 0.45) / 0.3) * Math.PI) * 9 : Math.sin(((t - 0.75) / 0.25) * Math.PI) * 3
-    o.position.y = rest.y + fall + bounce
-    o.quaternion.copy(final).multiply(new Quaternion().setFromAxisAngle(axis, (1 - e) * spin))
-    redraw()
-    if (t >= 1) t0.current = null
+    const { t, t0 } = pl
+    const f = Math.min(t.count - 1, Math.max(0, (performance.now() / 1000 - t0) * FPS))
+    const i0 = Math.floor(f)
+    const i1 = Math.min(t.count - 1, i0 + 1)
+    const a = f - i0
+    g.forEach((r, i) => {
+      const o = r.current
+      if (!o) return
+      const A = t.frames.subarray(i0 * 14 + i * 7, i0 * 14 + i * 7 + 7)
+      const B = t.frames.subarray(i1 * 14 + i * 7, i1 * 14 + i * 7 + 7)
+      o.position.lerpVectors(tmpA.set(A[0], A[1], A[2]), tmpB.set(B[0], B[1], B[2]), a)
+      o.quaternion.slerpQuaternions(tmpQa.set(A[3], A[4], A[5], A[6]), tmpQb.set(B[3], B[4], B[5], B[6]), a).multiply(t.fix[i])
+    })
+    if (f < t.count - 1) redraw()
   })
 
   return (
-    <group ref={g}>
-      <mesh
-        geometry={dieGeo()}
-        material={materials}
-        castShadow
-        onClick={(e: ThreeEvent<MouseEvent>) => {
-          if (!onClick) return
-          e.stopPropagation()
-          onClick()
-        }}
-        onPointerOver={() => onClick && (document.body.style.cursor = 'pointer')}
-        onPointerOut={() => (document.body.style.cursor = '')}
-      />
-    </group>
+    <>
+      {g.map((r, i) => (
+        <group key={i} ref={r}>
+          <mesh
+            geometry={dieGeo()}
+            material={materials}
+            castShadow
+            onClick={(e: ThreeEvent<MouseEvent>) => {
+              if (!onClick) return
+              e.stopPropagation()
+              onClick()
+            }}
+            onPointerOver={() => onClick && (document.body.style.cursor = 'pointer')}
+            onPointerOut={() => (document.body.style.cursor = '')}
+          />
+        </group>
+      ))}
+    </>
   )
 }
 
@@ -128,8 +132,7 @@ export function Dice({ dice, rolls, onRoll, at = [DICE.tray.x, DICE.tray.z] }: {
     <group>
       <mesh geometry={trayGeo()} material={[mat(PAL.maple), mat(PAL.mapleDeep)]} position={[at[0], 0, at[1]]} castShadow receiveShadow />
       <mesh geometry={feltGeo()} material={mat(PAL.felt)} position={[at[0], 0, at[1]]} receiveShadow onClick={onRoll} />
-      <Die value={a} roll={rolls} index={0} onClick={onRoll} at={at} />
-      <Die value={b} roll={rolls} index={1} onClick={onRoll} at={at} />
+      <Pair values={[a, b]} roll={rolls} onClick={onRoll} at={at} />
     </group>
   )
 }

@@ -81,5 +81,5 @@ export default function Parts({ part }: { part: string }) {
         </pre>
       </div>
     )
-  return <div className="home"><div className="plate home-card">Pages: ?part=board, ?part=check</div></div>
+  return <div className="menu"><div className="menu-col">Pages: ?part=board, ?part=check</div></div>
 }

@@ -8,7 +8,7 @@
 export type Spot = [number, number]
 export type Box = { what: string; x: number; z: number; w: number; d: number }
 
-export const CARD = { w: 54, d: 76, t: 0.7, small: 0.62 } // [D] a card lying flat; small ones (on the tray) are 62%
+export const CARD = { w: 54, d: 76, t: 0.9, small: 0.62 } // [D] a card lying flat; small ones (on the tray) are 62%
 export const TRAY = { w: 200, d: 150, rim: 6, h: 7 } // [D] the trade tray: near half is what you give, far half what you get
 export const DICE_TRAY = { w: 92, d: 62 } // [D] (matches spec DICE.tray)
 /** your pieces waiting to be built: a pile of roads, a cluster of houses, a group of cities */

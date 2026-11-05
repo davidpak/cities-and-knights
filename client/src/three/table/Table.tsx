@@ -5,34 +5,30 @@
  *
  * Clicking a thing is the move (see ui/Game.tsx for what each click does).
  *
- * Cheap however many cards there are: every card is its own thin card, but all the cards that look alike draw
- * together (one instanced mesh per face), and so do your waiting pieces. Nothing moves unless something changes.
+ * Every card and every piece is a real body (things.ts, Physical.tsx): the game says how many of what lie where, and
+ * the bodies fly there and settle; you can pick them up and toss them, and they find their own way home.
+ * Cheap however many there are: all the cards are one draw, each kind of piece one more, and nothing steps or draws
+ * while everything lies still.
  */
-import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BoxGeometry, Matrix4, MeshLambertMaterial, Quaternion, Vector3, type BufferGeometry, type InstancedMesh, type Material, type Texture } from 'three'
+import { Canvas, useThree } from '@react-three/fiber'
+import { useEffect } from 'react'
+import { BoxGeometry, Vector3 } from 'three'
+import { TOPO } from '../../../../shared/board.ts'
 import type { View } from '../../../../shared/engine.ts'
-import { CARDS, RESOURCES, type Card, type Hand, type PlayerColor, type Resource } from '../../../../shared/rules.ts'
-import { PAL, PLAYER } from '../../lib/palette.ts'
+import { CARDS, RESOURCES, type Card, type Hand, type Resource } from '../../../../shared/rules.ts'
+import { PAL } from '../../lib/palette.ts'
 import { mat } from '../../lib/toy.ts'
 import { BoardContents, Fit, Lights, canvasProps, type BoardProps } from '../Board.tsx'
 import { Dice } from '../Dice.tsx'
-import { cityGeo, roadGeo, settlementGeo } from '../geometry.ts'
 import { setProjector } from '../labels.ts'
-import { useRedraw } from '../Pieces.tsx'
-import { CAMERA } from '../spec.ts'
+import { CAMERA, DICE, ROAD, SEA, TILE, TOKEN, edgeAt, hexAt, vertexAt } from '../spec.ts'
 import { TestHook } from '../TestHook.tsx'
-import { awardFace, devBack, devFace, resourceBack, resourceFace, trayFace } from './faces.ts'
+import { trayFace } from './faces.ts'
 import { CARD, TRAY, seatParts, type Layout, type Spot } from './layout.ts'
+import { Physical, type Static } from './Physical.tsx'
+import { seeded, type Home, type PileSpec, type Thing } from './things.ts'
 
 const BOX = new BoxGeometry(1, 1, 1)
-const EDGE = new MeshLambertMaterial({ color: '#efe2c4' })
-const faceMats = new Map<Texture, Material>()
-const faceMat = (t: Texture) => {
-  let m = faceMats.get(t)
-  if (!m) faceMats.set(t, (m = new MeshLambertMaterial({ map: t })))
-  return m
-}
 
 export type TrayContents = { mode: 'trade' | 'discard'; give: Partial<Hand>; get: Partial<Hand>; locked?: boolean }
 type Build = 'road' | 'settlement' | 'city'
@@ -69,216 +65,222 @@ export type TableProps = BoardProps & {
   }
 }
 
-// ---------------------------------------------------------------- cards
+// ---------------------------------------------------------------- the piles: what lies where, as the game says
 
-/** a pile of cards somewhere on the table */
-type Pile = {
-  id: string
-  at: Spot
-  n: number
-  face: Texture
-  back: Texture
-  faceDown?: boolean
-  small?: boolean
-  /** most cards drawn (the count label says the rest) */
-  cap?: number
-  /** turned about the vertical */
-  turn?: number
-  /** how loosely the cards lie (mm of jitter) */
-  loose?: number
-  /** raised (on the tray, or ready to play) */
-  lift?: number
-  enabled?: boolean
-  onClick?: () => void
-}
+type Spec = PileSpec
+const CT = CARD.t
+const TRAY_FLOOR = 4
 
-function hash(s: string) {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
-  return () => {
-    h = Math.imul(h ^ (h >>> 15), 2246822507)
-    h = Math.imul(h ^ (h >>> 13), 3266489909)
-    return ((h ^= h >>> 16) >>> 0) / 4294967296
+/** slot i of a card pile: stacked straight up, each card a little askew */
+const cardHome = (id: string, at: Spot, opts: { base?: number; faceDown?: boolean; turn?: number; loose?: number } = {}) => (i: number): Home => {
+  const r = seeded(`${id}:${i}`)
+  const loose = opts.loose ?? 1.4
+  return {
+    x: at[0] + (r() - 0.5) * 2 * loose,
+    y: (opts.base ?? 0) + CT / 2 + i * CT,
+    z: at[1] + (r() - 0.5) * 2 * loose,
+    yaw: (opts.turn ?? 0) + (r() - 0.5) * 0.09,
+    flip: opts.faceDown,
   }
 }
 
-const UP = new Vector3(0, 1, 0)
-const tmpM = new Matrix4()
-const tmpQ = new Quaternion()
-const tmpP = new Vector3()
-const tmpS = new Vector3()
-
-/** every card on the table, drawn as one instanced mesh per look (face up, face down) */
-function Cards({ piles }: { piles: Pile[] }) {
-  const [hover, setHover] = useState<string | null>(null)
-  const redraw = useRedraw()
-  // one instance per visible card, grouped by what its top and bottom show
-  const groups = useMemo(() => {
-    const out = new Map<string, { top: Texture; bottom: Texture; cards: { pile: Pile; i: number }[] }>()
-    for (const pile of piles) {
-      const shown = Math.min(pile.n, pile.cap ?? 12)
-      if (shown <= 0) continue
-      const top = pile.faceDown ? pile.back : pile.face
-      const key = `${top.uuid}|${pile.back.uuid}`
-      if (!out.has(key)) out.set(key, { top, bottom: pile.back, cards: [] })
-      for (let i = 0; i < shown; i++) out.get(key)!.cards.push({ pile, i })
-    }
-    return [...out.entries()]
-  }, [piles])
-
-  return (
-    <>
-      {groups.map(([key, g]) => (
-        <CardGroup key={key} top={g.top} bottom={g.bottom} cards={g.cards} hover={hover} setHover={setHover} redraw={redraw} />
-      ))}
-      <Slots piles={piles} />
-    </>
-  )
-}
-
-function CardGroup({ top, bottom, cards, hover, setHover, redraw }: { top: Texture; bottom: Texture; cards: { pile: Pile; i: number }[]; hover: string | null; setHover: (id: string | null) => void; redraw: () => void }) {
-  const ref = useRef<InstancedMesh>(null)
-  const materials = useMemo(() => [EDGE, EDGE, faceMat(top), faceMat(bottom), EDGE, EDGE], [top, bottom])
-  const capacity = Math.max(8, 2 ** Math.ceil(Math.log2(cards.length)))
-  useLayoutEffect(() => {
-    const m = ref.current
-    if (!m) return
-    cards.forEach(({ pile, i }, k) => {
-      const rnd = hash(`${pile.id}:${i}`)
-      const s = pile.small ? CARD.small : 1
-      const loose = pile.loose ?? 1.4
-      const lift = (pile.lift ?? 0) + (hover === pile.id && pile.enabled ? 6 : 0)
-      tmpP.set(pile.at[0] + (rnd() - 0.5) * loose * 2, lift + i * (CARD.t + 0.12) + CARD.t / 2, pile.at[1] + (rnd() - 0.5) * loose * 2)
-      tmpQ.setFromAxisAngle(UP, (pile.turn ?? 0) + (rnd() - 0.5) * 0.09)
-      tmpS.set(CARD.w * s, CARD.t, CARD.d * s)
-      m.setMatrixAt(k, tmpM.compose(tmpP, tmpQ, tmpS))
-    })
-    m.count = cards.length
-    m.instanceMatrix.needsUpdate = true
-    m.computeBoundingSphere()
-    redraw()
-  })
-  const pileOf = (e: ThreeEvent<PointerEvent | MouseEvent>) => (e.instanceId !== undefined ? cards[e.instanceId]?.pile : undefined)
-  return (
-    <instancedMesh
-      key={capacity}
-      ref={ref}
-      args={[BOX, materials, capacity]}
-      castShadow
-      receiveShadow
-      onPointerMove={(e) => {
-        const p = pileOf(e)
-        if (!p?.enabled) return
-        e.stopPropagation()
-        if (hover !== p.id) setHover(p.id)
-        document.body.style.cursor = 'pointer'
-      }}
-      onPointerOut={() => {
-        setHover(null)
-        document.body.style.cursor = ''
-      }}
-      onClick={(e) => {
-        const p = pileOf(e)
-        if (!p?.enabled || !p.onClick) return
-        e.stopPropagation()
-        p.onClick()
-      }}
-    />
-  )
-}
-
-/** a dark place on the table where an empty pile goes (your hand, someone's cards), still clickable */
-function Slots({ piles }: { piles: Pile[] }) {
-  return (
-    <>
-      {piles
-        .filter((p) => p.n <= 0 && p.id.startsWith('slot:'))
-        .map((p) => (
-          <mesh
-            key={p.id}
-            geometry={BOX}
-            material={mat('#3b2a1d')}
-            scale={[CARD.w, 0.3, CARD.d]}
-            position={[p.at[0], 0.15, p.at[1]]}
-            receiveShadow
-            onClick={(e) => {
-              if (!p.enabled || !p.onClick) return
-              e.stopPropagation()
-              p.onClick()
-            }}
-          />
-        ))}
-    </>
-  )
-}
-
-// ---------------------------------------------------------------- your pieces waiting to be built
-
-const PIECE_GEO: Record<Build, () => BufferGeometry> = { road: roadGeo, settlement: settlementGeo, city: cityGeo }
-
-/** where each waiting piece sits in its pile: roads criss-crossed in layers, houses and cities in little groups */
-function supplySpots(what: Build, n: number): { x: number; y: number; z: number; turn: number }[] {
-  return Array.from({ length: n }, (_, i) => {
-    const rnd = hash(`${what}${i}`)
+/** your waiting pieces: roads criss-crossed in layers of three, houses and cities in little rows (slot by slot, so
+ *  taking one leaves the rest where they are) */
+function supplyHome(what: Build, at: Spot) {
+  return (i: number): Home => {
+    const r = seeded(`${what}${i}`)
     if (what === 'road') {
       const layer = Math.floor(i / 3)
       const k = i % 3
       const across = layer % 2 === 1
       const off = (k - 1) * 10
-      return { x: across ? off : 0, y: layer * 6.1, z: across ? 0 : off, turn: (across ? Math.PI / 2 : 0) + (rnd() - 0.5) * 0.12 }
+      return { x: at[0] + (across ? off : 0), y: layer * ROAD.h, z: at[1] + (across ? 0 : off), yaw: (across ? Math.PI / 2 : 0) + (r() - 0.5) * 0.1 }
     }
     const cols = what === 'city' ? 2 : 3
-    const sx = what === 'city' ? 32 : 21
+    const sx = what === 'city' ? 33 : 21
     const row = Math.floor(i / cols)
     const col = i % cols
-    const inRow = Math.min(cols, n - row * cols)
-    return { x: (col - (inRow - 1) / 2) * sx + (rnd() - 0.5) * 2, y: 0, z: (row - 0.5) * 20 + (rnd() - 0.5) * 2, turn: (rnd() - 0.5) * 0.5 }
-  })
+    const inRow = Math.min(cols, (what === 'city' ? 4 : 5) - row * cols)
+    return { x: at[0] + (col - (inRow - 1) / 2) * sx + (r() - 0.5) * 2, y: 0, z: at[1] + (row - 0.5) * 22 + (r() - 0.5) * 2, yaw: (r() - 0.5) * 0.4 }
+  }
 }
 
-function Supply({ what, at, n, color, enabled, up, ready, onClick }: { what: Build; at: Spot; n: number; color: PlayerColor; enabled: boolean; up: boolean; ready: boolean; onClick: () => void }) {
-  const body = useRef<InstancedMesh>(null)
-  const [hover, setHover] = useState(false)
-  const geo = PIECE_GEO[what]()
-  const materials = useMemo(() => [mat(PLAYER[color].body), mat(PLAYER[color].roof)], [color])
-  const redraw = useRedraw()
-  useLayoutEffect(() => {
-    const lift = up ? 12 : hover && enabled ? 5 : 0
-    supplySpots(what, n).forEach((p, i) => {
-      tmpM.compose(tmpP.set(at[0] + p.x, p.y + lift, at[1] + p.z), tmpQ.setFromAxisAngle(UP, p.turn), tmpS.set(1, 1, 1))
-      body.current?.setMatrixAt(i, tmpM)
+function useSpecs({ view, layout, hand, tray, can, on, building, picking, buildings, roads, robber, colors, tiles }: TableProps): Spec[] {
+  const me = view.you
+  const pl = me >= 0 ? view.players[me] : null
+  const specs: Spec[] = []
+  const card = (s: Omit<Spec, 'kind'>) => specs.push({ kind: 'card', ...s })
+  const seatOf = (p: number) => layout.seats.find((x) => x.p === p)
+  const homeOf = (p: number): Spot => (p === me ? layout.hand[2] : seatParts(seatOf(p)?.at ?? [0, -400], layout.portrait).hand)
+
+  // your hand: one stack per kind
+  if (hand)
+    RESOURCES.forEach((r, i) => {
+      const id = `hand:${r}`
+      card({ id, family: 'res', look: `res:${r}`, n: hand[r], home: cardHome(id, layout.hand[i]), enabled: can.hand && hand[r] > 0, onClick: () => on.hand(r) })
     })
-    for (const m of [body.current]) {
-      if (!m) continue
-      m.count = n
-      m.instanceMatrix.needsUpdate = true
-      m.computeBoundingSphere()
-    }
-    redraw()
+  // your development cards, by kind; the ones you can play now stand a little proud
+  const cards = pl?.cards ?? []
+  CARDS.filter((c) => cards.some((x) => x.card === c)).forEach((c, i) => {
+    const id = `dev:${c}`
+    card({ id, family: 'dev', look: `dev:${c}`, n: cards.filter((x) => x.card === c).length, home: cardHome(id, layout.dev(i)), lift: can.dev[c] ? 3 : 0, enabled: !!can.dev[c], onClick: () => on.dev(c) })
   })
-  const handlers = {
-    onPointerOver: (e: ThreeEvent<PointerEvent>) => {
-      if (!enabled) return
-      e.stopPropagation()
-      setHover(true)
-      document.body.style.cursor = 'pointer'
-    },
-    onPointerOut: () => {
-      setHover(false)
-      document.body.style.cursor = ''
-    },
-    onClick: (e: ThreeEvent<MouseEvent>) => {
-      if (!enabled) return
-      e.stopPropagation()
-      onClick()
-    },
+  // the bank: five stacks and the deck, face down
+  RESOURCES.forEach((r, i) => {
+    const id = `bank:${r}`
+    card({ id, family: 'res', look: `res:${r}`, n: view.bank[r], home: cardHome(id, layout.bank[i], { loose: 0.8 }), from: layout.bank[i], to: layout.bank[i], enabled: can.bank && view.bank[r] > 0, onClick: () => on.bank(r) })
+  })
+  card({ id: 'deck', family: 'dev', look: 'dev:?', n: view.pile, home: cardHome('deck', layout.deck, { faceDown: true, loose: 0.8 }), hidden: true, from: layout.deck, to: layout.deck, enabled: can.deck, onClick: on.deck })
+  // everyone else: their cards face down, their development cards face down, the knights they've played
+  for (const { p, at } of layout.seats) {
+    const o = view.players[p]
+    const parts = seatParts(at, layout.portrait)
+    card({ id: `opp:${p}`, family: 'res', look: 'res:?', n: o.handCount, home: cardHome(`opp:${p}`, parts.hand, { faceDown: true, loose: 3 }), hidden: true, from: parts.hand, to: parts.hand, enabled: can.opponents.includes(p), onClick: () => on.opponent(p) })
+    card({ id: `odev:${p}`, family: 'dev', look: 'dev:?', n: o.cardCount, home: cardHome(`odev:${p}`, parts.dev, { faceDown: true, loose: 2.5 }), hidden: true, from: parts.dev, to: parts.dev })
+    card({ id: `kn:${p}`, family: 'dev', look: 'dev:knight', n: o.knights, home: cardHome(`kn:${p}`, parts.knights, { loose: 4 }), from: parts.knights, to: parts.knights })
   }
+  // the two award cards, with whoever holds them
+  const award = (what: 'road' | 'army', p: number | null) => {
+    if (p === null || p < 0) return
+    const at: Spot = p === me ? layout.awardsMine : seatParts(seatOf(p)?.at ?? [0, -400], layout.portrait).awards
+    const [x, z] = what === 'road' ? [at[0], at[1] - 6] : [at[0] + 6, at[1] + 6]
+    card({ id: `${what}:${p}`, family: `award:${what}`, look: `award:${what}`, n: 1, home: cardHome(`${what}:${p}`, [x, z], { turn: what === 'road' ? 0.08 : -0.08, base: what === 'army' ? CT : 0, loose: 0 }) })
+  }
+  award('road', view.longestRoad)
+  award('army', view.largestArmy)
+  // the tray: what you give on the near half, what you get on the far half; behind it, one of each kind to ask for
+  if (tray) {
+    const [tx, tz] = layout.tray
+    const row = (h: Partial<Hand>, z: number, side: 'give' | 'get') => {
+      const kinds = RESOURCES.filter((r) => (h[r] ?? 0) > 0)
+      kinds.forEach((r, i) => {
+        const id = `tray:${side}:${r}`
+        const at: Spot = [tx + (i - (kinds.length - 1) / 2) * (CARD.w * CARD.small + 6), z]
+        // an offer to you: your side comes out of your hand, theirs from their cards; what you ask for, from the bank
+        const src = side === 'give' ? layout.hand[RESOURCES.indexOf(r)] : view.offer && view.offer.from !== me ? homeOf(view.offer.from) : layout.bank[RESOURCES.indexOf(r)]
+        card({ id, family: 'res', look: `res:${r}`, n: h[r] ?? 0, small: true, home: cardHome(id, at, { base: TRAY_FLOOR, loose: 1.8 }), from: src, to: src, enabled: can.tray && !tray.locked, onClick: () => (side === 'give' ? on.trayGive(r) : on.trayGet(r)) })
+      })
+    }
+    row(tray.give, tz + (tray.mode === 'trade' ? TRAY.d / 4 : 0), 'give')
+    if (tray.mode === 'trade') row(tray.get, tz - TRAY.d / 4, 'get')
+    if (tray.mode === 'trade' && !tray.locked)
+      RESOURCES.forEach((r, i) => {
+        const id = `want:${r}`
+        card({ id, family: 'want', look: `res:${r}`, n: 1, small: true, home: cardHome(id, layout.wants(i), { loose: 0 }), from: layout.bank[i], to: layout.bank[i], enabled: can.wants, onClick: () => on.want(r) })
+      })
+  }
+  // your waiting pieces
+  if (pl)
+    (['road', 'settlement', 'city'] as const).forEach((w) =>
+      specs.push({
+        id: `supply:${w}`,
+        kind: w,
+        family: `piece:${w}:${pl.color}`,
+        look: pl.color,
+        n: pl.pieces[w],
+        home: supplyHome(w, layout.supply[w]),
+        lift: building === w ? 12 : 0,
+        enabled: can.supply[w] || can.supplyTap || building === w,
+        onClick: () => on.supply(w),
+      }),
+    )
+  // the board: every piece built, and the robber (none of them to be picked up while you're choosing a spot)
+  const still = !picking
+  for (const [v, b] of Object.entries(buildings)) {
+    const [x, z] = vertexAt(Number(v))
+    const color = colors[b.owner]
+    const src = b.owner === me ? layout.supply[b.kind] : homeOf(b.owner)
+    specs.push({ id: `b:${v}:${b.kind}`, kind: b.kind, family: `piece:${b.kind}:${color}`, look: color, n: 1, home: () => ({ x, y: TILE.h, z, yaw: 0 }), from: src, to: src, grab: still })
+  }
+  for (const [e, owner] of Object.entries(roads)) {
+    const [x, z] = edgeAt(Number(e))
+    const color = colors[owner]
+    const src = owner === me ? layout.supply.road : homeOf(owner)
+    specs.push({ id: `r:${e}`, kind: 'road', family: `piece:road:${color}`, look: color, n: 1, home: () => ({ x, y: TILE.h, z, yaw: -TOPO.edges[Number(e)].angle }), from: src, to: src, grab: still })
+  }
+  const [rx, rz] = hexAt(robber)
+  specs.push({ id: 'robber', kind: 'robber', family: 'robber', look: 'robber', n: 1, home: () => ({ x: rx, y: TILE.h + (tiles[robber]?.number !== null ? TOKEN.h : 0), z: rz, yaw: 0 }), grab: still })
+  return specs
+}
+
+/** the fixed things the loose ones rest on and bump into */
+function staticsFor(layout: Layout, tray: boolean, tiles: TableProps['tiles']): Record<string, Static[]> {
+  const out: Static[] = [{ box: [5000, 50, 5000], at: [0, -50, 0] }]
+  const trayParts: Static[] = []
+  // the board, flat at the tiles' tops (pieces never tip into the gaps), its frame, and the number tokens
+  const hex = (r: number, y0: number, y1: number) => new Float32Array(Array.from({ length: 6 }, (_, i) => [r * Math.cos((i * Math.PI) / 3), 0, r * Math.sin((i * Math.PI) / 3)]).flatMap(([x, , z]) => [x, y0, z, x, y1, z]))
+  out.push({ hull: hex(SEA.inner, 0, TILE.h) })
+  const ap = SEA.inner * Math.cos(Math.PI / 6)
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3 + Math.PI / 6
+    const d = ap + SEA.rim / 2
+    out.push({ box: [SEA.inner / 2 + SEA.rim, SEA.rimH / 2, SEA.rim / 2], at: [d * Math.cos(a), SEA.rimH / 2, d * Math.sin(a)], yaw: -(a + Math.PI / 2) })
+  }
+  tiles.forEach((t, i) => {
+    if (t.number === null) return
+    const [x, z] = hexAt(i)
+    out.push({ cyl: [TOKEN.h / 2, TOKEN.r], at: [x, TILE.h + TOKEN.h / 2, z] })
+  })
+  // the trade tray
+  if (tray) {
+    const [tx, tz] = layout.tray
+    trayParts.push({ box: [TRAY.w / 2, TRAY_FLOOR / 2, TRAY.d / 2], at: [tx, TRAY_FLOOR / 2, tz] })
+    trayParts.push({ box: [TRAY.w / 2, TRAY.h / 2, TRAY.rim / 2], at: [tx, TRAY.h / 2, tz - TRAY.d / 2] })
+    trayParts.push({ box: [TRAY.w / 2, TRAY.h / 2, TRAY.rim / 2], at: [tx, TRAY.h / 2, tz + TRAY.d / 2] })
+    trayParts.push({ box: [TRAY.rim / 2, TRAY.h / 2, TRAY.d / 2], at: [tx - TRAY.w / 2, TRAY.h / 2, tz] })
+    trayParts.push({ box: [TRAY.rim / 2, TRAY.h / 2, TRAY.d / 2], at: [tx + TRAY.w / 2, TRAY.h / 2, tz] })
+  }
+  // the dice tray
+  const D = DICE.tray
+  const [dx, dz] = layout.dice
+  out.push({ box: [D.w / 2, D.felt / 2, D.d / 2], at: [dx, D.felt / 2, dz] })
+  for (const [ox, oz, hx, hz] of [
+    [0, -(D.d - D.rim) / 2, D.w / 2, D.rim / 2],
+    [0, (D.d - D.rim) / 2, D.w / 2, D.rim / 2],
+    [-(D.w - D.rim) / 2, 0, D.rim / 2, D.d / 2],
+    [(D.w - D.rim) / 2, 0, D.rim / 2, D.d / 2],
+  ])
+    out.push({ box: [hx, D.h / 2, hz], at: [dx + ox, D.h / 2, dz + oz] })
+  return { base: out, tray: trayParts }
+}
+
+/** a dark place on the table where an empty pile goes (your hand, someone's cards), still clickable */
+function Slots({ view, layout, hand, can, on }: TableProps) {
+  const slots: { id: string; at: Spot; onClick?: () => void }[] = []
+  if (hand) RESOURCES.forEach((r, i) => hand[r] <= 0 && slots.push({ id: `h${r}`, at: layout.hand[i] }))
+  for (const { p, at } of layout.seats)
+    if (view.players[p].handCount <= 0) slots.push({ id: `o${p}`, at: seatParts(at, layout.portrait).hand, onClick: can.opponents.includes(p) ? () => on.opponent(p) : undefined })
   return (
-    <group>
-      {/* a mat under the pieces you can build right now */}
-      {(ready || up) && <mesh geometry={BOX} material={mat(up ? '#e3a72c' : PAL.cream)} scale={[what === 'road' ? 44 : what === 'city' ? 66 : 62, 0.6, 44]} position={[at[0], 0.3, at[1]]} receiveShadow {...handlers} />}
-      <instancedMesh ref={body} args={[geo, materials, 16]} castShadow receiveShadow {...handlers} />
-    </group>
+    <>
+      {slots.map((p) => (
+        <mesh
+          key={p.id}
+          geometry={BOX}
+          material={mat('#3b2a1d')}
+          scale={[CARD.w, 0.3, CARD.d]}
+          position={[p.at[0], 0.15, p.at[1]]}
+          receiveShadow
+          onClick={(e) => {
+            if (!p.onClick) return
+            e.stopPropagation()
+            p.onClick()
+          }}
+        />
+      ))}
+    </>
+  )
+}
+
+/** a mat under the pieces you can build right now */
+function SupplyMats({ layout, can, building }: TableProps) {
+  return (
+    <>
+      {(['road', 'settlement', 'city'] as const)
+        .filter((w) => can.supply[w] || building === w)
+        .map((w) => (
+          <mesh key={w} geometry={BOX} material={mat(building === w ? '#e3a72c' : PAL.cream)} scale={[w === 'road' ? 44 : w === 'city' ? 70 : 64, 0.6, 50]} position={[layout.supply[w][0], 0.3, layout.supply[w][1]]} receiveShadow />
+        ))}
+    </>
   )
 }
 
@@ -288,7 +290,7 @@ function Tray({ at, mode }: { at: Spot; mode: 'trade' | 'discard' }) {
   const [tx, tz] = at
   return (
     <group>
-      <mesh geometry={BOX} material={[mat('#a87b50'), mat('#a87b50'), faceMat(trayFace(mode)), mat('#8a5e3c'), mat('#a87b50'), mat('#a87b50')]} scale={[TRAY.w, 4, TRAY.d]} position={[tx, 2, tz]} receiveShadow castShadow />
+      <mesh geometry={BOX} material={[mat('#a87b50'), mat('#a87b50'), mat('#ffffff', { map: trayFace(mode) }), mat('#8a5e3c'), mat('#a87b50'), mat('#a87b50')]} scale={[TRAY.w, TRAY_FLOOR, TRAY.d]} position={[tx, TRAY_FLOOR / 2, tz]} receiveShadow castShadow />
       {[
         [0, -TRAY.d / 2, TRAY.w, TRAY.rim],
         [0, TRAY.d / 2, TRAY.w, TRAY.rim],
@@ -299,67 +301,6 @@ function Tray({ at, mode }: { at: Spot; mode: 'trade' | 'discard' }) {
       ))}
     </group>
   )
-}
-
-// ---------------------------------------------------------------- everything, as piles
-
-function usePiles({ view, layout, hand, tray, can, on }: TableProps): Pile[] {
-  const me = view.you
-  const pl = me >= 0 ? view.players[me] : null
-  const piles: Pile[] = []
-  // your hand: one pile per kind; an empty kind leaves its place on the table
-  RESOURCES.forEach((r, i) => {
-    const n = hand?.[r] ?? 0
-    piles.push({ id: n ? `hand:${r}` : `slot:hand:${r}`, at: layout.hand[i], n, face: resourceFace(r), back: resourceBack(), enabled: can.hand && n > 0, onClick: () => on.hand(r) })
-  })
-  // your development cards, by kind; ones you can play now stand a little proud
-  const cards = pl?.cards ?? []
-  CARDS.filter((c) => cards.some((x) => x.card === c)).forEach((c, i) => {
-    piles.push({ id: `dev:${c}`, at: layout.dev(i), n: cards.filter((x) => x.card === c).length, face: devFace(c), back: devBack(), lift: can.dev[c] ? 3 : 0, enabled: !!can.dev[c], onClick: () => on.dev(c) })
-  })
-  // the bank: its five stacks (19 each to start) and its deck, face down
-  RESOURCES.forEach((r, i) => {
-    piles.push({ id: `bank:${r}`, at: layout.bank[i], n: view.bank[r], face: resourceFace(r), back: resourceBack(), cap: 19, loose: 0.8, enabled: can.bank && view.bank[r] > 0, onClick: () => on.bank(r) })
-  })
-  piles.push({ id: 'deck', at: layout.deck, n: view.pile, face: devBack(), back: devBack(), faceDown: true, cap: 25, loose: 0.8, enabled: can.deck, onClick: on.deck })
-  // everyone else: their cards face down (fanned a little), their development cards, knights they've played
-  for (const { p, at } of layout.seats) {
-    const o = view.players[p]
-    const parts = seatParts(at, layout.portrait)
-    piles.push({ id: o.handCount ? `opp:${p}` : `slot:opp:${p}`, at: parts.hand, n: o.handCount, face: resourceBack(), back: resourceBack(), faceDown: true, loose: 3, enabled: can.opponents.includes(p), onClick: () => on.opponent(p) })
-    piles.push({ id: `odev:${p}`, at: parts.dev, n: o.cardCount, face: devBack(), back: devBack(), faceDown: true, loose: 2.5 })
-    piles.push({ id: `kn:${p}`, at: parts.knights, n: o.knights, face: devFace('knight'), back: devBack(), loose: 4 })
-    if (view.longestRoad === p) piles.push({ id: `lr:${p}`, at: [parts.awards[0], parts.awards[1] - 6], n: 1, face: awardFace('road'), back: awardFace('road'), turn: 0.08 })
-    if (view.largestArmy === p) piles.push({ id: `la:${p}`, at: [parts.awards[0] + 6, parts.awards[1] + 6], n: 1, face: awardFace('army'), back: awardFace('army'), turn: -0.08, lift: 1 })
-  }
-  if (pl && view.longestRoad === me) piles.push({ id: 'lr:me', at: [layout.awardsMine[0], layout.awardsMine[1] - 6], n: 1, face: awardFace('road'), back: awardFace('road'), turn: 0.08 })
-  if (pl && view.largestArmy === me) piles.push({ id: 'la:me', at: [layout.awardsMine[0] + 6, layout.awardsMine[1] + 6], n: 1, face: awardFace('army'), back: awardFace('army'), turn: -0.08, lift: 1 })
-  // the tray: what you give on the near half, what you get on the far half; behind it, one of each kind to ask for
-  if (tray) {
-    const [tx, tz] = layout.tray
-    const row = (h: Partial<Hand>, z: number, side: 'give' | 'get') => {
-      const kinds = RESOURCES.filter((r) => (h[r] ?? 0) > 0)
-      kinds.forEach((r, i) =>
-        piles.push({
-          id: `tray:${side}:${r}`,
-          at: [tx + (i - (kinds.length - 1) / 2) * (CARD.w * CARD.small + 6), z],
-          n: h[r] ?? 0,
-          face: resourceFace(r),
-          back: resourceBack(),
-          small: true,
-          lift: 4,
-          loose: 1.8,
-          enabled: can.tray && !tray.locked,
-          onClick: () => (side === 'give' ? on.trayGive(r) : on.trayGet(r)),
-        }),
-      )
-    }
-    row(tray.give, tz + (tray.mode === 'trade' ? TRAY.d / 4 : 0), 'give')
-    if (tray.mode === 'trade') row(tray.get, tz - TRAY.d / 4, 'get')
-    if (tray.mode === 'trade' && !tray.locked)
-      RESOURCES.forEach((r, i) => piles.push({ id: `want:${r}`, at: layout.wants(i), n: 1, face: resourceFace(r), back: resourceBack(), small: true, loose: 0, enabled: can.wants, onClick: () => on.want(r) }))
-  }
-  return piles
 }
 
 // ---------------------------------------------------------------- the scene
@@ -382,28 +323,30 @@ function Projector() {
 }
 
 function TableTop() {
-  return <mesh geometry={BOX} material={mat('#5a3d29')} scale={[8000, 2, 8000]} position={[0, -1.2, 0]} receiveShadow />
+  return <mesh geometry={BOX} material={mat('#5a3d29')} scale={[8000, 2, 8000]} position={[0, -1, 0]} receiveShadow />
 }
 
 export function TableView(props: TableProps) {
-  const { layout, view, can, on, building, tray } = props
-  const piles = usePiles(props)
+  const { layout, tray, on, can } = props
+  const specs = useSpecs(props)
+  const statics = staticsFor(layout, !!tray, props.tiles)
   const reach = Math.max(-layout.bounds.minX, layout.bounds.maxX, -layout.bounds.minZ, layout.bounds.maxZ) + 40
-  const me = view.you
-  const pl = me >= 0 ? view.players[me] : null
+  // a card from your hand dropped on the tray goes on the tray
+  const onDrop = (t: Thing, at: Vector3) => {
+    if (!tray || !can.hand || !t.pile?.startsWith('hand:')) return
+    if (Math.abs(at.x - layout.tray[0]) < TRAY.w / 2 && Math.abs(at.z - layout.tray[1]) < TRAY.d / 2) on.hand(t.pile.slice(5) as Resource)
+  }
   return (
     <Canvas {...canvasProps()}>
       <Lights extent={reach} />
       <Fit bounds={layout.bounds} tilt={layout.portrait ? CAMERA.tilt + 0.08 : CAMERA.tilt + 0.14} />
       <TableTop />
-      <BoardContents {...props} />
+      <BoardContents {...props} pieces={false} />
       <Dice dice={props.dice ?? null} rolls={props.rolls ?? 0} onRoll={props.onRoll} at={layout.dice} />
       {tray && <Tray at={layout.tray} mode={tray.mode} />}
-      <Cards piles={piles} />
-      {pl &&
-        (['road', 'settlement', 'city'] as const).map((w) => (
-          <Supply key={w} what={w} at={layout.supply[w]} n={pl.pieces[w]} color={pl.color} enabled={can.supply[w] || can.supplyTap || building === w} ready={can.supply[w]} up={building === w} onClick={() => on.supply(w)} />
-        ))}
+      <Slots {...props} />
+      <SupplyMats {...props} />
+      <Physical specs={specs} statics={statics} onDrop={onDrop} />
       <Projector />
       <TestHook />
     </Canvas>

@@ -3,9 +3,8 @@
  * and turned once (the playbook's rule); turned things are lathed. Nothing is a plane laid over another surface.
  */
 import {
-  BoxGeometry, BufferGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2, Vector3,
+  BoxGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2, Vector3,
 } from 'three'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { roundedPolygon, roundedRect } from '../lib/shapes.ts'
 import { CITY, DICE, HARBOR, ROAD, ROBBER, SEA, SETTLEMENT, TILE, TOKEN } from './spec.ts'
 
@@ -69,85 +68,81 @@ function upright(points: [number, number][], depth: number, round: number) {
   return g
 }
 
-// ---------------------------------------------------------------- the pieces, built from parts like real toy pieces
-// Each piece is a few beveled parts merged into one shape with two looks: its colour (0) and its darker trim (1).
+// ---------------------------------------------------------------- the pieces: wooden toys, each one solid piece
+// A silhouette seen from the front (x across, y up, the base on y = 0) is sawn out and pushed back to its depth, and
+// every edge sanded round: the way real wooden game pieces are made. The outline is pulled in by the rounding first,
+// so the finished piece measures exactly what the spec says.
 
-type Part = { g: BufferGeometry; m: 0 | 1 }
+type Pt = [number, number]
 
-/** a beveled block standing on its base: w across, d deep, h tall, its base centred at (x, y, z) */
-function block(w: number, d: number, h: number, bevel: number, x = 0, y = 0, z = 0) {
-  const b = Math.min(bevel, w / 2 - 0.05, d / 2 - 0.05, h / 2 - 0.05)
-  return slab((s) => roundedRect(w - 2 * b, d - 2 * b, Math.min(b * 1.5, (w - 2 * b) / 2 - 0.01), s), h, b, 4).translate(x, y, z)
+/** the outline moved inward by d (counter-clockwise outline), corners mitred */
+function inset(points: Pt[], d: number): Pt[] {
+  const n = points.length
+  return points.map((p, i) => {
+    const a = points[(i - 1 + n) % n]
+    const b = points[(i + 1) % n]
+    const e1 = norm([p[0] - a[0], p[1] - a[1]])
+    const e2 = norm([b[0] - p[0], b[1] - p[1]])
+    // inward normals of the two edges (left of travel for a counter-clockwise outline)
+    const n1: Pt = [-e1[1], e1[0]]
+    const n2: Pt = [-e2[1], e2[0]]
+    const m = norm([n1[0] + n2[0], n1[1] + n2[1]])
+    const k = d / Math.max(0.2, m[0] * n1[0] + m[1] * n1[1])
+    return [p[0] + m[0] * k, p[1] + m[1] * k]
+  })
+}
+const norm = ([x, y]: Pt): Pt => {
+  const l = Math.hypot(x, y) || 1
+  return [x / l, y / l]
 }
 
-/** a gable roof: a triangle seen from the front (w wide, rising by `rise`), d deep, its eaves at height y */
-function gable(w: number, d: number, rise: number, round: number, x = 0, y = 0, z = 0) {
-  const g = new ExtrudeGeometry(roundedPolygon([[-w / 2 + round, 0], [w / 2 - round, 0], [0, rise - round]], round * 0.9, new Shape()), {
-    depth: d - 2 * round,
+/** a silhouette sawn out and sanded: `points` counter-clockwise from the front, `depth` front to back, centred */
+export function sawn(points: Pt[], depth: number, round: number) {
+  const g = new ExtrudeGeometry(roundedPolygon(inset(points, round), round * 0.6, new Shape()), {
+    depth: depth - 2 * round,
     bevelEnabled: true,
     bevelThickness: round,
     bevelSize: round,
-    bevelSegments: 2,
+    bevelSegments: 3,
     curveSegments: 3,
   })
-  return g.translate(x, y + round, z - (d - 2 * round) / 2)
+  g.translate(0, 0, -(depth - 2 * round) / 2)
+  g.clearGroups()
+  g.computeVertexNormals()
+  return g
 }
 
-/** the parts as one shape, each part keeping its look */
-function assemble(parts: Part[]) {
-  const geos = parts.map(({ g }) => {
-    const n = g.index ? g.toNonIndexed() : g
-    const out = new BufferGeometry()
-    out.setAttribute('position', n.attributes.position)
-    out.setAttribute('normal', n.attributes.normal)
-    return out
-  })
-  const merged = mergeGeometries(geos, true)!
-  merged.groups.forEach((gr, i) => (gr.materialIndex = parts[i].m))
-  return merged
+/** a house: square walls under a steep gable (spec SETTLEMENT) */
+export const SETTLEMENT_OUTLINE = (): Pt[] => {
+  const { w, wall, peak } = SETTLEMENT
+  return [[-w / 2, 0], [w / 2, 0], [w / 2, wall], [0, peak], [-w / 2, wall]]
+}
+/** a tall gabled hall on the left, a lower flat-topped wing on the right (spec CITY) */
+export const CITY_OUTLINE = (): Pt[] => {
+  const { w, hall, wall, peak, wing } = CITY
+  const x0 = -w / 2
+  const x1 = x0 + hall
+  return [[x0, 0], [w / 2, 0], [w / 2, wing], [x1, wing], [x1, wall], [x0 + hall / 2, peak], [x0, wall]]
 }
 
-/** a settlement: a little house. Walls, an overhanging roof, a chimney, a door. (Footprint: spec SETTLEMENT.) */
-export const settlementGeo = memo(() => {
-  const { w, d, wall, peak } = SETTLEMENT
-  const walls = { w: w - 3, d: d - 3.5 }
-  return assemble([
-    { g: block(walls.w, walls.d, wall + 0.5, 0.9), m: 0 },
-    { g: gable(w, d - 0.5, peak - wall + 0.5, 0.7, 0, wall - 0.5, 0), m: 1 },
-    { g: block(2.8, 2.8, 6, 0.5, 3.8, peak - 5.5, -2.4), m: 1 },
-    { g: block(4, 1.1, 6, 0.35, 0, 0, walls.d / 2 + 0.25), m: 1 },
-  ])
+export const settlementGeo = memo(() => sawn(SETTLEMENT_OUTLINE(), SETTLEMENT.d, SETTLEMENT.round))
+export const cityGeo = memo(() => sawn(CITY_OUTLINE(), CITY.d, CITY.round))
+/** a road: a square bar along +x */
+export const roadGeo = memo(() => {
+  const g = slab((s) => roundedRect(ROAD.len - 2 * ROAD.round, ROAD.w - 2 * ROAD.round, ROAD.round * 0.6, s), ROAD.h, ROAD.round, 4)
+  g.clearGroups()
+  return g
 })
 
-/** a city: a hall with its roof, and a tower with battlements. (Footprint: spec CITY.) */
-export const cityGeo = memo(() => {
-  const { w, d, wall, tower } = CITY
-  const towerW = 12
-  const hallW = w - towerW - 2.5
-  const hx = -w / 2 + towerW + 1 + hallW / 2 // the hall's middle
-  const tx = -w / 2 + towerW / 2 // the tower's middle
-  const merlon = 3.2
-  return assemble([
-    { g: block(hallW - 2, d - 4, wall, 0.9, hx), m: 0 },
-    { g: gable(hallW + 1.5, d - 1, 7, 0.7, hx, wall - 0.5, 0), m: 1 },
-    { g: block(towerW, towerW, tower, 1, tx), m: 0 },
-    ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz]) => ({ g: block(merlon, merlon, merlon, 0.5, tx + sx * (towerW / 2 - merlon / 2), tower - 0.3, sz * (towerW / 2 - merlon / 2)), m: 1 as const })),
-    { g: block(4.5, 1.1, 6.5, 0.35, hx, 0, (d - 4) / 2 + 0.25), m: 1 },
-    { g: block(2.6, 1.1, 4.2, 0.35, tx, 12.5, towerW / 2 + 0.25), m: 1 },
-  ])
-})
-
-/** a road: a chunky beveled bar (its top in the player's colour, its sides darker) */
-export const roadGeo = memo(() => slab((s) => roundedRect(ROAD.len - 2 * ROAD.round, ROAD.w - 2 * ROAD.round, 2.2, s), ROAD.h, ROAD.round, 6))
-
-export const robberGeo = memo(() => {
+/** the robber: a turned pawn, a broad foot, a waist, a round head */
+export const ROBBER_PROFILE = (): Pt[] => {
   const k = ROBBER.r / 9
-  const pts = [
+  return [
     [0, 0], [9, 0], [9.3, 1.4], [8.6, 3.6], [6.4, 6], [5.6, 10], [6.6, 15.5], [6, 19], [3.8, 20.6], [5.2, 22], [5.9, 24.6],
     [5.4, 27.4], [3.6, 29.3], [0, 30],
-  ].map(([x, y]) => new Vector2(x * k, (y * ROBBER.h) / 30))
-  return new LatheGeometry(pts, 32)
-})
+  ].map(([x, y]) => [x * k, (y * ROBBER.h) / 30] as Pt)
+}
+export const robberGeo = memo(() => new LatheGeometry(ROBBER_PROFILE().map(([x, y]) => new Vector2(x, y)), 32))
 
 /** a die: a box with six faces (each its own material group), its edges pushed out to round corners */
 export const dieGeo = memo(() => {

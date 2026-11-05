@@ -1,10 +1,10 @@
-# Hearth Isles
+# Towns and Peasants
 
 A 3D hex-island trading and building game for 2–4 players, online with friends or solo against bots.
-(*Hearth Isles* is a working title; it lives in `client/src/lib/palette.ts` as `GAME_NAME`.)
+(The name lives in `client/src/lib/palette.ts` as `GAME_NAME`.)
 
 Every move is a plain click or button press: the board only shows spots where a move is legal, and the server
-decides every result. The board is 3D, tipped a little toward you; real dice tumble in a tray beside it.
+decides every result. The board is 3D, tipped a little toward you; two real dice are thrown into a tray beside it.
 
 **Everything is on the table.** Your cards lie in front of you in stacks, with your development cards beside them
 and your pieces waiting to be built. The bank's five stacks and its development deck sit at the side, next to the dice
@@ -20,12 +20,24 @@ in their tray. Everyone else's cards lie face down at their places. To do someth
 On screen there's only whose turn it is, what just happened, the turn button, the tray's check and cross, counts on
 the stacks, everyone's name and points, and a History panel you can open.
 
-Every card is a real thin card lying in a loose stack, and the pieces are modelled like toys (a house with an
-overhanging roof, a chimney and a door; a hall with a crenellated tower). All the cards that look alike draw as one
-batch, and so do your waiting pieces, so a full table costs about the same as an empty one.
+**Everything is a real object.** Every card and every piece is a body in a physics world (Rapier). When the game
+changes, the things that must move fly to their new places and settle there: cards land on their stacks, a new road
+flies from your supply to its side of a tile, a stolen card crosses the table and turns over. You can also pick
+anything up with the mouse, carry it, drop it, or toss it into the others (a card from your hand dropped on the tray
+goes on the tray). Whatever comes to rest out of place goes back home a moment later. The dice are a real throw too,
+worked out the moment they're rolled and seeded by the roll's number, so everyone sees the same throw; once it lands,
+each die's printing is turned so the server's roll is on top. Clicks never depend on any of this: a click acts on the
+pile a thing belongs to, wherever it lies.
 
-**Fast on any computer:** the board draws only when something moves (nothing at all while you think), the whole
-island is two draw calls, shadows are recomputed only when a piece moves, and the home screen loads without three.js.
+The pieces are wooden toys, each one solid piece: a house (square walls under a steep gable), a city (a tall gabled
+hall with a lower wing), a square road bar, a turned pawn for the robber, all sawn from a silhouette and sanded round,
+with a faint grain under the paint. Stacks of cards are one solid block each in the physics world, as table-top
+simulators do it, so twenty paper-thin cards never jitter; a card is a body of its own only while it's loose.
+
+**Fast on any computer:** the table draws only when something moves (nothing at all while you think), the whole
+island is two draw calls, every card on the table is one more and each kind of piece one more (about 50 in all),
+shadows are recomputed only when something moves, sleeping bodies cost nothing, and the home screen loads without
+three.js (the physics engine follows in the background).
 
 ## Layout
 
@@ -56,7 +68,9 @@ without the server.
 
 ```sh
 npm test            # rules: 15 tests, including 120 whole bot games checked after every move
-npm run check       # the 3D spec's fit checks, and that nothing on the table overlaps (2-4 players, wide and tall)
+npm run check       # the 3D spec's fit checks; that nothing on the table overlaps (2-4 players, wide and tall);
+                    # the physics table headless (stacks lie still, moved cards land, tossed things go home, all sleep);
+                    # 30 real dice throws land flat in the tray showing the roll
 npm run typecheck   # shared, server and client
 npm run e2e         # two scripted players and a bot play a whole game through a running server
 ```

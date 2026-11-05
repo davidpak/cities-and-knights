@@ -43,9 +43,16 @@ export const DIORAMA = {
 
 export const TOKEN = { r: 21, h: 4.5, bevel: 1.4 } // [D] seen straight down, big enough to read at a glance
 
-export const SETTLEMENT = { w: 17, d: 17, wall: 10, peak: 18, round: 1.3 } // [D] a house: walls, an overhanging gable roof, a chimney, a door
-export const CITY = { w: 30, d: 19, wall: 11, peak: 17, towerW: 12, tower: 21, towerPeak: 24, round: 1.3 } // [D] a hall with its roof, and a crenellated tower
-export const ROAD = { len: 32, w: 8, h: 6, round: 1.8 } // [D]
+/**
+ * The pieces are wooden toys, each one solid piece: a silhouette (seen from the front, x across, y up) sawn out and
+ * pushed back to a depth, every edge sanded round. Fronts face +z (toward you), so the silhouette is what you see.
+ *   settlement  a house: square walls under a steep gable, the gable end toward you
+ *   city        a tall gabled hall with a lower wing beside it (twice the house, unmistakably bigger)
+ *   road        a square bar
+ */
+export const SETTLEMENT = { w: 13, d: 17, wall: 9, peak: 16, round: 1.4 } // [D]
+export const CITY = { w: 28, d: 15, hall: 14, wall: 17, peak: 25, wing: 11, round: 1.4 } // [D] hall: its width (left part); wall/peak: its heights; wing: the right part's height
+export const ROAD = { len: 32, w: 7, h: 7, round: 1.6 } // [D]
 export const ROBBER = { r: 11, h: 30 } // [D]
 
 /**
@@ -78,9 +85,6 @@ export const DICE = {
   tray: { x: 298, z: 228, w: 92, d: 62, rim: 5, h: 9, felt: 2 }, // [D] outside the frame, inside the camera's view
   throw: 1.0, // [D] seconds from the toss to rest
 }
-
-/** a dark ink line round every piece, so pieces stand out from the board */
-export const OUTLINE = { mm: 1.1 } // [D]
 
 export const SEA = {
   level: 6, // [D] water surface (tiles stand 6 mm proud of it)

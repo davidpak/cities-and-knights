@@ -7,8 +7,9 @@ import { Lobby } from './ui/Lobby.tsx'
 const Parts = lazy(() => import('./ui/Parts.tsx'))
 /** the board (and three.js with it) loads only once a game starts, so the home screen opens instantly */
 const Game = lazy(() => import('./ui/Game.tsx').then((m) => ({ default: m.Game })))
-// start fetching it in the background straight away
+// start fetching it in the background straight away; the physics engine (the biggest part) a moment later
 void import('./ui/Game.tsx')
+setTimeout(() => void import('./three/physics.ts').then((m) => m.loadRapier()), 1200)
 
 export default function App() {
   const part = new URLSearchParams(location.search).get('part')
@@ -26,9 +27,9 @@ function Play() {
   useEffect(() => connect(), [])
   if (!room) return <Home />
   if (!room.started) return <Lobby info={room} me={solo ? 'you' : playerId} />
-  if (!view) return <div className="home"><div className="plate home-card">Loading the table…</div></div>
+  if (!view) return <div className="menu"><div className="menu-col">Loading the table…</div></div>
   return (
-    <Suspense fallback={<div className="home">Loading the table…</div>}>
+    <Suspense fallback={<div className="menu">Loading the table…</div>}>
       <Game view={view} />
     </Suspense>
   )

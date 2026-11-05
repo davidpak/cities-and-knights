@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { GAME_NAME } from '../lib/palette.ts'
 import { myName, rememberName, room, startSolo, toast, useStore } from '../net.ts'
+import { Title } from './Title.tsx'
 
 export function Home() {
   const { connected, serverDown, toast: msg } = useStore()
@@ -11,21 +11,42 @@ export function Home() {
   const keep = () => rememberName(named)
 
   return (
-    <div className="home">
-      <div className="plate home-card">
-        <h1>{GAME_NAME}</h1>
-        <p className="sub">Settle the island. Trade, build, and race to 10 points.</p>
+    <div className="menu">
+      <div className="menu-col">
+        <Title />
 
-        <label className="field">
+        <label className="menu-name">
           <span>Your name</span>
           <input value={name} maxLength={16} placeholder="Name" onChange={(e) => setName(e.target.value)} />
         </label>
 
-        <div className="home-grid">
-          <div className="home-box">
-            <h3>Play with friends</h3>
+        <section className="menu-row">
+          <h2>Solo</h2>
+          <div className="menu-acts">
+            <span className="choices">
+              {[1, 2, 3].map((n) => (
+                <button key={n} className={bots === n ? 'on' : ''} onClick={() => setBots(n)}>
+                  {n}
+                </button>
+              ))}
+              <span className="after">{bots > 1 ? 'bots' : 'bot'}</span>
+            </span>
             <button
-              className="primary"
+              className="go"
+              onClick={() => {
+                keep()
+                startSolo(named, bots)
+              }}
+            >
+              Start
+            </button>
+          </div>
+        </section>
+
+        <section className="menu-row">
+          <h2>With friends</h2>
+          <div className="menu-acts">
+            <button
               disabled={!connected || !named}
               onClick={async () => {
                 keep()
@@ -35,45 +56,24 @@ export function Home() {
             >
               Create a room
             </button>
-            <div className="row">
-              <input value={code} maxLength={5} placeholder="CODE" className="code" onChange={(e) => setCode(e.target.value.toUpperCase())} />
-              <button
-                disabled={!connected || !named || code.length < 5}
-                onClick={async () => {
-                  keep()
-                  const r = await room.join(code, named)
-                  if (!r.ok) toast(r.error)
-                }}
-              >
-                Join
-              </button>
-            </div>
-            {!connected && !serverDown && <small className="warn">Connecting to the server…</small>}
-            {!connected && serverDown && <small className="warn">Can't reach the game server, so online play is off. Solo still works.</small>}
-          </div>
-          <div className="home-box">
-            <h3>Play solo</h3>
-            <div className="row">
-              {[1, 2, 3].map((n) => (
-                <button key={n} className={`mini-choice ${bots === n ? 'on' : ''}`} onClick={() => setBots(n)}>
-                  {n} bot{n > 1 ? 's' : ''}
-                </button>
-              ))}
-            </div>
+            <span className="or">or</span>
+            <input value={code} maxLength={5} placeholder="CODE" className="code" onChange={(e) => setCode(e.target.value.toUpperCase())} />
             <button
-              className="primary"
-              onClick={() => {
+              disabled={!connected || !named || code.length < 5}
+              onClick={async () => {
                 keep()
-                startSolo(named, bots)
+                const r = await room.join(code, named)
+                if (!r.ok) toast(r.error)
               }}
             >
-              Start
+              Join
             </button>
-            <small>Runs in your browser, no server needed.</small>
           </div>
-        </div>
+          {!connected && !serverDown && <small>Connecting…</small>}
+          {!connected && serverDown && <small>The server can't be reached. Solo still works.</small>}
+        </section>
       </div>
-      {msg && <div className="toast plate">{msg}</div>}
+      {msg && <div className="toast">{msg}</div>}
     </div>
   )
 }

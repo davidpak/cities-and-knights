@@ -7,6 +7,7 @@ export function Home() {
   const [name, setName] = useState(myName())
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('room') ?? '')
   const [bots, setBots] = useState(2)
+  const [knights, setKnights] = useState(() => localStorage.getItem('tp.knights') !== '0')
   const named = name.trim()
   const keep = () => rememberName(named)
 
@@ -19,6 +20,21 @@ export function Home() {
           <span>Your name</span>
           <input value={name} maxLength={16} placeholder="Name" onChange={(e) => setName(e.target.value)} />
         </label>
+
+        <section className="menu-row">
+          <h2>Game</h2>
+          <div className="menu-acts">
+            <span className="choices wide">
+              <button className={knights ? 'on' : ''} onClick={() => (setKnights(true), localStorage.setItem('tp.knights', '1'))}>
+                Knights and barbarians
+              </button>
+              <button className={!knights ? 'on' : ''} onClick={() => (setKnights(false), localStorage.setItem('tp.knights', '0'))}>
+                Basic
+              </button>
+            </span>
+          </div>
+          <small>{knights ? 'Cities make commodities and grow; knights hold off the barbarians; first to 13.' : 'Build, trade and race to 10.'}</small>
+        </section>
 
         <section className="menu-row">
           <h2>Solo</h2>
@@ -35,7 +51,7 @@ export function Home() {
               className="go"
               onClick={() => {
                 keep()
-                startSolo(named, bots)
+                startSolo(named, bots, knights)
               }}
             >
               Start
@@ -52,6 +68,7 @@ export function Home() {
                 keep()
                 const r = await room.create(named)
                 if (!r.ok) toast(r.error)
+                else room.knights(knights)
               }}
             >
               Create a room

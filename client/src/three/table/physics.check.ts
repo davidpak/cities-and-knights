@@ -18,6 +18,10 @@ const shapes: Shapes = {
     city: [prism(CITY_OUTLINE(), CITY.d)],
     road: [box(ROAD.len, ROAD.h, ROAD.w)],
     robber: [box(10, 10, 10)],
+    knight1: [box(10, 10, 10)],
+    knight2: [box(10, 10, 10)],
+    knight3: [box(10, 10, 10)],
+    wall: [box(10, 10, 10)],
   },
 }
 await RAPIER.init()

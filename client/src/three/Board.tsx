@@ -7,7 +7,7 @@
  */
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, type InstancedMesh, type OrthographicCamera } from 'three'
+import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, RingGeometry, type InstancedMesh, type OrthographicCamera } from 'three'
 import { TOPO } from '../../../shared/board.ts'
 import type { Building, GameEvent, Harbor, Tile } from '../../../shared/engine.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
@@ -16,12 +16,14 @@ import '../lib/toy.ts'
 import { getAtlas } from './atlas.ts'
 import { buildIsland } from './island.ts'
 import { Dice } from './Dice.tsx'
-import { BoardPieces, City, Pulse, Road, Robber, Settlement, boardShown, useRedraw } from './Pieces.tsx'
+import { BoardPieces, City, Pulse, Road, Robber, Settlement, boardShown, useRedraw, type BoardExtras } from './Pieces.tsx'
 import { CAMERA, SEA, TILE, VIEW, edgeAt, hexAt, vertexAt } from './spec.ts'
 import { TestHook } from './TestHook.tsx'
 import { QUALITY } from './quality.ts'
 
-export type PickKind = 'settlement' | 'city' | 'road' | 'robber'
+/** what's being picked on the board: a spot to build (shown with the piece), the robber's tile, or (the expansion) a
+ *  corner, a side or a tile for some other purpose (shown with a ring); 'quiet': your knights, ready to be clicked */
+export type PickKind = 'settlement' | 'city' | 'road' | 'robber' | 'vertex' | 'edge' | 'hex' | 'quiet'
 export type Picking = { kind: PickKind; spots: number[] } | null
 
 export type BoardProps = {
@@ -40,11 +42,16 @@ export type BoardProps = {
   onRoll?: () => void
   /** what happened, so new builds can pulse */
   events?: GameEvent[]
+  /** the expansion's pieces on the board */
+  extras?: BoardExtras | null
 }
 
 const islandMat = new MeshLambertMaterial({ vertexColors: true })
 const MARK = new MeshLambertMaterial({ color: PAL.cream })
+/** tiles to pick are ringed in gold (a cream ring would vanish against the cream tokens) */
+const GOLD = new MeshLambertMaterial({ color: '#e3a72c' })
 const dummy = new Object3D()
+const RING_MARK = new RingGeometry(0.88, 1, 40).rotateX(-Math.PI / 2)
 
 export type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number }
 const BOARD_BOUNDS: Bounds = { minX: -VIEW.w / 2, maxX: VIEW.w / 2, minZ: -(SEA.inner + SEA.rim) * 0.9, maxZ: (SEA.inner + SEA.rim) * 0.9 }
@@ -85,9 +92,11 @@ function Island({ tiles, harbors }: { tiles: Tile[]; harbors: Harbor[] }) {
   )
 }
 
-const spotAt = (kind: PickKind, id: number): [number, number] => (kind === 'road' ? edgeAt(id) : kind === 'robber' ? hexAt(id) : vertexAt(id))
+/** (for 'vertex', an id below zero is a tile's centre: -1 - tile) */
+const spotAt = (kind: PickKind, id: number): [number, number] =>
+  kind === 'road' || kind === 'edge' ? edgeAt(id) : kind === 'robber' || kind === 'hex' ? hexAt(id) : id < 0 ? hexAt(-1 - id) : vertexAt(id)
 /** how close (mm) the pointer must be to a spot to pick it */
-const REACH: Record<PickKind, number> = { settlement: 26, city: 26, road: 24, robber: 52 }
+const REACH: Record<PickKind, number> = { settlement: 26, city: 26, road: 24, robber: 52, vertex: 24, edge: 22, hex: 52, quiet: 20 }
 
 /** cream markers on every legal spot, all one draw call */
 function Markers({ kind, spots }: { kind: PickKind; spots: number[] }) {
@@ -97,18 +106,25 @@ function Markers({ kind, spots }: { kind: PickKind; spots: number[] }) {
     if (!m) return
     spots.forEach((id, i) => {
       const [x, z] = spotAt(kind, id)
-      dummy.position.set(x, TILE.h + 0.8, z)
-      dummy.rotation.set(0, kind === 'road' ? -TOPO.edges[id].angle : 0, 0)
-      dummy.scale.set(kind === 'road' ? 16 : 6.5, 1.6, kind === 'road' ? 4.5 : 6.5)
+      const edge = kind === 'road' || kind === 'edge'
+      const tile = kind === 'hex' || (kind === 'vertex' && id < 0)
+      dummy.position.set(x, TILE.h + (tile ? 5.2 : 0.8), z)
+      dummy.rotation.set(0, edge ? -TOPO.edges[id].angle : 0, 0)
+      dummy.scale.set(edge ? 16 : tile ? 24 : 6.5, tile ? 0.8 : 1.6, edge ? 4.5 : tile ? 24 : 6.5)
       dummy.updateMatrix()
       m.setMatrixAt(i, dummy.matrix)
     })
     m.instanceMatrix.needsUpdate = true
   }, [kind, spots])
-  if (kind === 'robber' || kind === 'city' || spots.length === 0) return null
+  if (kind === 'robber' || kind === 'city' || kind === 'quiet' || spots.length === 0) return null
+  // a tile to pick gets a ring round its number
+  if (kind === 'hex')
+    return (
+      <instancedMesh key={`${kind}${spots.length}`} ref={ref} args={[RING_MARK, GOLD, spots.length]} />
+    )
   return (
     <instancedMesh key={`${kind}${spots.length}`} ref={ref} args={[undefined, MARK, spots.length]}>
-      {kind === 'road' ? <boxGeometry args={[1, 1, 1]} /> : <cylinderGeometry args={[1, 1, 1, 16]} />}
+      {kind === 'road' || kind === 'edge' ? <boxGeometry args={[1, 1, 1]} /> : <cylinderGeometry args={[1, 1, 1, 16]} />}
     </instancedMesh>
   )
 }
@@ -158,6 +174,9 @@ function Picker({ picking, color, onPick }: { picking: NonNullable<Picking>; col
       {hover !== null && kind === 'city' && <City ghost color={color} x={hx} z={hz} />}
       {hover !== null && kind === 'road' && <Road ghost color={color} x={hx} z={hz} angle={TOPO.edges[hover].angle} />}
       {hover !== null && kind === 'robber' && <Robber ghost x={hx} z={hz} />}
+      {hover !== null && (kind === 'vertex' || kind === 'edge' || kind === 'hex' || kind === 'quiet') && (
+        <mesh geometry={RING_MARK} material={kind === 'hex' || hover < 0 ? GOLD : MARK} position={[hx, TILE.h + (kind === 'hex' || hover < 0 ? 5.6 : 1.2), hz]} scale={kind === 'hex' || hover < 0 ? 27 : 11} renderOrder={2} />
+      )}
     </>
   )
 }
@@ -201,17 +220,17 @@ function Pulses({ events, colors }: { events: GameEvent[]; colors: PlayerColor[]
 }
 
 /** the board and everything on it (not the dice: they sit wherever the table puts them) */
-export function BoardContents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, events = [], arrive = 0 }: BoardProps & { arrive?: number }) {
+export function BoardContents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, events = [], arrive = 0, extras = null }: BoardProps & { arrive?: number }) {
   const [rx, rz] = hexAt(robber)
   useState(boardShown)
   return (
     <>
       <Island tiles={tiles} harbors={harbors} />
-      <BoardPieces buildings={buildings} roads={roads} colors={colors} you={you} arrive={arrive} />
+      <BoardPieces buildings={buildings} roads={roads} colors={colors} you={you} arrive={arrive} extras={extras} />
       <Robber x={rx} z={rz} />
       <Pulses events={events} colors={colors} />
       {picking && you >= 0 && <Picker picking={picking} color={colors[you]} onPick={onPick} />}
-      <ShadowsOnChange deps={[JSON.stringify(buildings), JSON.stringify(roads), robber, tiles]} />
+      <ShadowsOnChange deps={[JSON.stringify(buildings), JSON.stringify(roads), robber, tiles, JSON.stringify(extras)]} />
     </>
   )
 }

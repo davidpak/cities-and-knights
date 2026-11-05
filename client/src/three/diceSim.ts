@@ -18,7 +18,9 @@ export type Throw = {
   frames: Float32Array
   count: number
   /** the turn of each die's printing that puts its rolled face on top */
-  fix: [Quaternion, Quaternion]
+  fix: Quaternion[]
+  /** dice in the throw (each frame holds 7 numbers per die) */
+  n: number
 }
 
 function seeded(n: number) {
@@ -61,21 +63,22 @@ function cubeTurn(from: number, to: number) {
 /** a throw's path doesn't depend on what it shows (that's the printing's turn, at the end), so the next roll's throw
  *  can be worked out ahead, while nothing's happening, and is ready the moment the roll comes */
 const cache = new Map<string, { frames: Float32Array; count: number; ends: Quaternion[] }>()
-const keyOf = (roll: number, at: [number, number]) => `${roll}|${at[0]}|${at[1]}`
+const keyOf = (roll: number, at: [number, number], n: number) => `${roll}|${at[0]}|${at[1]}|${n}`
 
-export function throwDice(R: typeof RAPIER, roll: number, at: [number, number], values: [number, number]): Throw {
-  const { frames, count, ends } = simulate(R, roll, at)
-  const fix = ends.map((q, i) => cubeTurn(DIE_FACES.indexOf(values[i]), upFace(q).face)) as [Quaternion, Quaternion]
-  return { frames, count, fix }
+/** a throw of as many dice as there are values (two, or three with the expansion's event die) */
+export function throwDice(R: typeof RAPIER, roll: number, at: [number, number], values: number[]): Throw {
+  const { frames, count, ends } = simulate(R, roll, at, values.length)
+  const fix = ends.map((q, i) => cubeTurn(DIE_FACES.indexOf(values[i]), upFace(q).face))
+  return { frames, count, fix, n: values.length }
 }
 
 /** work out a roll's throw now, if it isn't already (for the next roll, at an idle moment) */
-export function prepareThrow(R: typeof RAPIER, roll: number, at: [number, number]) {
-  simulate(R, roll, at)
+export function prepareThrow(R: typeof RAPIER, roll: number, at: [number, number], n = 2) {
+  simulate(R, roll, at, n)
 }
 
-function simulate(R: typeof RAPIER, roll: number, at: [number, number]) {
-  const key = keyOf(roll, at)
+function simulate(R: typeof RAPIER, roll: number, at: [number, number], n: number) {
+  const key = keyOf(roll, at, n)
   const hit = cache.get(key)
   if (hit) return hit
   if (cache.size > 8) cache.delete(cache.keys().next().value!)
@@ -101,11 +104,11 @@ function simulate(R: typeof RAPIER, roll: number, at: [number, number]) {
       world.createCollider(R.ColliderDesc.cuboid(hx, wallH / 2, hz).setTranslation(x0 + dx, wallH / 2, z0 + dz).setFriction(0.4).setRestitution(0.35), fixed)
     const h = DICE.size / 2
     const r = DICE.round * 0.8
-    const dice = [0, 1].map((i) => {
+    const dice = Array.from({ length: n }, (_, i) => i).map((i) => {
       const q = new Quaternion().setFromAxisAngle(new Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(), rnd() * Math.PI * 2)
       const b = world.createRigidBody(
         R.RigidBodyDesc.dynamic()
-          .setTranslation(x0 - inW / 2 + 12 + i * 10 + rnd() * 6, 34 + i * 10 + rnd() * 10, z0 + (i - 0.5) * 18 + (rnd() - 0.5) * 6)
+          .setTranslation(x0 - inW / 2 + 12 + i * 9 + rnd() * 6, 34 + i * 10 + rnd() * 10, z0 + (i - (n - 1) / 2) * 17 + (rnd() - 0.5) * 5)
           .setRotation(q)
           .setLinvel(380 + rnd() * 260, -150, (rnd() - 0.5) * 220)
           .setAngvel({ x: (rnd() - 0.5) * 40, y: (rnd() - 0.5) * 30, z: (rnd() - 0.5) * 40 })
@@ -116,7 +119,8 @@ function simulate(R: typeof RAPIER, roll: number, at: [number, number]) {
       return b
     })
     const max = FPS * 3
-    const frames = new Float32Array(max * 14)
+    const stride = 7 * n
+    const frames = new Float32Array(max * stride)
     let count = 0
     let quiet = 0
     for (let step = 0; step < max * 2; step++) {
@@ -125,7 +129,7 @@ function simulate(R: typeof RAPIER, roll: number, at: [number, number]) {
       dice.forEach((b, i) => {
         const p = b.translation()
         const q = b.rotation()
-        frames.set([p.x, p.y, p.z, q.x, q.y, q.z, q.w], count * 14 + i * 7)
+        frames.set([p.x, p.y, p.z, q.x, q.y, q.z, q.w], count * stride + i * 7)
       })
       count++
       const still = dice.every((b) => Math.hypot(...Object.values(b.linvel())) < 6 && Math.hypot(...Object.values(b.angvel())) < 0.2)
@@ -141,7 +145,7 @@ function simulate(R: typeof RAPIER, roll: number, at: [number, number]) {
     world.free()
     const ok = ends.every(({ p, q }) => upFace(q).dot > 0.985 && Math.abs(p.x - x0) < inW / 2 && Math.abs(p.z - z0) < inD / 2 && p.y < T.felt + h + 1.5)
     if (!ok && attempt < 5) continue
-    const out = { frames: frames.slice(0, count * 14), count, ends: ends.map((e) => e.q) }
+    const out = { frames: frames.slice(0, count * stride), count, ends: ends.map((e) => e.q) }
     cache.set(key, out)
     return out
   }

@@ -3,11 +3,11 @@
  * development cards, card backs, cost chips and little piece icons. Everything here reads as a physical thing on a
  * table: ink outlines, hard shadows, no glass and no glow.
  */
-import { CARD_NAME, CARD_TEXT, RESOURCES, type Card, type Hand, type Resource } from '../../../shared/rules.ts'
+import { CARD_NAME, CARD_TEXT, GOODS, RESOURCES, type Card, type Good, type Hand, type Resource } from '../../../shared/rules.ts'
 import { CARD_ICON, ICON } from '../lib/icons.ts'
 import { RESOURCE_COLOR, RESOURCE_NAME } from '../lib/palette.ts'
 
-export function Icon({ r, size = 18, color }: { r: Resource; size?: number; color?: string }) {
+export function Icon({ r, size = 18, color }: { r: Good; size?: number; color?: string }) {
   return (
     <svg className="icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden>
       <path d={ICON[r]} fill={color ?? RESOURCE_COLOR[r]} />
@@ -105,7 +105,7 @@ export function DevCard({ card, n, ready, onPlay }: { card: Card; n: number; rea
 export function Cost({ of }: { of: Partial<Hand> }) {
   return (
     <span className="cost">
-      {RESOURCES.flatMap((r) =>
+      {GOODS.flatMap((r) =>
         Array.from({ length: of[r] ?? 0 }, (_, i) => <span key={`${r}${i}`} className="chip" style={{ background: RESOURCE_COLOR[r] }} title={RESOURCE_NAME[r]} />),
       )}
     </span>
@@ -114,7 +114,7 @@ export function Cost({ of }: { of: Partial<Hand> }) {
 
 /** a bundle of cards in a sentence: 2 [wool] 1 [ore] */
 export function Bundle({ of, empty = 'nothing' }: { of: Partial<Hand>; empty?: string }) {
-  const rs = RESOURCES.filter((r) => (of[r] ?? 0) > 0)
+  const rs = GOODS.filter((r) => (of[r] ?? 0) > 0)
   if (!rs.length) return <span className="bundle muted">{empty}</span>
   return (
     <span className="bundle">

@@ -3,6 +3,29 @@
 A 3D hex-island trading and building game for 2–4 players, online with friends or solo against bots.
 (The name lives in `client/src/lib/palette.ts` as `GAME_NAME`.)
 
+**Two games in one.** *Knights and barbarians* (the default; pick it on the start screen or in the lobby) adds the
+expansion, with our own names and wording throughout:
+
+- Cities make **commodities** besides resources: paper from forest, cloth from pasture, coin from mountains. The second
+  piece you place in setup is a city. First to **13 points** wins.
+- Three **city tracks** (trade, politics, science): level n costs n of the track's commodity. Level 3 gives a perk
+  (trade commodities 2 for 1; knights of the third strength; a resource of your choice when a roll brings you
+  nothing). The first to reach level 4 raises a **metropolis** on a city (2 points); reaching 5 first takes it away.
+- **Knights** (three strengths) stand on your roads. Ready one with grain; from your next turn it can move along your
+  roads, push a weaker knight away, or chase the robber off. Knights also block other players' roads.
+- The **barbarians** sail a step with every ship on the **event die** (the third die). When they land, every city on
+  the island is their strength and every ready knight stands against them: held off, the best defender earns a point;
+  beaten, whoever gave least loses a city (a walled one loses its wall instead). Metropolises can't be taken.
+- **City walls** (2 brick) let you keep two more cards on a 7. The robber stays in the desert until the first landing.
+- **Progress cards** (25 kinds, our own set) come from the event die's gates: a gate in a track's colour gives a card to
+  everyone whose level in that track is high enough for the red die. Hold four at most; point cards go down at once.
+- The **trader**: put it on a tile beside you to trade that tile's resource 2 for 1, and hold a point while it's yours.
+
+On the table: your knights and walls wait beside your pieces; your three tracks sit by the dice (click a track to take
+its next step); everyone else's tracks are small beside their cards; the barbarians' lane runs above the bank. Click a
+knight on the board to ready it, click a ready one to pick it up and then where it goes. Click a progress card to play
+it; if it needs a target, the line at the top says what to click.
+
 Every move is a plain click or button press: the board only shows spots where a move is legal, and the server
 decides every result. The board is 3D, tipped a little toward you; two real dice are thrown into a tray beside it.
 
@@ -83,7 +106,7 @@ without the server.
 ## Checks
 
 ```sh
-npm test            # rules: 15 tests, including 120 whole bot games checked after every move
+npm test            # rules: 24 tests, including 120 whole bot games (and 60 with the expansion) checked after every move
 npm run check       # the 3D spec's fit checks; that nothing on the table overlaps (2-4 players, wide and tall);
                     # the physics table headless (stacks lie still, moved cards land, tossed things go home, all sleep);
                     # 30 real dice throws land flat in the tray showing the roll

@@ -16,7 +16,7 @@ import { botAction } from '../shared/bot.ts'
 import { apply, newGame, viewFor, type GameState } from '../shared/engine.ts'
 import { MAX_SEATS, NAME_MAX, type ClientToServer, type RoomInfo, type Seat, type ServerToClient } from '../shared/protocol.ts'
 
-type Room = { code: string; host: string; seats: Seat[]; game: GameState | null; botTimer?: NodeJS.Timeout; emptySince?: number }
+type Room = { code: string; host: string; seats: Seat[]; game: GameState | null; knights: boolean; botTimer?: NodeJS.Timeout; emptySince?: number }
 type Sock = Socket<ClientToServer, ServerToClient, Record<string, never>, { player: string }>
 
 const rooms = new Map<string, Room>()
@@ -48,7 +48,7 @@ const newCode = () => {
 const BOT_NAMES = ['Bramble', 'Pip', 'Juniper', 'Moss', 'Clover', 'Wren']
 
 function info(r: Room): RoomInfo {
-  return { code: r.code, host: r.host, seats: r.seats, started: r.game !== null }
+  return { code: r.code, host: r.host, seats: r.seats, started: r.game !== null, knights: r.knights }
 }
 
 function send(r: Room) {
@@ -139,7 +139,7 @@ io.on('connection', (raw) => {
   socket.on('room:create', (name, ack) => {
     if (myRoom()) leave(player)
     const code = newCode()
-    const room: Room = { code, host: player, seats: [{ id: player, name: cleanName(name), ready: false, bot: false, connected: true }], game: null }
+    const room: Room = { code, host: player, seats: [{ id: player, name: cleanName(name), ready: false, bot: false, connected: true }], game: null, knights: true }
     rooms.set(code, room)
     roomOf.set(player, code)
     for (const s of sockets.get(player) ?? []) s.join(code)
@@ -201,6 +201,13 @@ io.on('connection', (raw) => {
     send(room)
   })
 
+  socket.on('room:knights', (on) => {
+    const code = roomOf.get(player)
+    const room = code ? rooms.get(code) : undefined
+    if (!room || room.host !== player || room.game) return
+    room.knights = !!on
+    send(room)
+  })
   socket.on('room:start', (ack) => {
     const room = myRoom()
     if (!room) return ack({ ok: false, error: 'You are not in a room.' })
@@ -208,7 +215,7 @@ io.on('connection', (raw) => {
     if (room.game) return ack({ ok: false, error: 'Already started.' })
     if (room.seats.length < 2) return ack({ ok: false, error: 'You need at least 2 players (add a bot?).' })
     if (!room.seats.every((s) => s.ready || s.id === player)) return ack({ ok: false, error: 'Everyone needs to be ready.' })
-    room.game = newGame(room.seats.map((s) => ({ id: s.id, name: s.name })), (Math.random() * 2 ** 31) | 0)
+    room.game = newGame(room.seats.map((s) => ({ id: s.id, name: s.name })), (Math.random() * 2 ** 31) | 0, { knights: room.knights })
     ack({ ok: true })
     send(room)
   })

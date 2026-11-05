@@ -3,10 +3,11 @@
  * and turned once (the playbook's rule); turned things are lathed. Nothing is a plane laid over another surface.
  */
 import {
-  BoxGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2, Vector3,
+  BoxGeometry, BufferGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2, Vector3,
 } from 'three'
 import { roundedPolygon, roundedRect } from '../lib/shapes.ts'
-import { CITY, DICE, HARBOR, ROAD, ROBBER, SEA, SETTLEMENT, TILE, TOKEN } from './spec.ts'
+import { CITY, DICE, HARBOR, KNIGHT, ROAD, ROBBER, SEA, SETTLEMENT, TILE, TOKEN, TOWER, TRADER, WALL } from './spec.ts'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 const memo = <T>(f: () => T) => {
   let v: T | undefined
@@ -214,3 +215,47 @@ export const hullGeo = memo(() => {
 
 /** a triangular sail, standing up, its face across the boat's length */
 export const sailGeo = memo(() => upright([[0, 0], [10, 0], [0, 15]], 1, 0.35))
+
+// ---------------------------------------------------------------- the expansion's pieces
+
+/** a knight's turned profile (radius, height) for its strength: a foot, a body, a helmeted head */
+export const KNIGHT_PROFILE = (level: 1 | 2 | 3): Pt[] => {
+  const h = KNIGHT.h[level]
+  const r = KNIGHT.r
+  return [
+    [0, 0], [r, 0], [r, 1.6], [r * 0.72, 2.6], [r * 0.5, h * 0.42], [r * 0.62, h * 0.56], [r * 0.7, h * 0.7],
+    [r * 0.68, h * 0.84], [r * 0.5, h * 0.95], [0, h],
+  ] as Pt[]
+}
+const knightGeo = (level: 1 | 2 | 3) => {
+  const h = KNIGHT.h[level]
+  const parts: BufferGeometry[] = [new LatheGeometry(KNIGHT_PROFILE(level).map(([x, y]) => new Vector2(x, y)), 18)]
+  // a crest over the helmet for the stronger ones, a plume on top for the strongest
+  if (level >= 2) parts.push(new BoxGeometry(1.6, 3.4, KNIGHT.r * 1.2).translate(0, h - 0.4, 0))
+  if (level >= 3) parts.push(new LatheGeometry([new Vector2(0, 0), new Vector2(1.6, 0.4), new Vector2(0.8, 4), new Vector2(0, 5)], 8).translate(0, h + 1, 0))
+  const clean = parts.map((g) => {
+    const n = g.index ? g.toNonIndexed() : g
+    const out = new BufferGeometry()
+    out.setAttribute('position', n.attributes.position)
+    out.setAttribute('normal', n.attributes.normal)
+    out.setAttribute('uv', n.attributes.uv ?? n.attributes.position)
+    return out
+  })
+  return mergeGeometries(clean)!
+}
+export const knight1Geo = memo(() => knightGeo(1))
+export const knight2Geo = memo(() => knightGeo(2))
+export const knight3Geo = memo(() => knightGeo(3))
+
+/** a low stone ring round a city */
+export const wallGeo = memo(() => rim(WALL.w, WALL.d, WALL.rim, WALL.h, 2))
+
+/** a metropolis's tower, standing behind its city */
+export const towerGeo = memo(() =>
+  sawn([[-TOWER.w / 2, 0], [TOWER.w / 2, 0], [TOWER.w / 2, TOWER.wall], [0, TOWER.peak], [-TOWER.w / 2, TOWER.wall]], TOWER.d, 1.2),
+)
+
+/** the trader: a small turned cone */
+export const traderGeo = memo(() =>
+  new LatheGeometry([new Vector2(0, 0), new Vector2(TRADER.r, 0), new Vector2(TRADER.r * 0.9, 1.5), new Vector2(TRADER.r * 0.35, TRADER.h * 0.75), new Vector2(TRADER.r * 0.55, TRADER.h * 0.86), new Vector2(0, TRADER.h)].map(([x, y]) => new Vector2(x as unknown as number, y as unknown as number)), 16),
+)

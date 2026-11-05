@@ -54,6 +54,18 @@ export const SETTLEMENT = { w: 15, d: 19, wall: 10.5, peak: 18.5, round: 1.5 } /
 export const CITY = { w: 32, d: 17, hall: 16, wall: 19.5, peak: 28.5, wing: 12.5, round: 1.5 } // [D] hall: its width (left part); wall/peak: its heights; wing: the right part's height
 export const ROAD = { len: 36, w: 8, h: 8, round: 1.7 } // [D]
 export const ROBBER = { r: 12.5, h: 34 } // [D]
+/**
+ * The expansion's pieces.
+ *   knight      a turned pawn in a helmet; taller for each strength (and a crest, then a plume). Standing: ready.
+ *               Lying on its side: resting
+ *   wall        a low stone ring round a city
+ *   tower       a metropolis: a tall gabled tower behind the city
+ *   trader      a small turned cone on the tile it trades
+ */
+export const KNIGHT = { r: 7, h: [0, 13, 17, 21] as const } // [D] (by strength)
+export const WALL = { w: 44, d: 30, rim: 3.2, h: 6 } // [D] (round a city: CITY.w 32 x CITY.d 17, with room)
+export const TOWER = { w: 11, d: 11, wall: 30, peak: 38 } // [D]
+export const TRADER = { r: 5.5, h: 17 } // [D]
 
 /**
  * A harbour, as on the usual board: its sign sits out in the water off one coast side, and two short wooden piers

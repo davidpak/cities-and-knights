@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { TOPO } from '../../../shared/board.ts'
 import type { GameEvent, View } from '../../../shared/engine.ts'
-import { CARD_NAME, RESOURCES, type Hand, type Resource } from '../../../shared/rules.ts'
+import { CARD_NAME, PROGRESS, RESOURCES, TRACK_NAME, type Good, type Hand } from '../../../shared/rules.ts'
 import { PLAYER, RESOURCE_NAME } from '../lib/palette.ts'
 import { Bundle, Icon, PieceIcon, Pips } from './Cards.tsx'
 
@@ -20,7 +20,7 @@ export function Who({ view, p, you = true }: { view: View; p: number; you?: bool
   )
 }
 
-const one = (r: Resource, n = 1): Partial<Hand> => ({ [r]: n })
+const one = (r: Good, n = 1): Partial<Hand> => ({ [r]: n })
 const TERRAIN_WORD: Record<string, string> = { forest: 'forest', hills: 'hills', pasture: 'pasture', fields: 'fields', mountains: 'mountains', desert: 'desert' }
 
 /** one event as a line of words and pictures; null for ones not worth a line */
@@ -32,6 +32,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
         <>
           {W(e.p)} rolled <Pips v={e.dice[0]} size={15} />
           <Pips v={e.dice[1]} size={15} /> <b className="big-num">{e.dice[0] + e.dice[1]}</b>
+          {e.event && <span className="muted"> · {e.event === 'ship' ? 'the ship sails on' : `${TRACK_NAME[e.event].toLowerCase()} gate`}</span>}
         </>
       )
     case 'gain':
@@ -155,6 +156,101 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
         <>
           {W(e.p)} took <b className="award-word">{e.what === 'road' ? 'Longest Road' : 'Largest Army'}</b> (+2)
           {e.was !== null && <> from {W(e.was)}</>}
+        </>
+      )
+    case 'barbarians':
+      return e.at >= 7 ? <>The barbarians land!</> : <>The barbarians' ship sails on ({7 - e.at} to go)</>
+    case 'attack': {
+      const strength = e.strength
+      const defense = e.defense.reduce((a, b) => a + b, 0)
+      if (e.won)
+        return (
+          <>
+            The barbarians ({strength}) are driven off by the knights ({defense})
+            {e.defender !== null ? <>: {W(e.defender)} defended best (+1)</> : e.tied.length ? <>: {e.tied.map((p, i) => <span key={p}>{i > 0 && ', '}{W(p)}</span>)} each take a progress card</> : null}
+          </>
+        )
+      return (
+        <>
+          The barbarians ({strength}) beat the knights ({defense})
+          {e.pillaged.length > 0 && (
+            <>
+              : {e.pillaged.map((x, i) => (
+                <span key={i}>
+                  {i > 0 && ', '}
+                  {W(x.p)} lost {x.wall ? 'a city wall' : 'a city'}
+                </span>
+              ))}
+            </>
+          )}
+        </>
+      )
+    }
+    case 'draw':
+      return (
+        <>
+          {W(e.p)} drew a {TRACK_NAME[e.track].toLowerCase()} card{e.card && (e.p === view.you || e.card === 'townCharter' || e.card === 'press') ? <>: <b>{PROGRESS[e.card].name}</b></> : null}
+        </>
+      )
+    case 'improve':
+      return (
+        <>
+          {W(e.p)} raised {TRACK_NAME[e.track].toLowerCase()} to <b>{e.level}</b>
+        </>
+      )
+    case 'metropolis':
+      return (
+        <>
+          {W(e.p)} raised a <b className="award-word">{TRACK_NAME[e.track]} metropolis</b> (+2){e.from !== null && <> from {W(e.from)}</>}
+        </>
+      )
+    case 'knight': {
+      const str = e.level ? ` (${['', 'basic', 'strong', 'mighty'][e.level]})` : ''
+      const what = {
+        build: 'raised a knight',
+        promote: 'made a knight stronger',
+        activate: 'readied a knight',
+        move: 'moved a knight',
+        displace: 'pushed away a knight of',
+        chase: 'chased the robber off with a knight',
+        lost: 'lost a knight',
+      }[e.what]
+      return (
+        <>
+          {W(e.p)} {what}
+          {e.what === 'displace' && e.victim !== undefined ? <> {W(e.victim)}</> : str}
+        </>
+      )
+    }
+    case 'wall':
+      return <>{W(e.p)} built a city wall</>
+    case 'progress':
+      return (
+        <>
+          {W(e.p)} played <b>{PROGRESS[e.card].name}</b>
+        </>
+      )
+    case 'merchant':
+      return <>{W(e.p)} sent out the trader</>
+    case 'take':
+      return (
+        <>
+          {W(e.p)} took {e.what === 'progress' ? (e.card && (e.p === view.you || e.from === view.you) ? <b>{PROGRESS[e.card].name}</b> : 'a progress card') : e.what ? <Bundle of={one(e.what, e.count)} /> : <b>{e.count}</b>}
+          {!e.what || e.what === 'progress' ? (e.what === 'progress' ? '' : ' card' + (e.count === 1 ? '' : 's')) : ''} from {W(e.from)}
+        </>
+      )
+    case 'swap':
+      return <>{W(e.p)} swapped two number tokens</>
+    case 'unroad':
+      return (
+        <>
+          {W(e.p)} took up a road of {W(e.owner)}
+        </>
+      )
+    case 'aqueduct':
+      return (
+        <>
+          {W(e.p)} took <Bundle of={one(e.r)} /> (waterworks)
         </>
       )
     case 'turn':

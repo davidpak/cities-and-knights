@@ -24,6 +24,20 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
             Copy invite link
           </button>
         </div>
+        <div className="menu-acts">
+          {host ? (
+            <span className="choices wide">
+              <button className={info.knights ? 'on' : ''} onClick={() => room.knights(true)}>
+                Knights and barbarians
+              </button>
+              <button className={!info.knights ? 'on' : ''} onClick={() => room.knights(false)}>
+                Basic
+              </button>
+            </span>
+          ) : (
+            <small>{info.knights ? 'Knights and barbarians, to 13 points' : 'The basic game, to 10 points'}</small>
+          )}
+        </div>
         <ul className="seats">
           {info.seats.map((s) => (
             <li key={s.id} className="seat">

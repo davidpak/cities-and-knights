@@ -11,12 +11,12 @@ let bad = 0
 let frames = 0
 const t0 = performance.now()
 for (let roll = 1; roll <= 30; roll++) {
-  const values: [number, number] = [((roll * 7) % 6) + 1, ((roll * 11) % 6) + 1]
+  const values = [((roll * 7) % 6) + 1, ((roll * 11) % 6) + 1, ...(roll % 2 ? [((roll * 5) % 6) + 1] : [])]
   const at: [number, number] = [528, 232]
   const th = throwDice(RAPIER as never, roll, at, values)
   frames += th.count
-  const last = (th.count - 1) * 14
-  for (let i = 0; i < 2; i++) {
+  const last = (th.count - 1) * 7 * th.n
+  for (let i = 0; i < th.n; i++) {
     const f = th.frames.subarray(last + i * 7, last + i * 7 + 7)
     const q = new Quaternion(f[3], f[4], f[5], f[6]).multiply(th.fix[i])
     let shown = 0
@@ -33,5 +33,5 @@ for (let roll = 1; roll <= 30; roll++) {
   }
 }
 const ms = (performance.now() - t0) / 30
-console.log(`${bad ? '✗' : '✓'} 30 throws land flat in the tray showing the roll (${(frames / 30 / 60).toFixed(2)} s each on average, ${ms.toFixed(1)} ms to work out)`)
+console.log(`${bad ? '✗' : '✓'} 30 throws (of two dice, and of three) land flat in the tray showing the roll (${(frames / 30 / 60).toFixed(2)} s each on average, ${ms.toFixed(1)} ms to work out)`)
 ;(globalThis as unknown as { process: { exit: (n: number) => void } }).process.exit(bad ? 1 : 0)

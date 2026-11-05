@@ -260,6 +260,45 @@ input {
   to { opacity: 1; transform: none; }
 }
 
+/* the expansion: putting a progress card back, and the barbarians' count beside their lane */
+.todo-x {
+  margin-left: calc(var(--u) * 10);
+  border: none;
+  background: #d2452f;
+  color: #fff;
+  border-radius: 50%;
+  width: calc(var(--u) * 22);
+  height: calc(var(--u) * 22);
+  font-size: calc(var(--u) * 12);
+  pointer-events: auto;
+  vertical-align: middle;
+}
+.lane-tag {
+  position: absolute;
+  transform: translate(-50%, 90%);
+  white-space: nowrap;
+  font-size: calc(var(--u) * 12.5);
+  padding: calc(var(--u) * 1) calc(var(--u) * 8);
+  background: var(--paper);
+  border-radius: calc(var(--u) * 4);
+  color: var(--ink);
+}
+.track-tag {
+  position: absolute;
+  transform: translate(-100%, -50%);
+  white-space: nowrap;
+  font-size: calc(var(--u) * 11.5);
+  font-weight: 700;
+  color: var(--paper);
+  text-shadow: none;
+}
+.lane-tag .ok {
+  color: #2f8a4f;
+}
+.lane-tag .no {
+  color: #c4412b;
+}
+
 /* pinned to the table */
 .labels {
   position: absolute;
@@ -599,6 +638,10 @@ input {
   padding: 10px 0;
   background: var(--wood-2);
   color: var(--cream);
+}
+.menu .choices.wide button {
+  width: auto;
+  padding: 10px 14px;
 }
 .menu .choices button.on {
   background: var(--cream);

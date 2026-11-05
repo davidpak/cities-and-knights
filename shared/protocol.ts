@@ -2,7 +2,8 @@
 import type { Action, View } from './engine.ts'
 
 export type Seat = { id: string; name: string; ready: boolean; bot: boolean; connected: boolean }
-export type RoomInfo = { code: string; host: string; seats: Seat[]; started: boolean }
+/** knights: play with the expansion (knights, barbarians, commodities, city improvements, progress cards) */
+export type RoomInfo = { code: string; host: string; seats: Seat[]; started: boolean; knights: boolean }
 export type Ack = { ok: true; code?: string } | { ok: false; error: string }
 
 export interface ServerToClient {
@@ -19,6 +20,7 @@ export interface ClientToServer {
   'room:addBot': () => void
   'room:removeSeat': (id: string) => void
   'room:start': (ack: (a: Ack) => void) => void
+  'room:knights': (on: boolean) => void
   'game:action': (a: Action, ack: (a: Ack) => void) => void
 }
 

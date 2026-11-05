@@ -26,7 +26,7 @@ import { Euler, Quaternion, Vector3 } from 'three'
 
 type R = typeof RAPIER
 
-export type ThingKind = 'card' | 'road' | 'settlement' | 'city' | 'robber'
+export type ThingKind = 'card' | 'road' | 'settlement' | 'city' | 'robber' | 'knight1' | 'knight2' | 'knight3' | 'wall'
 export type Home = { x: number; y: number; z: number; yaw: number; flip?: boolean }
 export type PileSpec = {
   id: string
@@ -91,7 +91,7 @@ export type Thing = {
 /** body shapes, by kind (sizes and hull points in mm, from the spec) */
 export type Shapes = {
   card: { w: number; d: number; t: number; small: number }
-  hull: Record<'road' | 'settlement' | 'city' | 'robber', Float32Array[]>
+  hull: Record<Exclude<ThingKind, 'card'>, Float32Array[]>
 }
 export type StaticPart = { box: [number, number, number]; at: [number, number, number]; yaw?: number } | { hull: Float32Array } | { cyl: [number, number]; at: [number, number, number] }
 

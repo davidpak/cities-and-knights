@@ -18,16 +18,30 @@ import { useRapier } from './physics.ts'
 const NORMALS = [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, -1, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)]
 const UP = new Vector3(0, 1, 0)
 
+type DieStyle = 'plain' | 'red' | 'yellow' | 'event'
+const STYLE: Record<DieStyle, { body: string; pip: string; one: string }> = {
+  plain: { body: '#fbf7ef', pip: '#22170f', one: '#c8453c' },
+  red: { body: '#c8453c', pip: '#fff6ea', one: '#fff6ea' },
+  yellow: { body: '#f0cf62', pip: '#2a1d13', one: '#2a1d13' },
+  event: { body: '#fbf7ef', pip: '#22170f', one: '#22170f' },
+}
+/** the event die's faces: three ships, then a gate in each track's colour */
+const GATE: Record<number, string> = { 4: '#e2b33c', 5: '#3f6fc0', 6: '#4c9a4f' }
+const SHIP = 'M2 14h20l-3 5H5z M11 3h1.6v10H11z M12.6 4l6 7h-6z M11 5l-5 7h5z'
+const GATE_ICON = 'M5 21V9a7 7 0 0 1 14 0v12h-4v-8a3 3 0 0 0-6 0v8z'
+
 /** all six faces in one picture (three across, two down), so a die is one draw, not six */
-let atlas: CanvasTexture | null = null
-function faceAtlas() {
-  if (atlas) return atlas
+const atlases = new Map<DieStyle, CanvasTexture>()
+function faceAtlas(style: DieStyle = 'plain') {
+  const hit = atlases.get(style)
+  if (hit) return hit
   const S = 128
   const c = document.createElement('canvas')
   c.width = S * 3
   c.height = S * 2
   const ctx = c.getContext('2d')!
-  ctx.fillStyle = '#fbf7ef'
+  const st = STYLE[style]
+  ctx.fillStyle = st.body
   ctx.fillRect(0, 0, c.width, c.height)
   const spots: Record<number, [number, number][]> = {
     1: [[0.5, 0.5]],
@@ -40,17 +54,27 @@ function faceAtlas() {
   for (let v = 1; v <= 6; v++) {
     const ox = ((v - 1) % 3) * S
     const oy = Math.floor((v - 1) / 3) * S
-    ctx.fillStyle = v === 1 ? '#c8453c' : '#22170f'
+    if (style === 'event') {
+      ctx.save()
+      ctx.translate(ox + S * 0.14, oy + S * 0.14)
+      ctx.scale((S * 0.72) / 24, (S * 0.72) / 24)
+      ctx.fillStyle = v <= 3 ? '#2a1d13' : GATE[v]
+      ctx.fill(new Path2D(v <= 3 ? SHIP : GATE_ICON))
+      ctx.restore()
+      continue
+    }
+    ctx.fillStyle = v === 1 ? st.one : st.pip
     for (const [x, y] of spots[v]) {
       ctx.beginPath()
-      ctx.arc(ox + x * S, oy + y * S, v === 1 ? 15 : 11, 0, Math.PI * 2)
+      ctx.arc(ox + x * S, oy + y * S, v === 1 && style === 'plain' ? 15 : 11, 0, Math.PI * 2)
       ctx.fill()
     }
   }
-  atlas = new CanvasTexture(c)
-  atlas.colorSpace = SRGBColorSpace
-  atlas.anisotropy = QUALITY.aniso
-  return atlas
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  t.anisotropy = QUALITY.aniso
+  atlases.set(style, t)
+  return t
 }
 
 /** the die's shape with each face's picture taken from the atlas, all one group */
@@ -87,14 +111,14 @@ const tmpQa = new Quaternion()
 const tmpQb = new Quaternion()
 
 /** both dice: a real throw (diceSim) played back each time the roll count goes up; still otherwise */
-function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: number; onClick?: () => void; at: [number, number] }) {
+function Pair({ values, styles, roll, onClick, at }: { values: number[]; styles: DieStyle[]; roll: number; onClick?: () => void; at: [number, number] }) {
   const R = useRapier()
-  const g = [useRef<Group>(null), useRef<Group>(null)]
-  const material = useMemo(() => mat('#ffffff', { map: faceAtlas() }), [])
+  const g = [useRef<Group>(null), useRef<Group>(null), useRef<Group>(null)].slice(0, values.length)
+  const materials = useMemo(() => styles.map((st) => mat('#ffffff', { map: faceAtlas(st) })), [styles.join()])
   const redraw = useRedraw()
   const seen = useRef<number | null>(null)
   const play = useRef<{ t: Throw; t0: number } | null>(null)
-  const key = `${values[0]}${values[1]}${roll}${at[0]},${at[1]}`
+  const key = `${values.join()}${roll}${at[0]},${at[1]}`
 
   // a new roll: throw it (a rejoin or a resize just shows how the last one lies)
   useLayoutEffect(() => {
@@ -105,7 +129,7 @@ function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: n
     redraw()
     // the next throw, worked out while nobody's waiting for it
     const idle = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number }).requestIdleCallback
-    const later = () => prepareThrow(R, roll + 1, at)
+    const later = () => prepareThrow(R, roll + 1, at, values.length)
     const id = idle ? idle(later, { timeout: 4000 }) : window.setTimeout(later, 1500)
     return () => {
       const cancel = (window as unknown as { cancelIdleCallback?: (n: number) => void }).cancelIdleCallback
@@ -120,7 +144,7 @@ function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: n
     if (!pl) {
       // the engine isn't here yet: the dice lie side by side, the roll on top
       g.forEach((r, i) => {
-        r.current?.position.set(at[0] + (i - 0.5) * 30, DICE.tray.felt + DICE.size / 2, at[1])
+        r.current?.position.set(at[0] + (i - (values.length - 1) / 2) * 26, DICE.tray.felt + DICE.size / 2, at[1])
         r.current?.quaternion.copy(restingOn(values[i], 0.3 + i * 0.5))
       })
       return
@@ -133,8 +157,9 @@ function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: n
     g.forEach((r, i) => {
       const o = r.current
       if (!o) return
-      const A = t.frames.subarray(i0 * 14 + i * 7, i0 * 14 + i * 7 + 7)
-      const B = t.frames.subarray(i1 * 14 + i * 7, i1 * 14 + i * 7 + 7)
+      const st = 7 * t.n
+      const A = t.frames.subarray(i0 * st + i * 7, i0 * st + i * 7 + 7)
+      const B = t.frames.subarray(i1 * st + i * 7, i1 * st + i * 7 + 7)
       o.position.lerpVectors(tmpA.set(A[0], A[1], A[2]), tmpB.set(B[0], B[1], B[2]), a)
       o.quaternion.slerpQuaternions(tmpQa.set(A[3], A[4], A[5], A[6]), tmpQb.set(B[3], B[4], B[5], B[6]), a).multiply(t.fix[i])
     })
@@ -147,7 +172,7 @@ function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: n
         <group key={i} ref={r}>
           <mesh
             geometry={dieShape()}
-            material={material}
+            material={materials[i]}
             castShadow
             onClick={(e: ThreeEvent<MouseEvent>) => {
               if (!onClick) return
@@ -164,13 +189,19 @@ function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: n
 }
 
 /** the dice in their tray, at `at` on the table (the tray's centre) */
-export function Dice({ dice, rolls, onRoll, at = [DICE.tray.x, DICE.tray.z] }: { dice: [number, number] | null; rolls: number; onRoll?: () => void; at?: [number, number] }) {
+const EVENT_VALUE: Record<string, number> = { trade: 4, politics: 5, science: 6 }
+
+/** the dice in their tray: two, or in the expansion a red, a yellow and the event die */
+export function Dice({ dice, rolls, onRoll, at = [DICE.tray.x, DICE.tray.z], event }: { dice: [number, number] | null; rolls: number; onRoll?: () => void; at?: [number, number]; event?: string | null }) {
   const [a, b] = dice ?? [6, 6]
+  const expansion = event !== undefined
+  const values = expansion ? [a, b, event && event !== 'ship' ? EVENT_VALUE[event] : 1 + (rolls % 3)] : [a, b]
+  const styles: DieStyle[] = expansion ? ['red', 'yellow', 'event'] : ['plain', 'plain']
   return (
     <group>
       <mesh geometry={trayGeo()} material={[mat(PAL.maple), mat(PAL.mapleDeep)]} position={[at[0], 0, at[1]]} castShadow receiveShadow />
       <mesh geometry={feltGeo()} material={mat(PAL.felt)} position={[at[0], 0, at[1]]} receiveShadow onClick={onRoll} />
-      <Pair values={[a, b]} roll={rolls} onClick={onRoll} at={at} />
+      <Pair values={values} styles={styles} roll={rolls} onClick={onRoll} at={at} />
     </group>
   )
 }

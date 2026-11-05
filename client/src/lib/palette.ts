@@ -3,7 +3,7 @@
  * darks that are plum and never black. Terrain colours are chosen first for telling tiles apart at a glance
  * (forest dark green, pasture light green, fields gold, hills terracotta, mountains slate, desert sand).
  */
-import type { PlayerColor, Resource, Terrain } from '../../../shared/rules.ts'
+import type { Good, PlayerColor, Terrain } from '../../../shared/rules.ts'
 
 export const GAME_NAME = 'Towns and Peasants'
 
@@ -45,18 +45,27 @@ export const PLAYER: Record<PlayerColor, { body: string; roof: string; ui: strin
   white: { body: '#f4efe6', roof: '#cfc6d8', ui: '#d8d0c4' },
 }
 
-export const RESOURCE_COLOR: Record<Resource, string> = {
+export const RESOURCE_COLOR: Record<Good, string> = {
   lumber: '#3f7f4c',
   brick: '#c4643f',
   wool: '#9ccd6e',
   grain: '#e5b94e',
   ore: '#8f8ca6',
+  paper: '#c9a55c',
+  cloth: '#b95b8c',
+  coin: '#4f78b8',
 }
 
-export const RESOURCE_NAME: Record<Resource, string> = {
+export const RESOURCE_NAME: Record<Good, string> = {
   lumber: 'Lumber',
   brick: 'Brick',
   wool: 'Wool',
   grain: 'Grain',
   ore: 'Ore',
+  paper: 'Paper',
+  cloth: 'Cloth',
+  coin: 'Coin',
 }
+
+/** the expansion's three tracks: trade (yellow), politics (blue), science (green) */
+export const TRACK_COLOR = { trade: '#e2b33c', politics: '#3f6fc0', science: '#4c9a4f' } as const

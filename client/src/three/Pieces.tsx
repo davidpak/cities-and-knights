@@ -8,8 +8,8 @@ import { Color, Matrix4, MeshBasicMaterial, Quaternion, RingGeometry, Vector3, t
 import { TOPO } from '../../../shared/board.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
 import { PAL, PLAYER } from '../lib/palette.ts'
-import { cityGeo, roadGeo, robberGeo, settlementGeo } from './geometry.ts'
-import { TILE, TOKEN, edgeAt, vertexAt } from './spec.ts'
+import { cityGeo, knight1Geo, knight2Geo, knight3Geo, roadGeo, robberGeo, settlementGeo, towerGeo, traderGeo, wallGeo } from './geometry.ts'
+import { KNIGHT, TILE, TOKEN, edgeAt, hexAt, vertexAt } from './spec.ts'
 import { wood } from './wood.ts'
 
 const DROP = 0.2 // seconds
@@ -144,15 +144,22 @@ export function Pulse({ x, z, color, size = 16, onDone }: { x: number; z: number
 
 // ---------------------------------------------------------------- every piece on the board, one draw per kind
 
-const KIND_GEO = { road: roadGeo, settlement: settlementGeo, city: cityGeo } as const
+const KIND_GEO = { road: roadGeo, settlement: settlementGeo, city: cityGeo, knight1: knight1Geo, knight2: knight2Geo, knight3: knight3Geo, wall: wallGeo, tower: towerGeo, trader: traderGeo } as const
 type Kind = keyof typeof KIND_GEO
-type Placed = { key: string; kind: Kind; x: number; z: number; yaw: number; color: PlayerColor; mine: boolean }
+const KIND_LIST = Object.keys(KIND_GEO) as Kind[]
+const KIND_CAP: Record<Kind, number> = { road: 64, settlement: 24, city: 24, knight1: 12, knight2: 12, knight3: 12, wall: 12, tower: 3, trader: 1 }
+type Placed = { key: string; kind: Kind; x: number; y?: number; z: number; yaw: number; color: PlayerColor; mine: boolean; lying?: boolean }
+/** the expansion's pieces on the board */
+export type BoardExtras = { knights: Record<number, { owner: number; level: 1 | 2 | 3; active: boolean }>; walls: Record<number, number>; metropolis: Record<string, number | null>; merchant: { hex: number; owner: number } | null }
 const tmpMat = new Matrix4()
 const tmpPos = new Vector3()
 const tmpRot = new Quaternion()
 const ONE = new Vector3(1, 1, 1)
 const ZERO = new Vector3(0, 0, 0)
 const AXIS_Y = new Vector3(0, 1, 0)
+const AXIS_X = new Vector3(0, 0, 1)
+const tmpTip = new Quaternion()
+const stone = new Color('#a9a39a')
 const pieceColors = new Map<string, Color>()
 const pieceColor = (c: PlayerColor) => pieceColors.get(c) ?? pieceColors.set(c, new Color(PLAYER[c].body)).get(c)!
 
@@ -161,8 +168,10 @@ const pieceColor = (c: PlayerColor) => pieceColors.get(c) ?? pieceColors.set(c, 
  * drawn one by one, with their shadows, that was nearly two hundred draws). A new one drops in; one of yours instead
  * appears the moment the piece flying from your supply arrives (`arrive` s).
  */
-export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0 }: { buildings: Record<number, { owner: number; kind: 'settlement' | 'city' }>; roads: Record<number, number>; colors: PlayerColor[]; you?: number; arrive?: number }) {
-  const refs = { road: useRef<InstancedMesh>(null), settlement: useRef<InstancedMesh>(null), city: useRef<InstancedMesh>(null) }
+export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0, extras = null }: { buildings: Record<number, { owner: number; kind: 'settlement' | 'city' }>; roads: Record<number, number>; colors: PlayerColor[]; you?: number; arrive?: number; extras?: BoardExtras | null }) {
+  const refs = useRef<Partial<Record<Kind, InstancedMesh>>>({})
+  /** each knight's standing (1) or lying (0), eased toward what it should be */
+  const stand = useRef(new Map<string, number>())
   const born = useRef(new Map<string, number>())
   const live = useRef(true)
   const redraw = useRedraw()
@@ -176,8 +185,27 @@ export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0 }: 
       const [x, z] = vertexAt(Number(v))
       out.push({ key: `${b.kind[0]}${v}`, kind: b.kind, x, z, yaw: 0, color: colors[b.owner], mine: b.owner === you })
     }
+    if (extras) {
+      for (const [v, k] of Object.entries(extras.knights)) {
+        const [x, z] = vertexAt(Number(v))
+        out.push({ key: `k${v}:${k.level}`, kind: `knight${k.level}`, x, z, yaw: 0.4, color: colors[k.owner], mine: k.owner === you, lying: !k.active })
+      }
+      for (const [v, o] of Object.entries(extras.walls)) {
+        const [x, z] = vertexAt(Number(v))
+        out.push({ key: `w${v}`, kind: 'wall', x, z, yaw: 0, color: colors[o], mine: o === you })
+      }
+      for (const v of Object.values(extras.metropolis)) {
+        if (v === null || !buildings[v]) continue
+        const [x, z] = vertexAt(v)
+        out.push({ key: `t${v}`, kind: 'tower', x: x + 8, z: z - 9, yaw: 0, color: colors[buildings[v].owner], mine: false })
+      }
+      if (extras.merchant) {
+        const [x, z] = hexAt(extras.merchant.hex)
+        out.push({ key: `m${extras.merchant.hex}`, kind: 'trader', x: x + 26, y: 0, z: z + 6, yaw: 0, color: colors[extras.merchant.owner], mine: false })
+      }
+    }
     return out
-  }, [buildings, roads, colors, you])
+  }, [buildings, roads, colors, you, extras])
 
   useLayoutEffect(() => {
     const now = performance.now() / 1000
@@ -190,27 +218,39 @@ export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0 }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placed])
 
-  useFrame(() => {
+  useFrame((_, dt) => {
     if (!live.current) return
     const now = performance.now() / 1000
     let moving = false
-    const n = { road: 0, settlement: 0, city: 0 }
+    const n = Object.fromEntries(KIND_LIST.map((k) => [k, 0])) as Record<Kind, number>
     for (const p of placed) {
-      const m = refs[p.kind].current
+      const m = refs.current[p.kind]
       if (!m) continue
       const t0 = born.current.get(p.key) ?? -1e9
       const mine = p.mine && arrive > 0
       const k = Math.min(1, (now - t0) / DROP)
       if (k < 1) moving = true
       const shown = now >= t0
-      tmpPos.set(p.x, TILE.h + (shown && !mine ? FROM * (1 - Math.max(0, k)) ** 2 : 0), p.z)
+      tmpPos.set(p.x, (p.y ?? TILE.h) + (shown && !mine ? FROM * (1 - Math.max(0, k)) ** 2 : 0), p.z)
       tmpRot.setFromAxisAngle(AXIS_Y, p.yaw)
+      if (p.lying !== undefined) {
+        // a knight stands when ready and lies on its side when resting, and turns between the two in a moment
+        const want = p.lying ? 0 : 1
+        const was = stand.current.get(p.key) ?? want
+        const up = was + Math.sign(want - was) * Math.min(Math.abs(want - was), dt * 5)
+        stand.current.set(p.key, up)
+        if (up !== want) moving = true
+        const tip = (1 - up) * (Math.PI / 2)
+        tmpTip.setFromAxisAngle(AXIS_X, tip)
+        tmpRot.multiply(tmpTip)
+        tmpPos.y += Math.sin(tip) * KNIGHT.r * 0.82
+      }
       const i = n[p.kind]++
       m.setMatrixAt(i, tmpMat.compose(tmpPos, tmpRot, shown ? ONE : ZERO))
-      m.setColorAt(i, pieceColor(p.color))
+      m.setColorAt(i, p.kind === 'wall' ? stone : pieceColor(p.color))
     }
-    for (const kind of ['road', 'settlement', 'city'] as const) {
-      const m = refs[kind].current
+    for (const kind of KIND_LIST) {
+      const m = refs.current[kind]
       if (!m) continue
       m.count = n[kind]
       m.visible = n[kind] > 0
@@ -224,8 +264,16 @@ export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0 }: 
 
   return (
     <>
-      {(['road', 'settlement', 'city'] as const).map((k) => (
-        <instancedMesh key={k} ref={refs[k]} args={[KIND_GEO[k](), wood(), k === 'road' ? 64 : 24]} castShadow receiveShadow />
+      {KIND_LIST.filter((k) => extras || ['road', 'settlement', 'city'].includes(k)).map((k) => (
+        <instancedMesh
+          key={k}
+          ref={(m) => {
+            if (m) refs.current[k] = m
+          }}
+          args={[KIND_GEO[k](), wood(), KIND_CAP[k]]}
+          castShadow
+          receiveShadow
+        />
       ))}
     </>
   )

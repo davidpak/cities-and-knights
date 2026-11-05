@@ -12,7 +12,11 @@ export const CARD = { w: 64, d: 90, t: 0.9, small: 0.6 } // [D] a card lying fla
 export const TRAY = { w: 200, d: 150, rim: 6, h: 7 } // [D] the trade tray: near half is what you give, far half what you get
 export const DICE_TRAY = { w: 92, d: 62 } // [D] (matches spec DICE.tray)
 /** your pieces waiting to be built: a pile of roads, a cluster of houses, a group of cities */
-export const SUPPLY = { road: { w: 52, d: 52 }, settlement: { w: 72, d: 50 }, city: { w: 76, d: 54 } } // [D]
+export const SUPPLY = { road: { w: 52, d: 52 }, settlement: { w: 72, d: 50 }, city: { w: 76, d: 54 }, knight: { w: 44, d: 44 }, wall: { w: 62, d: 40 } } // [D]
+/** the expansion's boards on the table: your three city tracks (five steps each), the barbarians' sea lane */
+export const TRACKS_BOX = { step: 34, row: 34, w: 5 * 34, d: 3 * 34 } // [D] yours; everyone else's are small (SEAT_TRACKS)
+export const SEAT_TRACKS = { step: 9, row: 10, w: 5 * 9, d: 3 * 10 } // [D]
+export const SEA_LANE = { step: 28, steps: 8, d: 30 } // [D] seven steps of sea and the shore
 
 export type Layout = {
   portrait: boolean
@@ -29,6 +33,15 @@ export type Layout = {
   seats: { p: number; at: Spot }[]
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number }
   boxes: Box[]
+  /** the expansion's places (absent in the basic game) */
+  k: {
+    knights: [Spot, Spot, Spot] // your knights waiting, by strength
+    wall: Spot
+    points: Spot // your defender and point cards
+    tracks: Spot // the middle of your three tracks
+    lane: Spot // the middle of the barbarians' lane
+    decks: Record<'trade' | 'politics' | 'science', Spot>
+  } | null
 }
 
 /** an opponent's area: their hand (face down), their development cards (face down), knights played, awards.
@@ -50,7 +63,7 @@ export const seatParts = (at: Spot, portrait = false) => {
 /** the height kept clear at the top for the two lines (whose turn, what just happened) */
 const LINES = 70
 
-export function layoutFor(players: number, you: number, aspect: number): Layout {
+export function layoutFor(players: number, you: number, aspect: number, knights = false): Layout {
   const portrait = aspect < 0.95
   const others = Array.from({ length: players }, (_, i) => i).filter((i) => i !== you)
   const spread = (n: number, w: number) => (n === 1 ? [0] : Array.from({ length: n }, (_, i) => -w + (2 * w * i) / (n - 1)))
@@ -74,7 +87,31 @@ export function layoutFor(players: number, you: number, aspect: number): Layout 
       dice: [526, 140],
       seats: others.map((p, i) => ({ p, at: [xs[i], -395] as Spot })),
       bounds: { minX: -645, maxX: 645, minZ: -515, maxZ: 450 },
+      k: null,
     }
+    if (knights)
+      // the expansion: eight kinds of card in your hand and the bank, progress cards where development cards were,
+      // your knights and walls under your pieces, your three tracks by the dice, the barbarians' lane above the bank
+      L = {
+        ...L,
+        hand: Array.from({ length: 8 }, (_, i): Spot => [-430 + i * 72, 392]),
+        dev: (i) => [150 + i * 68, 392],
+        meLabel: [-178, 322],
+        wants: (i) => (i < 5 ? [-520 + (i - 2) * 42, -178] : [-520 + (i - 6) * 42, -118]),
+        supply: { road: [-610, 190], settlement: [-532, 190], city: [-445, 190] },
+        awardsMine: [-600, 345],
+        bank: Array.from({ length: 8 }, (_, i): Spot => [452 + (i % 3) * 74, -200 + Math.floor(i / 3) * 100]),
+        deck: [600, 0],
+        dice: [526, 205],
+        k: {
+          knights: [[-612, 262], [-562, 262], [-512, 262]],
+          wall: [-440, 262],
+          points: [-528, 345],
+          tracks: [545, 316],
+          lane: [528, -285],
+          decks: { trade: [600, 0], politics: [452, 100], science: [526, 100] },
+        },
+      }
   } else {
     // stacked: everyone else, the bank and dice, the board, the tray, your hand, then your development cards
     // and pieces
@@ -93,7 +130,27 @@ export function layoutFor(players: number, you: number, aspect: number): Layout 
       dice: [200, -440],
       seats: others.map((p, i) => ({ p, at: [xs[i], -560] as Spot })),
       bounds: { minX: -362, maxX: 362, minZ: -665, maxZ: 852 },
+      k: null,
     }
+    if (knights)
+      L = {
+        ...L,
+        hand: Array.from({ length: 8 }, (_, i): Spot => [-266 + i * 76, 620]),
+        bank: Array.from({ length: 8 }, (_, i): Spot => [-300 + i * 72, -440]),
+        deck: [-330, 450],
+        dice: [300, -440],
+        wants: (i) => (i < 5 ? [(i - 2) * 42, 450 - TRAY.d / 2 - 32] : [(i - 6) * 42 + 260, 450 - TRAY.d / 2 - 32]),
+        awardsMine: [40, 830],
+        bounds: { minX: -362, maxX: 362, minZ: -665, maxZ: 960 },
+        k: {
+          knights: [[-330, 815], [-280, 815], [-230, 815]],
+          wall: [-160, 815],
+          points: [115, 830],
+          tracks: [272, 826],
+          lane: [0, -355],
+          decks: { trade: [-330, 450], politics: [-262, 450], science: [-194, 450] },
+        },
+      }
   }
 
   const c = (what: string, [x, z]: Spot, w = CARD.w, d = CARD.d): Box => ({ what, x, z, w, d })
@@ -104,11 +161,21 @@ export function layoutFor(players: number, you: number, aspect: number): Layout 
     c('settlements', L.supply.settlement, SUPPLY.settlement.w, SUPPLY.settlement.d),
     c('cities', L.supply.city, SUPPLY.city.w, SUPPLY.city.d),
     c('tray', L.tray, TRAY.w, TRAY.d),
-    ...[0, 1, 2, 3, 4].map((i) => c(`want ${i}`, L.wants(i), CARD.w * CARD.small, CARD.d * CARD.small)),
+    ...L.hand.map((_, i) => c(`want ${i}`, L.wants(i), CARD.w * CARD.small, CARD.d * CARD.small)),
     ...L.bank.map((s, i) => c(`bank ${i}`, s)),
-    c('deck', L.deck),
+    ...(L.k ? [] : [c('deck', L.deck)]),
     c('dice', L.dice, DICE_TRAY.w, DICE_TRAY.d),
     c('my awards', L.awardsMine),
+    ...(L.k
+      ? [
+          ...L.k.knights.map((s, i) => c(`knights ${i + 1}`, s, SUPPLY.knight.w, SUPPLY.knight.d)),
+          c('walls', L.k.wall, SUPPLY.wall.w, SUPPLY.wall.d),
+          c('my points', L.k.points),
+          c('my tracks', L.k.tracks, TRACKS_BOX.w, TRACKS_BOX.d),
+          c('barbarian lane', L.k.lane, SEA_LANE.step * SEA_LANE.steps, SEA_LANE.d),
+          ...Object.entries(L.k.decks).map(([t, s]) => c(`${t} deck`, s)),
+        ]
+      : []),
     ...L.seats.flatMap(({ p, at }) => {
       const s = seatParts(at, portrait)
       const k = s.small ? CARD.small : 1
@@ -137,9 +204,10 @@ export function layoutFor(players: number, you: number, aspect: number): Layout 
 export function checkLayouts(frameR: number): { what: string; ok: boolean; value: string }[] {
   const out: { what: string; ok: boolean; value: string }[] = []
   const inFrame = (x: number, z: number) => Math.abs(z) <= (Math.sqrt(3) / 2) * frameR && Math.sqrt(3) * Math.abs(x) + Math.abs(z) <= Math.sqrt(3) * frameR
+  for (const knights of [false, true])
   for (const portrait of [false, true]) {
     for (const n of [2, 3, 4]) {
-      const L = layoutFor(n, 0, portrait ? 0.6 : 1.6)
+      const L = layoutFor(n, 0, portrait ? 0.6 : 1.6, knights)
       const hits: string[] = []
       L.boxes.forEach((a, i) =>
         L.boxes.forEach((b, j) => {
@@ -153,7 +221,7 @@ export function checkLayouts(frameR: number): { what: string; ok: boolean; value
         const { minX, maxX, minZ, maxZ } = L.bounds
         if (a.x - a.w / 2 < minX || a.x + a.w / 2 > maxX || a.z - a.d / 2 < minZ || a.z + a.d / 2 > maxZ) hits.push(`${a.what} outside the view`)
       }
-      out.push({ what: `${portrait ? 'tall' : 'wide'} table, ${n} players: nothing overlaps`, ok: hits.length === 0, value: hits.length ? hits.slice(0, 4).join('; ') : `${L.boxes.length} things placed` })
+      out.push({ what: `${knights ? 'knights, ' : ''}${portrait ? 'tall' : 'wide'} table, ${n} players: nothing overlaps`, ok: hits.length === 0, value: hits.length ? hits.slice(0, 4).join('; ') : `${L.boxes.length} things placed` })
     }
   }
   return out

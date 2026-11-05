@@ -83,6 +83,7 @@ export const room = {
   rename: (name: string) => socket?.emit('room:rename', name),
   ready: () => socket?.emit('room:ready'),
   addBot: () => socket?.emit('room:addBot'),
+  knights: (on: boolean) => socket?.emit('room:knights', on),
   removeSeat: (id: string) => socket?.emit('room:removeSeat', id),
   start: () => call('room:start'),
 }
@@ -98,6 +99,12 @@ export async function act(a: Action): Promise<boolean> {
 // ---------------------------------------------------------------- solo: you against bots, all in the browser
 
 let solo: GameState | null = null
+const AUTO = typeof location !== 'undefined' && /[?&]auto/.test(location.search) && /[?&]test/.test(location.search)
+/** ?test&auto=N: stop playing your seat at turn N */
+const autoStop = () => {
+  const n = Number(new URLSearchParams(location.search).get('auto'))
+  return n > 0 && (solo?.turn ?? 0) >= n
+}
 let soloTimer: ReturnType<typeof setTimeout> | undefined
 
 function soloPublish() {
@@ -107,14 +114,31 @@ function soloPublish() {
   clearTimeout(soloTimer)
   if (solo.phase.kind === 'over') return
   const g = solo
-  const next = g.players.map((_, i) => i).find((i) => i !== you && botAction(viewFor(g, i), i, Math.random) !== null)
+  // (?test&auto: a bot plays your seat too, for looking at a game in progress)
+  const auto = AUTO && !autoStop()
+  const next = g.players.map((_, i) => i).find((i) => (auto || i !== you) && botAction(viewFor(g, i), i, Math.random) !== null)
   if (next === undefined) return
   soloTimer = setTimeout(() => {
     if (!solo) return
     const a = botAction(viewFor(solo, next), next, Math.random)
     if (a) soloAct(next, a, true)
-  }, solo.phase.kind === 'setup' ? 450 : 700)
+  }, AUTO ? 40 : solo.phase.kind === 'setup' ? 450 : 700)
 }
+
+// (?test: a browser test may hand your seat some cards from the bank, to try things that cost them)
+if (typeof window !== 'undefined' && /[?&]test/.test(location.search))
+  (window as unknown as { __grant: (h: Partial<Record<string, number>>) => void }).__grant = (h) => {
+    if (!solo) return
+    const you = solo.players.findIndex((p) => p.id === 'you')
+    const g = structuredClone(solo)
+    for (const [k, n] of Object.entries(h)) {
+      const take = Math.min(n ?? 0, g.bank[k as keyof typeof g.bank])
+      g.bank[k as keyof typeof g.bank] -= take
+      g.players[you].hand[k as keyof typeof g.bank] += take
+    }
+    solo = g
+    soloPublish()
+  }
 
 function soloAct(p: number, a: Action, bot = false): boolean {
   if (!solo) return false
@@ -129,13 +153,13 @@ function soloAct(p: number, a: Action, bot = false): boolean {
   return true
 }
 
-export function startSolo(name: string, bots: number) {
+export function startSolo(name: string, bots: number, knights = true) {
   const names = ['Bramble', 'Pip', 'Juniper']
   const seats = [{ id: 'you', name: name || 'You' }, ...names.slice(0, bots).map((n, i) => ({ id: `bot${i}`, name: n }))]
-  solo = newGame(seats, (Math.random() * 2 ** 31) | 0)
+  solo = newGame(seats, (Math.random() * 2 ** 31) | 0, { knights })
   set({
     solo: true,
-    room: { code: 'SOLO', host: 'you', started: true, seats: seats.map((s) => ({ ...s, ready: true, bot: s.id !== 'you', connected: true })) },
+    room: { code: 'SOLO', host: 'you', started: true, knights, seats: seats.map((s) => ({ ...s, ready: true, bot: s.id !== 'you', connected: true })) },
   })
   soloPublish()
 }

@@ -40,8 +40,8 @@ export function cardMaterial() {
           float tile = aSide < 0.5 ? aTiles.x : (aSide < 1.5 ? aTiles.y : ${EDGE_TILE.toFixed(1)});
           vec2 cell = vec2(mod(tile, ${ATLAS.cols.toFixed(1)}), floor(tile / ${ATLAS.cols.toFixed(1)}));
           vec2 u = aSide > 1.5 ? vec2(0.5) : mix(vec2(0.006), vec2(0.994), uv);
-          // the bottom face is seen from below: mirror it so a turned-over card reads the right way round
-          if (aSide > 0.5 && aSide < 1.5) u.x = 1.0 - u.x;
+          // the bottom face, seen when the card lies face down: printed so it reads the right way up
+          if (aSide > 0.5 && aSide < 1.5) u = vec2(1.0) - u;
           vMapUv = vec2((cell.x + u.x) / ${ATLAS.cols.toFixed(1)}, 1.0 - (cell.y + 1.0 - u.y) / ${ATLAS.rows.toFixed(1)});
         }`,
       )

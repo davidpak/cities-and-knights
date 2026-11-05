@@ -10,12 +10,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { Color, InstancedMesh, Matrix4, Plane, Quaternion, Raycaster, Sphere, Vector2, Vector3, type BufferGeometry } from 'three'
 import type { PlayerColor } from '../../../../shared/rules.ts'
 import { PAL, PLAYER } from '../../lib/palette.ts'
-import { CITY_OUTLINE, ROBBER_PROFILE, SETTLEMENT_OUTLINE, cityGeo, roadGeo, robberGeo, settlementGeo } from '../geometry.ts'
+import { CITY_OUTLINE, KNIGHT_PROFILE, ROBBER_PROFILE, SETTLEMENT_OUTLINE, cityGeo, knight1Geo, knight2Geo, knight3Geo, roadGeo, robberGeo, settlementGeo, wallGeo } from '../geometry.ts'
 import { useRapier } from '../physics.ts'
-import { CITY, ROAD, SETTLEMENT } from '../spec.ts'
+import { CITY, ROAD, SETTLEMENT, WALL } from '../spec.ts'
 import { wood } from '../wood.ts'
 import { cardGeometry, cardMaterial, cardTiles } from './cardMesh.ts'
-import { BACK_TILE, TILE } from './faces.ts'
+import { TILE, backOf } from './faces.ts'
 import { CARD } from './layout.ts'
 import { Table, type PileSpec, type Pose, type Shapes, type StaticPart, type Thing, type ThingKind } from './things.ts'
 
@@ -52,19 +52,27 @@ const SHAPES: Shapes = {
     })(),
     // the bar lies along x, its width across z
     road: [box(ROAD.len, ROAD.h, ROAD.w)],
-    robber: [
-      new Float32Array(
-        ROBBER_PROFILE().flatMap(([r, y]) => Array.from({ length: 10 }, (_, i) => [r * Math.cos((i / 10) * Math.PI * 2), y, r * Math.sin((i / 10) * Math.PI * 2)]).flat()),
-      ),
-    ],
+    robber: [turned(ROBBER_PROFILE())],
+    knight1: [turned(KNIGHT_PROFILE(1))],
+    knight2: [turned(KNIGHT_PROFILE(2))],
+    knight3: [turned(KNIGHT_PROFILE(3))],
+    // a ring isn't convex: its four sides
+    wall: (() => {
+      const { w, d, rim, h } = WALL
+      return [box(w, h, rim, 0).map((v, i) => (i % 3 === 2 ? v - (d - rim) / 2 : v)), box(w, h, rim, 0).map((v, i) => (i % 3 === 2 ? v + (d - rim) / 2 : v)), box(rim, h, d - 2 * rim, -(w - rim) / 2), box(rim, h, d - 2 * rim, (w - rim) / 2)].map((a) => new Float32Array(a))
+    })(),
   },
+}
+/** a turned profile as a hull: its points round the axis */
+function turned(profile: [number, number][]) {
+  return new Float32Array(profile.flatMap(([r, y]) => Array.from({ length: 10 }, (_, i) => [r * Math.cos((i / 10) * Math.PI * 2), y, r * Math.sin((i / 10) * Math.PI * 2)]).flat()))
 }
 
 // ---------------------------------------------------------------- drawing
 
-const CAP: Record<ThingKind, number> = { card: 512, road: 128, settlement: 48, city: 40, robber: 2 }
-const GEO: Record<Exclude<ThingKind, 'card'>, () => BufferGeometry> = { road: roadGeo, settlement: settlementGeo, city: cityGeo, robber: robberGeo }
-const KINDS: ThingKind[] = ['card', 'road', 'settlement', 'city', 'robber']
+const CAP: Record<ThingKind, number> = { card: 512, road: 128, settlement: 48, city: 40, robber: 2, knight1: 24, knight2: 24, knight3: 24, wall: 16 }
+const GEO: Record<Exclude<ThingKind, 'card'>, () => BufferGeometry> = { road: roadGeo, settlement: settlementGeo, city: cityGeo, robber: robberGeo, knight1: knight1Geo, knight2: knight2Geo, knight3: knight3Geo, wall: wallGeo }
+const KINDS: ThingKind[] = ['card', 'road', 'settlement', 'city', 'robber', 'knight1', 'knight2', 'knight3', 'wall']
 const tmpM = new Matrix4()
 const tmpS = new Vector3()
 const tmpPose: Pose = { p: new Vector3(), q: new Quaternion() }
@@ -83,7 +91,7 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
   const R = useRapier()
   const { camera, gl, invalidate, size } = useThree()
   const meshes = useRef<Partial<Record<ThingKind, InstancedMesh>>>({})
-  const lists = useRef<Record<ThingKind, Thing[]>>({ card: [], road: [], settlement: [], city: [], robber: [] })
+  const lists = useRef<Record<ThingKind, Thing[]>>({ card: [], road: [], settlement: [], city: [], robber: [], knight1: [], knight2: [], knight3: [], wall: [] })
   const tiles = useMemo(() => cardTiles(CAP.card), [])
   const cardGeo = useMemo(() => {
     const g = cardGeometry()
@@ -154,7 +162,7 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
           const s = t.small ? CARD.small : 1
           tmpS.set(CARD.w * s, CARD.t, CARD.d * s)
           const a = TILE[t.look] ?? 5
-          const b = BACK_TILE[t.family] ?? 5
+          const b = backOf(t.family, t.look)
           if (tiles.getX(i) !== a || tiles.getY(i) !== b) {
             tiles.setXY(i, a, b)
             tilesChanged = true
@@ -294,7 +302,7 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
         frustumCulled={false}
         {...handlers('card')}
       />
-      {(['road', 'settlement', 'city'] as const).map((k) => (
+      {(['road', 'settlement', 'city', 'knight1', 'knight2', 'knight3', 'wall'] as const).map((k) => (
         <instancedMesh
           key={k}
           ref={(m) => {

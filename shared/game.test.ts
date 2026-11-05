@@ -169,7 +169,7 @@ test('a 7 makes big hands discard half, then the robber moves and steals', () =>
       break
     }
   }
-  s.players[1].hand = { lumber: 3, brick: 3, wool: 3, grain: 0, ore: 0 }
+  s.players[1].hand = { ...emptyHand(), lumber: 3, brick: 3, wool: 3 }
   s.bank = { ...s.bank }
   // keep the totals honest for the invariants
   const fix = () => {

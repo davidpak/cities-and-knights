@@ -24,10 +24,10 @@ expansion, with our own names and wording throughout:
 On the table: your knights and walls wait beside your pieces. Your three tracks are desk **flip charts** just above
 your hand: each page shows the level reached, the building it has grown to, and what the next step costs; click a
 chart to take its next step and the page goes over the top (everyone else's stand small beside their cards; on a
-phone yours make way for the trade tray while it's out). The barbarians' **raid** is eight big hexes zig-zagging down
-beside the board's upper-left side: out of the fog, six numbered sea hexes, then the landing, a beach with a little
-town painted with their strength against the knights standing ready. Their longship sails a hex on at each ship on
-the event die, and the hexes it has crossed go dark, so how close they are reads at a glance. Click a
+phone yours make way for the trade tray while it's out). The barbarians' **voyage** is a little sea board in a maple frame along the board's upper-left side: eight big hexes
+lie on it zig-zagging from the fog out at sea through seven numbered ones to an island with a town. Their longship
+sails a hex on at each ship on the event die, and the hexes it has crossed go dark, so how close they are reads at a
+glance; a signpost on a rock beside the last hex is painted with their strength against the knights standing ready. Click a
 knight on the board to ready it, click a ready one to pick it up and then where it goes. Click a progress card to play
 it; if it needs a target, the line at the top says what to click.
 

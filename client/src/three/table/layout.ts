@@ -6,7 +6,7 @@
  * Every object's footprint is listed in `boxes`, so a check can prove nothing overlaps.
  */
 export type Spot = [number, number]
-export type Box = { what: string; x: number; z: number; w: number; d: number; hex?: number }
+export type Box = { what: string; x: number; z: number; w: number; d: number; poly?: Spot[] }
 
 export const CARD = { w: 64, d: 90, t: 0.9, small: 0.6 } // [D] a card lying flat; small ones (on the tray, and everyone else's on a tall screen) are 60%
 /** your hand's stacks lie side by side, nearly touching */
@@ -23,20 +23,35 @@ export const SEAT_TRACKS = { scale: 0.36, mine: 1.2 } // [D] everyone else's: th
 export const FRAME_R = 344
 
 /**
- * The barbarians' raid: big flat-topped hexes, one per step, zig-zagging down beside the board's upper-left side
- * (straight down, down-left, straight down... which runs parallel to that side), from the open sea at the top to the
- * landing beside the board. Hex i of 8: its centre.
+ * The barbarians' voyage: a sea board in a frame, lying along the board's upper-left side, and on it big
+ * flat-topped hexes, one per step, zig-zagging from the open sea at its top end to the island at its bottom end,
+ * beside the board. `hexes` and `island` are in the sea board's own frame (x along it, toward the island; z across
+ * it, away from the board); `yaw` turns that frame onto the table.
  */
-export function raidPath(r: number, s0: number, gap = 10): Spot[] {
+export type Raid = { r: number; x: number; z: number; len: number; wid: number; yaw: number; hexes: Spot[]; island: Spot; corners: Spot[] }
+export function raidBoard(r: number, s: number, gap = 10): Raid {
   const h = (Math.sqrt(3) / 2) * r
+  const m = 7 // the sea's margin inside the frame
+  const isle = 0.95 * r // the island's radius
+  const len = 2 * m + 2 * r + 10.5 * r + 4 + 2 * isle
+  const wid = 2 * m + 3 * h
   const P0: Spot = [-FRAME_R / 2, -(Math.sqrt(3) / 2) * FRAME_R] // the frame's top-left corner
   const u: Spot = [-0.5, Math.sqrt(3) / 2] // along the side, toward its left corner
   const n: Spot = [-Math.sqrt(3) / 2, -0.5] // away from the board
-  return Array.from({ length: 8 }, (_, i) => {
-    const s = s0 + 1.5 * r * i
-    const off = gap + h + (i % 2 === 0 ? h : 0)
-    return [P0[0] + s * u[0] + off * n[0], P0[1] + s * u[1] + off * n[1]] as Spot
-  })
+  const off = gap + wid / 2
+  const x = P0[0] + s * u[0] + off * n[0]
+  const z = P0[1] + s * u[1] + off * n[1]
+  const hexes = Array.from({ length: 8 }, (_, i): Spot => [-len / 2 + m + r + 1.5 * r * i, (i % 2 === 0 ? 1 : -1) * (h / 2)])
+  const world = ([a, b]: Spot): Spot => [x + a * u[0] + b * n[0], z + a * u[1] + b * n[1]]
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => world([(a * len) / 2, (b * wid) / 2]))
+  // (the frame maps the board's x onto u and z onto n: a turn of -120 degrees)
+  return { r, x, z, len, wid, yaw: (-2 * Math.PI) / 3, hexes, island: [len / 2 - m - isle, 0], corners }
+}
+/** a point of the sea board's own frame, on the table */
+export function raidToTable(R: Raid, [a, b]: Spot): Spot {
+  const c = Math.cos(R.yaw)
+  const sn = Math.sin(R.yaw)
+  return [R.x + a * c + b * sn, R.z - a * sn + b * c]
 }
 
 /**
@@ -107,7 +122,7 @@ export type Layout = {
     points: Spot // your defender and point cards
     tracks: Spot // the middle of your three flip charts (put away while the tray is out, if `tracksYield`)
     tracksYield: boolean
-    raid: { r: number; at: Spot[] } // the barbarians' hexes
+    raid: Raid // the barbarians' voyage
     decks: Record<'trade' | 'politics' | 'science', Spot>
   } | null
 }
@@ -132,8 +147,9 @@ export const seatParts = (at: Spot, portrait = false) => {
 const LINES = 70
 /** (on a phone the lines keep a readable size however small the table is drawn, so they take more of it) */
 const LINES_TALL = 120
-/** where along the board's side the raid starts (mm before the frame's top-left corner, negative: above it) */
-const RAID_S0 = { wide: 90, tall: -215 }
+/** the voyage's hexes, and where along the board's side its middle lies (mm from the frame's top-left corner) */
+const RAID_R = { wide: 32, tall: 33 }
+const RAID_S = { wide: 266, tall: -66 }
 
 export function layoutFor(players: number, you: number, aspect: number, knights = false): Layout {
   const portrait = aspect < 0.95
@@ -168,14 +184,14 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       // the expansion: eight kinds of card; along the bottom your hand, then your progress cards, points and awards;
       // above the hand (on the left, beside the board) your three flip charts; on the left your pieces and the
       // barbarians' raid zig-zagging down beside the board; on the right the progress decks, the bank, the tray, the dice
-      const xs3 = spread(others.length, others.length === 3 ? 360 : 300)
+      const xs3 = spread(others.length, 360)
       L = {
         ...L,
         seats: others.map((p, i) => ({ p, at: [xs3[i], -395] as Spot })),
         hand: Array.from({ length: 8 }, (_, i): Spot => [-600 + i * HAND_STEP, 392]),
         dev: (i, held = 8) => [-600 + held * HAND_STEP + 22 + i * HAND_STEP, 392],
         meLabel: [-560, 312],
-        supply: { road: [-614, 160], settlement: [-540, 160], city: [-455, 160] },
+        supply: { road: [-614, 171], settlement: [-540, 171], city: [-455, 171] },
         awardsMine: [412, 392],
         tray: [540, 30],
         marks: 'left',
@@ -190,7 +206,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
           points: [342, 392],
           tracks: [-370, 295],
           tracksYield: false,
-          raid: { r: 36, at: raidPath(36, RAID_S0.wide) },
+          raid: raidBoard(RAID_R.wide, RAID_S.wide),
           decks: { trade: [535, -420], politics: [578, -420], science: [621, -420] },
         },
       }
@@ -245,7 +261,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
           points: [-60, 756],
           tracks: [0, 462],
           tracksYield: true,
-          raid: { r: 40, at: raidPath(40, RAID_S0.tall) },
+          raid: raidBoard(RAID_R.tall, RAID_S.tall),
           decks: { trade: [150, -575], politics: [195, -575], science: [240, -575] },
         },
       }
@@ -277,7 +293,13 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
           c('walls', L.k.wall, SUPPLY.wall.w, SUPPLY.wall.d),
           c('my points', L.k.points),
           ...(L.k.tracksYield ? [] : [c('my tracks', L.k.tracks, TRACKS_BOX.w, TRACKS_BOX.d)]),
-          ...L.k.raid.at.map(([x, z], i): Box => ({ what: `raid ${i}`, x, z, w: 2 * L.k!.raid.r, d: Math.sqrt(3) * L.k!.raid.r, hex: L.k!.raid.r })),
+          (() => {
+            const cs = L.k!.raid.corners
+            const xs = cs.map((p) => p[0])
+            const zs = cs.map((p) => p[1])
+            const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs)
+            return { what: 'barbarian voyage', x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, poly: cs }
+          })(),
           ...Object.entries(L.k.decks).map(([t, s]) => c(`${t} deck`, s, CARD.w * CARD.small, CARD.d * CARD.small)),
         ]
       : []),
@@ -307,6 +329,34 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
   return { ...L, boxes }
 }
 
+const boxPoly = (b: Box): Spot[] => [[b.x - b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z - b.d / 2], [b.x + b.w / 2, b.z + b.d / 2], [b.x - b.w / 2, b.z + b.d / 2]]
+/** points along a polygon's edges, every few mm */
+function edgePoints(p: Spot[]): Spot[] {
+  const out: Spot[] = []
+  p.forEach((a, i) => {
+    const b = p[(i + 1) % p.length]
+    const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 6)
+    for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n])
+  })
+  return out
+}
+/** two convex polygons overlap (or come within 2 mm): separating axes */
+function polyHits(a: Spot[], b: Spot[]) {
+  for (const poly of [a, b])
+    for (let i = 0; i < poly.length; i++) {
+      const [x0, z0] = poly[i]
+      const [x1, z1] = poly[(i + 1) % poly.length]
+      const nx = z1 - z0
+      const nz = -(x1 - x0)
+      const l = Math.hypot(nx, nz)
+      const proj = (q: Spot[]) => q.map(([x, z]) => (x * nx + z * nz) / l)
+      const pa = proj(a)
+      const pb = proj(b)
+      if (Math.max(...pa) + 2 < Math.min(...pb) || Math.max(...pb) + 2 < Math.min(...pa)) return false
+    }
+  return true
+}
+
 /** checks every layout (2 to 4 players, wide and tall): nothing overlaps anything else or the board's frame */
 export function checkLayouts(frameR: number): { what: string; ok: boolean; value: string }[] {
   const out: { what: string; ok: boolean; value: string }[] = [{ what: 'the layout knows the frame', ok: frameR === FRAME_R, value: `${frameR}` }]
@@ -320,20 +370,22 @@ export function checkLayouts(frameR: number): { what: string; ok: boolean; value
         L.boxes.forEach((b, j) => {
           if (j <= i) return
           // the raid's hexes touch each other; the charts that make way for the tray, the tray and its cards
-          if (a.what.startsWith('raid') && b.what.startsWith('raid')) return
           const yields = (x: Box) => x.what.includes('[yields]')
           const trayish = (x: Box) => x.what === 'tray' || x.what.startsWith('want') || x.what.startsWith('[tray')
           if ((yields(a) && trayish(b)) || (yields(b) && trayish(a))) return
+          if (a.poly || b.poly) {
+            if (polyHits(a.poly ?? boxPoly(a), b.poly ?? boxPoly(b))) hits.push(`${a.what} / ${b.what}`)
+            return
+          }
           if (Math.abs(a.x - b.x) * 2 < a.w + b.w + 4 && Math.abs(a.z - b.z) * 2 < a.d + b.d + 4) hits.push(`${a.what} / ${b.what}`)
         }),
       )
       for (const a of L.boxes) {
-        const pts = a.hex
-          ? [[a.x, a.z], ...Array.from({ length: 6 }, (_, k) => [a.x + a.hex! * Math.cos((k * Math.PI) / 3), a.z + a.hex! * Math.sin((k * Math.PI) / 3)])]
-          : [-1, 0, 1].flatMap((sx) => [-1, 0, 1].map((sz) => [a.x + (sx * a.w) / 2, a.z + (sz * a.d) / 2]))
+        const pts = a.poly ? edgePoints(a.poly) : [-1, 0, 1].flatMap((sx) => [-1, 0, 1].map((sz) => [a.x + (sx * a.w) / 2, a.z + (sz * a.d) / 2]))
         if (pts.some(([x, z]) => inFrame(x, z))) hits.push(`${a.what} / board`)
         const { minX, maxX, minZ, maxZ } = L.bounds
-        if (a.x - a.w / 2 < minX || a.x + a.w / 2 > maxX || a.z - a.d / 2 < minZ || a.z + a.d / 2 > maxZ) hits.push(`${a.what} outside the view`)
+        if (a.poly && a.poly.some(([x, z]) => x < minX || x > maxX || z < minZ || z > maxZ)) hits.push(`${a.what} outside the view`)
+        else if (!a.poly && (a.x - a.w / 2 < minX || a.x + a.w / 2 > maxX || a.z - a.d / 2 < minZ || a.z + a.d / 2 > maxZ)) hits.push(`${a.what} outside the view`)
       }
       out.push({ what: `${knights ? 'knights, ' : ''}${portrait ? 'tall' : 'wide'} table, ${n} players: nothing overlaps`, ok: hits.length === 0, value: hits.length ? hits.slice(0, 4).join('; ') : `${L.boxes.length} things placed` })
     }

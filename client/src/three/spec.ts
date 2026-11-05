@@ -43,8 +43,8 @@ export const DIORAMA = {
 
 export const TOKEN = { r: 21, h: 4.5, bevel: 1.4 } // [D] seen straight down, big enough to read at a glance
 
-export const SETTLEMENT = { w: 17, d: 17, wall: 10, peak: 18, round: 1.3 } // [D] seen from above: a square with a roof ridge
-export const CITY = { w: 30, d: 19, wall: 11, peak: 17, towerW: 13, tower: 22, towerPeak: 28, round: 1.3 } // [D] wider and deeper: tells apart from above
+export const SETTLEMENT = { w: 17, d: 17, wall: 10, peak: 18, round: 1.3 } // [D] a house: walls, an overhanging gable roof, a chimney, a door
+export const CITY = { w: 30, d: 19, wall: 11, peak: 17, towerW: 12, tower: 21, towerPeak: 24, round: 1.3 } // [D] a hall with its roof, and a crenellated tower
 export const ROAD = { len: 32, w: 8, h: 6, round: 1.8 } // [D]
 export const ROBBER = { r: 11, h: 30 } // [D]
 

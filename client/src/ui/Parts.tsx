@@ -7,7 +7,10 @@ import { useMemo } from 'react'
 import { TOPO } from '../../../shared/board.ts'
 import { botAction } from '../../../shared/bot.ts'
 import { apply, newGame, type GameState } from '../../../shared/engine.ts'
-import { BoardView } from '../three/Board.tsx'
+import { Canvas } from '@react-three/fiber'
+import { PLAYER_COLORS } from '../../../shared/rules.ts'
+import { BoardView, Fit, Lights, canvasProps } from '../three/Board.tsx'
+import { City, Road, Robber, Settlement } from '../three/Pieces.tsx'
 import { checkBoard } from '../three/spec.ts'
 
 const q = new URLSearchParams(location.search)
@@ -37,6 +40,27 @@ function Board({ s }: { s: GameState }) {
 
 export default function Parts({ part }: { part: string }) {
   const s = useMemo(() => sample(Number(q.get('seed') ?? 4), Number(q.get('turns') ?? 14)), [])
+  if (part === 'pieces')
+    return (
+      <div style={{ position: 'fixed', inset: 0 }}>
+        <Canvas {...canvasProps()}>
+          <Lights extent={140} />
+          <Fit bounds={{ minX: -95, maxX: 95, minZ: -42, maxZ: 42 }} tilt={0.75} />
+          <mesh position={[0, 10, 0]} receiveShadow>
+            <boxGeometry args={[400, 4, 200]} />
+            <meshLambertMaterial color="#5a3d29" />
+          </mesh>
+          {PLAYER_COLORS.map((c, i) => (
+            <group key={c} position={[(i - 1.5) * 44, 0, 0]}>
+              <Settlement color={c} x={-8} z={-18} />
+              <City color={c} x={4} z={10} />
+              <Road color={c} x={-4} z={32} angle={0} />
+            </group>
+          ))}
+          <Robber x={86} z={0} />
+        </Canvas>
+      </div>
+    )
   if (part === 'board')
     return (
       <div style={{ position: 'fixed', inset: 0 }}>

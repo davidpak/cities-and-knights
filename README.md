@@ -12,13 +12,17 @@ in their tray. Everyone else's cards lie face down at their places. To do someth
 
 - **Build:** click a piece in your supply (the ones you can afford stand on a little mat), then click a white spot.
 - **Buy a development card:** click the deck. **Play one:** click it.
-- **Trade:** click cards in your hand and they go onto the near half of the trade tray. Click what you want, either
-  the cards behind the tray or the bank's stacks, and it goes on the far half. Then "Trade with the bank", or "Offer"
-  a player (or tap their cards first). They see the tray on their side and answer Accept or No thanks.
+- **Trade:** click cards in your hand to put them on the trade tray, and the cards behind the tray for what you want.
+  To trade with the bank, click the bank's card you want. To trade with a player, click their cards. The green
+  check puts it to everyone; the red cross puts it back. An offer to you shows on your own tray: check or cross.
 - **Roll:** click the dice. **Rob:** click a tile, then the cards of the player to steal from.
 
-On screen there's only one line saying what to do, one saying what just happened, the turn button, a few buttons by
-the tray, counts on the stacks, everyone's name and points, and a History panel you can open.
+On screen there's only whose turn it is, what just happened, the turn button, the tray's check and cross, counts on
+the stacks, everyone's name and points, and a History panel you can open.
+
+Every card is a real thin card lying in a loose stack, and the pieces are modelled like toys (a house with an
+overhanging roof, a chimney and a door; a hall with a crenellated tower). All the cards that look alike draw as one
+batch, and so do your waiting pieces, so a full table costs about the same as an empty one.
 
 **Fast on any computer:** the board draws only when something moves (nothing at all while you think), the whole
 island is two draw calls, shadows are recomputed only when a piece moves, and the home screen loads without three.js.

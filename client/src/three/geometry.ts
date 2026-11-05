@@ -3,8 +3,9 @@
  * and turned once (the playbook's rule); turned things are lathed. Nothing is a plane laid over another surface.
  */
 import {
-  BoxGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2, Vector3,
+  BoxGeometry, BufferGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2, Vector3,
 } from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { roundedPolygon, roundedRect } from '../lib/shapes.ts'
 import { CITY, DICE, HARBOR, ROAD, ROBBER, SEA, SETTLEMENT, TILE, TOKEN } from './spec.ts'
 
@@ -68,29 +69,76 @@ function upright(points: [number, number][], depth: number, round: number) {
   return g
 }
 
+// ---------------------------------------------------------------- the pieces, built from parts like real toy pieces
+// Each piece is a few beveled parts merged into one shape with two looks: its colour (0) and its darker trim (1).
+
+type Part = { g: BufferGeometry; m: 0 | 1 }
+
+/** a beveled block standing on its base: w across, d deep, h tall, its base centred at (x, y, z) */
+function block(w: number, d: number, h: number, bevel: number, x = 0, y = 0, z = 0) {
+  const b = Math.min(bevel, w / 2 - 0.05, d / 2 - 0.05, h / 2 - 0.05)
+  return slab((s) => roundedRect(w - 2 * b, d - 2 * b, Math.min(b * 1.5, (w - 2 * b) / 2 - 0.01), s), h, b, 4).translate(x, y, z)
+}
+
+/** a gable roof: a triangle seen from the front (w wide, rising by `rise`), d deep, its eaves at height y */
+function gable(w: number, d: number, rise: number, round: number, x = 0, y = 0, z = 0) {
+  const g = new ExtrudeGeometry(roundedPolygon([[-w / 2 + round, 0], [w / 2 - round, 0], [0, rise - round]], round * 0.9, new Shape()), {
+    depth: d - 2 * round,
+    bevelEnabled: true,
+    bevelThickness: round,
+    bevelSize: round,
+    bevelSegments: 2,
+    curveSegments: 3,
+  })
+  return g.translate(x, y + round, z - (d - 2 * round) / 2)
+}
+
+/** the parts as one shape, each part keeping its look */
+function assemble(parts: Part[]) {
+  const geos = parts.map(({ g }) => {
+    const n = g.index ? g.toNonIndexed() : g
+    const out = new BufferGeometry()
+    out.setAttribute('position', n.attributes.position)
+    out.setAttribute('normal', n.attributes.normal)
+    return out
+  })
+  const merged = mergeGeometries(geos, true)!
+  merged.groups.forEach((gr, i) => (gr.materialIndex = parts[i].m))
+  return merged
+}
+
+/** a settlement: a little house. Walls, an overhanging roof, a chimney, a door. (Footprint: spec SETTLEMENT.) */
 export const settlementGeo = memo(() => {
-  const { w, d, wall, peak, round } = SETTLEMENT
-  const x = w / 2 - round
-  return upright([[-x, 0], [x, 0], [x, wall - round], [0, peak - round], [-x, wall - round]], d, round)
+  const { w, d, wall, peak } = SETTLEMENT
+  const walls = { w: w - 3, d: d - 3.5 }
+  return assemble([
+    { g: block(walls.w, walls.d, wall + 0.5, 0.9), m: 0 },
+    { g: gable(w, d - 0.5, peak - wall + 0.5, 0.7, 0, wall - 0.5, 0), m: 1 },
+    { g: block(2.8, 2.8, 6, 0.5, 3.8, peak - 5.5, -2.4), m: 1 },
+    { g: block(4, 1.1, 6, 0.35, 0, 0, walls.d / 2 + 0.25), m: 1 },
+  ])
 })
 
+/** a city: a hall with its roof, and a tower with battlements. (Footprint: spec CITY.) */
 export const cityGeo = memo(() => {
-  const { w, d, wall, peak, towerW, tower, towerPeak, round } = CITY
-  const L = -w / 2 + round
-  const R = w / 2 - round
-  const t = L + towerW // where the tower meets the house
-  const mid = (t + R) / 2
-  return upright(
-    [
-      [L, 0], [R, 0], [R, wall - round], [mid, peak - round], [t, wall - round], [t, tower - round],
-      [(L + t) / 2, towerPeak - round], [L, tower - round],
-    ],
-    d,
-    round,
-  )
+  const { w, d, wall, tower } = CITY
+  const towerW = 12
+  const hallW = w - towerW - 2.5
+  const hx = -w / 2 + towerW + 1 + hallW / 2 // the hall's middle
+  const tx = -w / 2 + towerW / 2 // the tower's middle
+  const merlon = 3.2
+  return assemble([
+    { g: block(hallW - 2, d - 4, wall, 0.9, hx), m: 0 },
+    { g: gable(hallW + 1.5, d - 1, 7, 0.7, hx, wall - 0.5, 0), m: 1 },
+    { g: block(towerW, towerW, tower, 1, tx), m: 0 },
+    ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz]) => ({ g: block(merlon, merlon, merlon, 0.5, tx + sx * (towerW / 2 - merlon / 2), tower - 0.3, sz * (towerW / 2 - merlon / 2)), m: 1 as const })),
+    { g: block(4.5, 1.1, 6.5, 0.35, hx, 0, (d - 4) / 2 + 0.25), m: 1 },
+    { g: block(2.6, 1.1, 4.2, 0.35, tx, 12.5, towerW / 2 + 0.25), m: 1 },
+  ])
 })
 
-export const roadGeo = memo(() => slab((s) => roundedRect(ROAD.len - 2 * ROAD.round, ROAD.w - 2 * ROAD.round, 1.5, s), ROAD.h, ROAD.round))
+/** a road: a chunky beveled bar (its top in the player's colour, its sides darker) */
+export const roadGeo = memo(() => slab((s) => roundedRect(ROAD.len - 2 * ROAD.round, ROAD.w - 2 * ROAD.round, 2.2, s), ROAD.h, ROAD.round, 6))
 
 export const robberGeo = memo(() => {
   const k = ROBBER.r / 9

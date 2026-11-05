@@ -1,30 +1,33 @@
 /**
- * The table round the board, as things you can pick up: your cards in stacks, your development cards, your pieces
- * waiting to be built, the bank's stacks and its deck of development cards, everyone else's cards face down, and a
- * wooden trade tray. Clicking a thing is the move: click a card to put it on the tray, a bank stack to ask the bank for
- * it, the deck to buy a card, a piece to build it, someone's cards to trade with them (or to steal, after the robber).
+ * The table round the board: real cards, real pieces. Your cards lie in loose stacks in front of you; your pieces
+ * wait in a pile beside them; the bank's cards and its deck sit at the side; everyone else's cards lie face down at
+ * their places; a wooden tray takes what you put up for trade.
  *
- * Cheap: every stack is one box (its height is the count), the scene only redraws when something changes.
+ * Clicking a thing is the move (see ui/Game.tsx for what each click does).
+ *
+ * Cheap however many cards there are: every card is its own thin card, but all the cards that look alike draw
+ * together (one instanced mesh per face), and so do your waiting pieces. Nothing moves unless something changes.
  */
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useState, type ReactNode } from 'react'
-import { BoxGeometry, MeshLambertMaterial, Vector3, type Material, type Texture } from 'three'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { BoxGeometry, Matrix4, MeshBasicMaterial, MeshLambertMaterial, Quaternion, Vector3, BackSide, type BufferGeometry, type InstancedMesh, type Material, type Texture } from 'three'
 import type { View } from '../../../../shared/engine.ts'
-import { CARDS, RESOURCES, type Card, type Hand, type Resource } from '../../../../shared/rules.ts'
-import { PLAYER } from '../../lib/palette.ts'
+import { CARDS, RESOURCES, type Card, type Hand, type PlayerColor, type Resource } from '../../../../shared/rules.ts'
+import { PAL, PLAYER } from '../../lib/palette.ts'
 import { mat } from '../../lib/toy.ts'
 import { BoardContents, Fit, Lights, canvasProps, type BoardProps } from '../Board.tsx'
 import { Dice } from '../Dice.tsx'
 import { cityGeo, roadGeo, settlementGeo } from '../geometry.ts'
 import { setProjector } from '../labels.ts'
-import { Outline } from '../Pieces.tsx'
-import { CAMERA } from '../spec.ts'
+import { useRedraw } from '../Pieces.tsx'
+import { CAMERA, OUTLINE } from '../spec.ts'
 import { TestHook } from '../TestHook.tsx'
 import { awardFace, devBack, devFace, resourceBack, resourceFace, trayFace } from './faces.ts'
 import { CARD, TRAY, seatParts, type Layout, type Spot } from './layout.ts'
 
 const BOX = new BoxGeometry(1, 1, 1)
 const EDGE = new MeshLambertMaterial({ color: '#efe2c4' })
+const INK = new MeshBasicMaterial({ color: PAL.ink, side: BackSide })
 const faceMats = new Map<Texture, Material>()
 const faceMat = (t: Texture) => {
   let m = faceMats.get(t)
@@ -33,6 +36,7 @@ const faceMat = (t: Texture) => {
 }
 
 export type TrayContents = { mode: 'trade' | 'discard'; give: Partial<Hand>; get: Partial<Hand>; locked?: boolean }
+type Build = 'road' | 'settlement' | 'city'
 
 export type TableProps = BoardProps & {
   view: View
@@ -47,14 +51,12 @@ export type TableProps = BoardProps & {
     wants: boolean
     bank: boolean
     deck: boolean
-    supply: Record<'road' | 'settlement' | 'city', boolean>
-    /** pieces can be tapped (to build, or to hear what they cost) */
+    supply: Record<Build, boolean>
     supplyTap: boolean
     dev: Partial<Record<Card, boolean>>
     opponents: number[]
   }
-  /** which build is picked up (its pieces lift) */
-  building: 'road' | 'settlement' | 'city' | null
+  building: Build | null
   on: {
     hand: (r: Resource) => void
     trayGive: (r: Resource) => void
@@ -63,193 +65,243 @@ export type TableProps = BoardProps & {
     bank: (r: Resource) => void
     deck: () => void
     dev: (c: Card) => void
-    supply: (w: 'road' | 'settlement' | 'city') => void
+    supply: (w: Build) => void
     opponent: (p: number) => void
   }
 }
 
-// ---------------------------------------------------------------- things you can click
+// ---------------------------------------------------------------- cards
 
-/** a thing that lifts a little under the pointer, and says it can be clicked */
-function Clickable({ children, onClick, enabled, at, lift = 0 }: { children: ReactNode; onClick?: () => void; enabled: boolean; at: Spot; lift?: number }) {
-  const [hover, setHover] = useState(false)
-  useEffect(() => {
-    if (!enabled) setHover(false)
-  }, [enabled])
+/** a pile of cards somewhere on the table */
+type Pile = {
+  id: string
+  at: Spot
+  n: number
+  face: Texture
+  back: Texture
+  faceDown?: boolean
+  small?: boolean
+  /** most cards drawn (the count label says the rest) */
+  cap?: number
+  /** turned about the vertical */
+  turn?: number
+  /** how loosely the cards lie (mm of jitter) */
+  loose?: number
+  /** raised (on the tray, or ready to play) */
+  lift?: number
+  enabled?: boolean
+  onClick?: () => void
+}
+
+function hash(s: string) {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507)
+    h = Math.imul(h ^ (h >>> 13), 3266489909)
+    return ((h ^= h >>> 16) >>> 0) / 4294967296
+  }
+}
+
+const UP = new Vector3(0, 1, 0)
+const tmpM = new Matrix4()
+const tmpQ = new Quaternion()
+const tmpP = new Vector3()
+const tmpS = new Vector3()
+
+/** every card on the table, drawn as one instanced mesh per look (face up, face down) */
+function Cards({ piles }: { piles: Pile[] }) {
+  const [hover, setHover] = useState<string | null>(null)
+  const redraw = useRedraw()
+  // one instance per visible card, grouped by what its top and bottom show
+  const groups = useMemo(() => {
+    const out = new Map<string, { top: Texture; bottom: Texture; cards: { pile: Pile; i: number }[] }>()
+    for (const pile of piles) {
+      const shown = Math.min(pile.n, pile.cap ?? 12)
+      if (shown <= 0) continue
+      const top = pile.faceDown ? pile.back : pile.face
+      const key = `${top.uuid}|${pile.back.uuid}`
+      if (!out.has(key)) out.set(key, { top, bottom: pile.back, cards: [] })
+      for (let i = 0; i < shown; i++) out.get(key)!.cards.push({ pile, i })
+    }
+    return [...out.entries()]
+  }, [piles])
+
   return (
-    <group
-      position={[at[0], lift + (hover && enabled ? 4 : 0), at[1]]}
-      onPointerOver={(e: ThreeEvent<PointerEvent>) => {
-        if (!enabled) return
+    <>
+      {groups.map(([key, g]) => (
+        <CardGroup key={key} top={g.top} bottom={g.bottom} cards={g.cards} hover={hover} setHover={setHover} redraw={redraw} />
+      ))}
+      <Slots piles={piles} />
+    </>
+  )
+}
+
+function CardGroup({ top, bottom, cards, hover, setHover, redraw }: { top: Texture; bottom: Texture; cards: { pile: Pile; i: number }[]; hover: string | null; setHover: (id: string | null) => void; redraw: () => void }) {
+  const ref = useRef<InstancedMesh>(null)
+  const materials = useMemo(() => [EDGE, EDGE, faceMat(top), faceMat(bottom), EDGE, EDGE], [top, bottom])
+  const capacity = Math.max(8, 2 ** Math.ceil(Math.log2(cards.length)))
+  useLayoutEffect(() => {
+    const m = ref.current
+    if (!m) return
+    cards.forEach(({ pile, i }, k) => {
+      const rnd = hash(`${pile.id}:${i}`)
+      const s = pile.small ? CARD.small : 1
+      const loose = pile.loose ?? 1.4
+      const lift = (pile.lift ?? 0) + (hover === pile.id && pile.enabled ? 6 : 0)
+      tmpP.set(pile.at[0] + (rnd() - 0.5) * loose * 2, lift + i * (CARD.t + 0.12) + CARD.t / 2, pile.at[1] + (rnd() - 0.5) * loose * 2)
+      tmpQ.setFromAxisAngle(UP, (pile.turn ?? 0) + (rnd() - 0.5) * 0.09)
+      tmpS.set(CARD.w * s, CARD.t, CARD.d * s)
+      m.setMatrixAt(k, tmpM.compose(tmpP, tmpQ, tmpS))
+    })
+    m.count = cards.length
+    m.instanceMatrix.needsUpdate = true
+    m.computeBoundingSphere()
+    redraw()
+  })
+  const pileOf = (e: ThreeEvent<PointerEvent | MouseEvent>) => (e.instanceId !== undefined ? cards[e.instanceId]?.pile : undefined)
+  return (
+    <instancedMesh
+      key={capacity}
+      ref={ref}
+      args={[BOX, materials, capacity]}
+      castShadow
+      receiveShadow
+      onPointerMove={(e) => {
+        const p = pileOf(e)
+        if (!p?.enabled) return
         e.stopPropagation()
-        setHover(true)
+        if (hover !== p.id) setHover(p.id)
         document.body.style.cursor = 'pointer'
       }}
       onPointerOut={() => {
-        setHover(false)
+        setHover(null)
         document.body.style.cursor = ''
       }}
-      onClick={(e: ThreeEvent<MouseEvent>) => {
-        if (!enabled || !onClick) return
+      onClick={(e) => {
+        const p = pileOf(e)
+        if (!p?.enabled || !p.onClick) return
         e.stopPropagation()
-        onClick()
+        p.onClick()
       }}
-    >
-      {children}
-    </group>
+    />
   )
 }
 
-/** a stack of cards lying flat: one box, as tall as the count (a single card at least, when there are any) */
-function Stack({ n, face, back, small, faceDown, empty = 'hide' }: { n: number; face: Texture; back: Texture; small?: boolean; faceDown?: boolean; empty?: 'hide' | 'slot' }) {
-  const k = small ? CARD.small : 1
-  if (n <= 0) {
-    if (empty === 'hide') return null
-    // an empty place where the stack goes
-    return (
-      <mesh geometry={BOX} material={mat('#3b2a1d')} scale={[CARD.w * k, 0.3, CARD.d * k]} position={[0, 0.15, 0]} receiveShadow />
-    )
-  }
-  const h = Math.min(n, 12) * CARD.t
-  const top = faceMat(faceDown ? back : face)
-  const bottom = faceMat(back)
-  return <mesh geometry={BOX} material={[EDGE, EDGE, top, bottom, EDGE, EDGE]} scale={[CARD.w * k, h, CARD.d * k]} position={[0, h / 2, 0]} castShadow receiveShadow />
+/** a dark place on the table where an empty pile goes (your hand, someone's cards), still clickable */
+function Slots({ piles }: { piles: Pile[] }) {
+  return (
+    <>
+      {piles
+        .filter((p) => p.n <= 0 && p.id.startsWith('slot:'))
+        .map((p) => (
+          <mesh
+            key={p.id}
+            geometry={BOX}
+            material={mat('#3b2a1d')}
+            scale={[CARD.w, 0.3, CARD.d]}
+            position={[p.at[0], 0.15, p.at[1]]}
+            receiveShadow
+            onClick={(e) => {
+              if (!p.enabled || !p.onClick) return
+              e.stopPropagation()
+              p.onClick()
+            }}
+          />
+        ))}
+    </>
+  )
 }
 
-// ---------------------------------------------------------------- your area
+// ---------------------------------------------------------------- your pieces waiting to be built
 
-function MyArea({ view, layout, hand, can, on, building }: TableProps) {
-  const me = view.you
-  const pl = view.players[me]
-  const color = pl.color
-  const cards = pl.cards ?? []
+const PIECE_GEO: Record<Build, () => BufferGeometry> = { road: roadGeo, settlement: settlementGeo, city: cityGeo }
+
+/** where each waiting piece sits in its pile: roads criss-crossed in layers, houses and cities in little groups */
+function supplySpots(what: Build, n: number): { x: number; y: number; z: number; turn: number }[] {
+  return Array.from({ length: n }, (_, i) => {
+    const rnd = hash(`${what}${i}`)
+    if (what === 'road') {
+      const layer = Math.floor(i / 3)
+      const k = i % 3
+      const across = layer % 2 === 1
+      const off = (k - 1) * 10
+      return { x: across ? off : 0, y: layer * 6.1, z: across ? 0 : off, turn: (across ? Math.PI / 2 : 0) + (rnd() - 0.5) * 0.12 }
+    }
+    const cols = what === 'city' ? 2 : 3
+    const sx = what === 'city' ? 32 : 21
+    const row = Math.floor(i / cols)
+    const col = i % cols
+    const inRow = Math.min(cols, n - row * cols)
+    return { x: (col - (inRow - 1) / 2) * sx + (rnd() - 0.5) * 2, y: 0, z: (row - 0.5) * 20 + (rnd() - 0.5) * 2, turn: (rnd() - 0.5) * 0.5 }
+  })
+}
+
+function Supply({ what, at, n, color, enabled, up, ready, onClick }: { what: Build; at: Spot; n: number; color: PlayerColor; enabled: boolean; up: boolean; ready: boolean; onClick: () => void }) {
+  const body = useRef<InstancedMesh>(null)
+  const line = useRef<InstancedMesh>(null)
+  const [hover, setHover] = useState(false)
+  const geo = PIECE_GEO[what]()
+  const materials = useMemo(() => [mat(PLAYER[color].body), mat(PLAYER[color].roof)], [color])
+  const redraw = useRedraw()
+  const outline = useMemo(() => {
+    geo.computeBoundingBox()
+    const b = geo.boundingBox!
+    const t = OUTLINE.mm
+    const size = new Vector3().subVectors(b.max, b.min)
+    const s = new Vector3((size.x + 2 * t) / size.x, (size.y + 2 * t) / size.y, (size.z + 2 * t) / size.z)
+    const c = new Vector3().addVectors(b.max, b.min).multiplyScalar(0.5)
+    return new Matrix4().compose(new Vector3(c.x * (1 - s.x), c.y * (1 - s.y), c.z * (1 - s.z)), new Quaternion(), s)
+  }, [geo])
+  useLayoutEffect(() => {
+    const lift = up ? 12 : hover && enabled ? 5 : 0
+    supplySpots(what, n).forEach((p, i) => {
+      tmpM.compose(tmpP.set(at[0] + p.x, p.y + lift, at[1] + p.z), tmpQ.setFromAxisAngle(UP, p.turn), tmpS.set(1, 1, 1))
+      body.current?.setMatrixAt(i, tmpM)
+      line.current?.setMatrixAt(i, tmpM.clone().multiply(outline))
+    })
+    for (const m of [body.current, line.current]) {
+      if (!m) continue
+      m.count = n
+      m.instanceMatrix.needsUpdate = true
+      m.computeBoundingSphere()
+    }
+    redraw()
+  })
+  const handlers = {
+    onPointerOver: (e: ThreeEvent<PointerEvent>) => {
+      if (!enabled) return
+      e.stopPropagation()
+      setHover(true)
+      document.body.style.cursor = 'pointer'
+    },
+    onPointerOut: () => {
+      setHover(false)
+      document.body.style.cursor = ''
+    },
+    onClick: (e: ThreeEvent<MouseEvent>) => {
+      if (!enabled) return
+      e.stopPropagation()
+      onClick()
+    },
+  }
   return (
     <group>
-      {RESOURCES.map((r, i) => (
-        <Clickable key={r} at={layout.hand[i]} enabled={can.hand && (hand?.[r] ?? 0) > 0} onClick={() => on.hand(r)}>
-          <Stack n={hand?.[r] ?? 0} face={resourceFace(r)} back={resourceBack()} empty="slot" />
-        </Clickable>
-      ))}
-      {CARDS.filter((c) => cards.some((x) => x.card === c)).map((c, i) => (
-        <Clickable key={c} at={layout.dev(i)} enabled={!!can.dev[c]} onClick={() => on.dev(c)} lift={can.dev[c] ? 2 : 0}>
-          <Stack n={cards.filter((x) => x.card === c).length} face={devFace(c)} back={devBack()} />
-        </Clickable>
-      ))}
-      {(['road', 'settlement', 'city'] as const).map((w) => (
-        <Supply key={w} what={w} at={layout.supply[w]} n={pl.pieces[w]} color={color} can={can.supply[w]} tap={can.supplyTap} up={building === w} onClick={() => on.supply(w)} />
-      ))}
-      <Awards view={view} p={me} at={layout.awardsMine} />
+      {/* a mat under the pieces you can build right now */}
+      {(ready || up) && <mesh geometry={BOX} material={mat(up ? '#e3a72c' : PAL.cream)} scale={[what === 'road' ? 44 : what === 'city' ? 66 : 62, 0.6, 44]} position={[at[0], 0.3, at[1]]} receiveShadow {...handlers} />}
+      <instancedMesh ref={body} args={[geo, materials, 16]} castShadow receiveShadow {...handlers} />
+      <instancedMesh ref={line} args={[geo, INK, 16]} />
     </group>
-  )
-}
-
-/** your pieces not yet built, standing in a little group (picked up when you choose to build one) */
-function Supply({ what, at, n, color, can, tap, up, onClick }: { what: 'road' | 'settlement' | 'city'; at: Spot; n: number; color: TableProps['colors'][number]; can: boolean; tap: boolean; up: boolean; onClick: () => void }) {
-  const geo = what === 'road' ? roadGeo() : what === 'city' ? cityGeo() : settlementGeo()
-  const body = [mat(PLAYER[color].body), mat(PLAYER[color].roof)]
-  const shown = Math.min(n, what === 'road' ? 5 : what === 'city' ? 4 : 5)
-  const spots: [number, number, number][] = Array.from({ length: shown }, (_, i) => {
-    if (what === 'road') return [0, i * 6.2, 0] // a neat pile
-    const cols = what === 'city' ? 2 : 3
-    const sx = what === 'city' ? 22 : 15
-    return [((i % cols) - (cols - 1) / 2) * sx, 0, (Math.floor(i / cols) - 0.5) * 16]
-  })
-  return (
-    <Clickable at={at} enabled={can || up || tap} onClick={onClick} lift={up ? 10 : 0}>
-      {/* a coaster under the pieces you can afford, so you can see what's buildable at a glance */}
-      {(can || up) && <mesh geometry={BOX} material={mat(up ? '#e3a72c' : '#f6ecd5')} scale={[what === 'road' ? 40 : 52, 0.6, what === 'road' ? 18 : 40]} position={[0, 0.3, 0]} receiveShadow />}
-      {spots.map((p, i) => (
-        <group key={i} position={[p[0], p[1] + 0.6, p[2]]} rotation={[0, what === 'road' ? 0.4 : 0, 0]}>
-          <mesh geometry={geo} material={body} castShadow />
-          <Outline geometry={geo} />
-        </group>
-      ))}
-    </Clickable>
-  )
-}
-
-function Awards({ view, p, at }: { view: View; p: number; at: Spot }) {
-  const both = view.longestRoad === p && view.largestArmy === p
-  return (
-    <>
-      {view.longestRoad === p && (
-        <group position={[at[0] - (both ? 12 : 0), 0, at[1]]} rotation={[0, 0.08, 0]}>
-          <Stack n={1} face={awardFace('road')} back={awardFace('road')} />
-        </group>
-      )}
-      {view.largestArmy === p && (
-        <group position={[at[0] + (both ? 12 : 0), both ? 1 : 0, at[1]]} rotation={[0, -0.08, 0]}>
-          <Stack n={1} face={awardFace('army')} back={awardFace('army')} />
-        </group>
-      )}
-    </>
-  )
-}
-
-// ---------------------------------------------------------------- everyone else
-
-function Seats({ view, layout, can, on }: TableProps) {
-  return (
-    <>
-      {layout.seats.map(({ p, at }) => {
-        const pl = view.players[p]
-        const parts = seatParts(at)
-        return (
-          <group key={p}>
-            <Clickable at={parts.hand} enabled={can.opponents.includes(p)} onClick={() => on.opponent(p)}>
-              <Stack n={pl.handCount} face={resourceBack()} back={resourceBack()} faceDown empty="slot" />
-            </Clickable>
-            <group position={[parts.dev[0], 0, parts.dev[1]]}>
-              <Stack n={pl.cardCount} face={devBack()} back={devBack()} faceDown empty="slot" />
-            </group>
-            {pl.knights > 0 && (
-              <group position={[parts.knights[0], 0, parts.knights[1]]}>
-                <Stack n={pl.knights} face={devFace('knight')} back={devBack()} />
-              </group>
-            )}
-            <Awards view={view} p={p} at={parts.awards} />
-          </group>
-        )
-      })}
-    </>
-  )
-}
-
-// ---------------------------------------------------------------- the bank
-
-function Bank({ view, layout, can, on }: TableProps) {
-  return (
-    <>
-      {RESOURCES.map((r, i) => (
-        <Clickable key={r} at={layout.bank[i]} enabled={can.bank && view.bank[r] > 0} onClick={() => on.bank(r)}>
-          <Stack n={view.bank[r]} face={resourceFace(r)} back={resourceBack()} empty="slot" />
-        </Clickable>
-      ))}
-      <Clickable at={layout.deck} enabled={can.deck} onClick={on.deck}>
-        <Stack n={view.pile} face={devBack()} back={devBack()} faceDown empty="slot" />
-      </Clickable>
-    </>
   )
 }
 
 // ---------------------------------------------------------------- the trade tray
 
-function Tray({ layout, tray, can, on }: TableProps) {
-  const [tx, tz] = layout.tray
-  if (!tray) return null
-  const k = CARD.small
-  const row = (h: Partial<Hand>, z: number, click: (r: Resource) => void, enabled: boolean) => {
-    const kinds = RESOURCES.filter((r) => (h[r] ?? 0) > 0)
-    return kinds.map((r, i) => (
-      <Clickable key={r} at={[tx + (i - (kinds.length - 1) / 2) * (CARD.w * k + 6), z]} enabled={enabled} onClick={() => click(r)} lift={TRAY.h - 3}>
-        <Stack n={h[r] ?? 0} face={resourceFace(r)} back={resourceBack()} small />
-      </Clickable>
-    ))
-  }
+function Tray({ at, mode }: { at: Spot; mode: 'trade' | 'discard' }) {
+  const [tx, tz] = at
   return (
     <group>
-      {/* the tray: a floor with its two halves marked, and a rim */}
-      <mesh geometry={BOX} material={[mat('#a87b50'), mat('#a87b50'), faceMat(trayFace(tray.mode)), mat('#8a5e3c'), mat('#a87b50'), mat('#a87b50')]} scale={[TRAY.w, 4, TRAY.d]} position={[tx, 2, tz]} receiveShadow castShadow />
+      <mesh geometry={BOX} material={[mat('#a87b50'), mat('#a87b50'), faceMat(trayFace(mode)), mat('#8a5e3c'), mat('#a87b50'), mat('#a87b50')]} scale={[TRAY.w, 4, TRAY.d]} position={[tx, 2, tz]} receiveShadow castShadow />
       {[
         [0, -TRAY.d / 2, TRAY.w, TRAY.rim],
         [0, TRAY.d / 2, TRAY.w, TRAY.rim],
@@ -258,18 +310,69 @@ function Tray({ layout, tray, can, on }: TableProps) {
       ].map(([x, z, w, d], i) => (
         <mesh key={i} geometry={BOX} material={mat('#8a5e3c')} scale={[w, TRAY.h, d]} position={[tx + x, TRAY.h / 2, tz + z]} castShadow receiveShadow />
       ))}
-      {row(tray.give, tz + (tray.mode === 'trade' ? TRAY.d / 4 : 0), on.trayGive, can.tray && !tray.locked)}
-      {tray.mode === 'trade' && row(tray.get, tz - TRAY.d / 4, on.trayGet, can.tray && !tray.locked)}
-      {/* behind the tray: one of each card, to ask for */}
-      {tray.mode === 'trade' &&
-        !tray.locked &&
-        RESOURCES.map((r, i) => (
-          <Clickable key={r} at={layout.wants(i)} enabled={can.wants} onClick={() => on.want(r)}>
-            <Stack n={1} face={resourceFace(r)} back={resourceBack()} small />
-          </Clickable>
-        ))}
     </group>
   )
+}
+
+// ---------------------------------------------------------------- everything, as piles
+
+function usePiles({ view, layout, hand, tray, can, on }: TableProps): Pile[] {
+  const me = view.you
+  const pl = me >= 0 ? view.players[me] : null
+  const piles: Pile[] = []
+  // your hand: one pile per kind; an empty kind leaves its place on the table
+  RESOURCES.forEach((r, i) => {
+    const n = hand?.[r] ?? 0
+    piles.push({ id: n ? `hand:${r}` : `slot:hand:${r}`, at: layout.hand[i], n, face: resourceFace(r), back: resourceBack(), enabled: can.hand && n > 0, onClick: () => on.hand(r) })
+  })
+  // your development cards, by kind; ones you can play now stand a little proud
+  const cards = pl?.cards ?? []
+  CARDS.filter((c) => cards.some((x) => x.card === c)).forEach((c, i) => {
+    piles.push({ id: `dev:${c}`, at: layout.dev(i), n: cards.filter((x) => x.card === c).length, face: devFace(c), back: devBack(), lift: can.dev[c] ? 3 : 0, enabled: !!can.dev[c], onClick: () => on.dev(c) })
+  })
+  // the bank: its five stacks (19 each to start) and its deck, face down
+  RESOURCES.forEach((r, i) => {
+    piles.push({ id: `bank:${r}`, at: layout.bank[i], n: view.bank[r], face: resourceFace(r), back: resourceBack(), cap: 19, loose: 0.8, enabled: can.bank && view.bank[r] > 0, onClick: () => on.bank(r) })
+  })
+  piles.push({ id: 'deck', at: layout.deck, n: view.pile, face: devBack(), back: devBack(), faceDown: true, cap: 25, loose: 0.8, enabled: can.deck, onClick: on.deck })
+  // everyone else: their cards face down (fanned a little), their development cards, knights they've played
+  for (const { p, at } of layout.seats) {
+    const o = view.players[p]
+    const parts = seatParts(at, layout.portrait)
+    piles.push({ id: o.handCount ? `opp:${p}` : `slot:opp:${p}`, at: parts.hand, n: o.handCount, face: resourceBack(), back: resourceBack(), faceDown: true, loose: 3, enabled: can.opponents.includes(p), onClick: () => on.opponent(p) })
+    piles.push({ id: `odev:${p}`, at: parts.dev, n: o.cardCount, face: devBack(), back: devBack(), faceDown: true, loose: 2.5 })
+    piles.push({ id: `kn:${p}`, at: parts.knights, n: o.knights, face: devFace('knight'), back: devBack(), loose: 4 })
+    if (view.longestRoad === p) piles.push({ id: `lr:${p}`, at: [parts.awards[0], parts.awards[1] - 6], n: 1, face: awardFace('road'), back: awardFace('road'), turn: 0.08 })
+    if (view.largestArmy === p) piles.push({ id: `la:${p}`, at: [parts.awards[0] + 6, parts.awards[1] + 6], n: 1, face: awardFace('army'), back: awardFace('army'), turn: -0.08, lift: 1 })
+  }
+  if (pl && view.longestRoad === me) piles.push({ id: 'lr:me', at: [layout.awardsMine[0], layout.awardsMine[1] - 6], n: 1, face: awardFace('road'), back: awardFace('road'), turn: 0.08 })
+  if (pl && view.largestArmy === me) piles.push({ id: 'la:me', at: [layout.awardsMine[0] + 6, layout.awardsMine[1] + 6], n: 1, face: awardFace('army'), back: awardFace('army'), turn: -0.08, lift: 1 })
+  // the tray: what you give on the near half, what you get on the far half; behind it, one of each kind to ask for
+  if (tray) {
+    const [tx, tz] = layout.tray
+    const row = (h: Partial<Hand>, z: number, side: 'give' | 'get') => {
+      const kinds = RESOURCES.filter((r) => (h[r] ?? 0) > 0)
+      kinds.forEach((r, i) =>
+        piles.push({
+          id: `tray:${side}:${r}`,
+          at: [tx + (i - (kinds.length - 1) / 2) * (CARD.w * CARD.small + 6), z],
+          n: h[r] ?? 0,
+          face: resourceFace(r),
+          back: resourceBack(),
+          small: true,
+          lift: 4,
+          loose: 1.8,
+          enabled: can.tray && !tray.locked,
+          onClick: () => (side === 'give' ? on.trayGive(r) : on.trayGet(r)),
+        }),
+      )
+    }
+    row(tray.give, tz + (tray.mode === 'trade' ? TRAY.d / 4 : 0), 'give')
+    if (tray.mode === 'trade') row(tray.get, tz - TRAY.d / 4, 'get')
+    if (tray.mode === 'trade' && !tray.locked)
+      RESOURCES.forEach((r, i) => piles.push({ id: `want:${r}`, at: layout.wants(i), n: 1, face: resourceFace(r), back: resourceBack(), small: true, loose: 0, enabled: can.wants, onClick: () => on.want(r) }))
+  }
+  return piles
 }
 
 // ---------------------------------------------------------------- the scene
@@ -279,7 +382,6 @@ function Projector() {
   const { camera, size, gl } = useThree()
   useEffect(() => {
     const v = new Vector3()
-    // wait a frame so the camera fit has run
     const id = requestAnimationFrame(() => {
       const rect = gl.domElement.getBoundingClientRect()
       setProjector((x, y, z) => {
@@ -297,8 +399,11 @@ function TableTop() {
 }
 
 export function TableView(props: TableProps) {
-  const { layout } = props
+  const { layout, view, can, on, building, tray } = props
+  const piles = usePiles(props)
   const reach = Math.max(-layout.bounds.minX, layout.bounds.maxX, -layout.bounds.minZ, layout.bounds.maxZ) + 40
+  const me = view.you
+  const pl = me >= 0 ? view.players[me] : null
   return (
     <Canvas {...canvasProps()}>
       <Lights extent={reach} />
@@ -306,10 +411,12 @@ export function TableView(props: TableProps) {
       <TableTop />
       <BoardContents {...props} />
       <Dice dice={props.dice ?? null} rolls={props.rolls ?? 0} onRoll={props.onRoll} at={layout.dice} />
-      <MyArea {...props} />
-      <Seats {...props} />
-      <Bank {...props} />
-      <Tray {...props} />
+      {tray && <Tray at={layout.tray} mode={tray.mode} />}
+      <Cards piles={piles} />
+      {pl &&
+        (['road', 'settlement', 'city'] as const).map((w) => (
+          <Supply key={w} what={w} at={layout.supply[w]} n={pl.pieces[w]} color={pl.color} enabled={can.supply[w] || can.supplyTap || building === w} ready={can.supply[w]} up={building === w} onClick={() => on.supply(w)} />
+        ))}
       <Projector />
       <TestHook />
     </Canvas>

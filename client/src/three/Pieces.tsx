@@ -23,53 +23,60 @@ export function useRedraw() {
   }
 }
 
-function Drop({ children, ghost }: { children: ReactNode; ghost?: boolean }) {
+/** pieces already on the board when it first shows are simply there; later ones drop in */
+let shownAt = 0
+export const boardShown = () => (shownAt = performance.now())
+
+/** a new piece drops into place (after `delay` s: one of yours waits for the one flying over from your supply) */
+function Drop({ children, ghost, delay = 0 }: { children: ReactNode; ghost?: boolean; delay?: number }) {
   const g = useRef<Group>(null)
-  const t0 = useRef<number | null>(ghost ? -1 : null)
+  const settled = ghost || performance.now() - shownAt < 400
+  const t0 = useRef<number | null>(settled ? -1 : null)
   const redraw = useRedraw()
   useFrame(({ clock }) => {
     const o = g.current
     if (!o || t0.current === -1) return
-    if (t0.current === null) t0.current = clock.elapsedTime
-    const t = Math.min(1, (clock.elapsedTime - t0.current) / DROP)
-    o.position.y = FROM * (1 - t) * (1 - t)
+    if (t0.current === null) t0.current = clock.elapsedTime + delay
+    const t = Math.max(0, Math.min(1, (clock.elapsedTime - t0.current) / DROP))
+    o.visible = clock.elapsedTime >= t0.current
+    o.position.y = delay ? 0 : FROM * (1 - t) * (1 - t)
     redraw()
     if (t >= 1) t0.current = -1
   })
   return (
-    <group ref={g} position={[0, ghost ? 0 : FROM, 0]}>
+    <group ref={g} position={[0, settled || delay ? 0 : FROM, 0]} visible={settled || !delay}>
       {children}
     </group>
   )
 }
 
-type PieceProps = { color: PlayerColor; ghost?: boolean; x: number; z: number }
+type PieceProps = { color: PlayerColor; ghost?: boolean; x: number; z: number; delay?: number }
 const body = (c: PlayerColor, ghost?: boolean) => wood(PLAYER[c].body, ghost ? 0.7 : 1)
 
-export function Settlement({ color, ghost, x, z }: PieceProps) {
+export function Settlement({ color, ghost, x, z, delay }: PieceProps) {
   return (
     <group position={[x, TILE.h, z]}>
-      <Drop ghost={ghost}>
+      <Drop ghost={ghost} delay={delay}>
         <mesh geometry={settlementGeo()} material={body(color, ghost)} castShadow={!ghost} />
       </Drop>
     </group>
   )
 }
 
-export function City({ color, ghost, x, z }: PieceProps) {
+export function City({ color, ghost, x, z, delay }: PieceProps) {
   return (
     <group position={[x, TILE.h, z]}>
-      <Drop ghost={ghost}>
+      <Drop ghost={ghost} delay={delay}>
         <mesh geometry={cityGeo()} material={body(color, ghost)} castShadow={!ghost} />
       </Drop>
     </group>
   )
 }
 
-export function Road({ color, ghost, x, z, angle }: PieceProps & { angle: number }) {
+export function Road({ color, ghost, x, z, angle, delay }: PieceProps & { angle: number }) {
   return (
-    <group position={[x, TILE.h - 1, z]} rotation={[0, -angle, 0]}>
-      <Drop ghost={ghost}>
+    <group position={[x, TILE.h, z]} rotation={[0, -angle, 0]}>
+      <Drop ghost={ghost} delay={delay}>
         <mesh geometry={roadGeo()} material={body(color, ghost)} castShadow={!ghost} />
       </Drop>
     </group>

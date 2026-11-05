@@ -20,11 +20,12 @@ in their tray. Everyone else's cards lie face down at their places. To do someth
 On screen there's only whose turn it is, what just happened, the turn button, the tray's check and cross, counts on
 the stacks, everyone's name and points, and a History panel you can open.
 
-**Everything is a real object.** Every card and every piece is a body in a physics world (Rapier). When the game
-changes, the things that must move fly to their new places and settle there: cards land on their stacks, a new road
-flies from your supply to its side of a tile, a stolen card crosses the table and turns over. You can also pick
-anything up with the mouse, carry it, drop it, or toss it into the others (a card from your hand dropped on the tray
-goes on the tray). Whatever comes to rest out of place goes back home a moment later. The dice are a real throw too,
+**The things on the table are real objects.** Every card and every piece waiting in your supply is a body in a
+physics world (Rapier). When the game changes, the cards that must move fly to their new places and settle there:
+they land on their stacks, a stolen card crosses the table and turns over. You can pick any of them up with the mouse,
+carry it, drop it, or toss it into the others (a card from your hand dropped on the tray goes on the tray). Whatever
+comes to rest out of place goes back home a moment later. The board is not physical: pieces on it and the robber are
+fixed where they stand. Click a piece in your supply, then a spot, and it flies over and is set down there. The dice are a real throw too,
 worked out the moment they're rolled and seeded by the roll's number, so everyone sees the same throw; once it lands,
 each die's printing is turned so the server's roll is on top. Clicks never depend on any of this: a click acts on the
 pile a thing belongs to, wherever it lies.

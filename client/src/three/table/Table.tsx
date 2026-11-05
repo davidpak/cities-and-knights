@@ -21,12 +21,12 @@ import { mat } from '../../lib/toy.ts'
 import { BoardContents, Fit, Lights, canvasProps, type BoardProps } from '../Board.tsx'
 import { Dice } from '../Dice.tsx'
 import { setProjector } from '../labels.ts'
-import { CAMERA, DICE, ROAD, SEA, TILE, TOKEN, edgeAt, hexAt, vertexAt } from '../spec.ts'
+import { CAMERA, CITY, DICE, ROAD, SEA, SETTLEMENT, TILE, TOKEN, edgeAt, hexAt, vertexAt } from '../spec.ts'
 import { TestHook } from '../TestHook.tsx'
 import { trayFace } from './faces.ts'
 import { CARD, TRAY, seatParts, type Layout, type Spot } from './layout.ts'
 import { Physical, type Static } from './Physical.tsx'
-import { seeded, type Home, type PileSpec, type Thing } from './things.ts'
+import { VANISH, seeded, type Home, type PileSpec, type Thing } from './things.ts'
 
 const BOX = new BoxGeometry(1, 1, 1)
 
@@ -105,7 +105,7 @@ function supplyHome(what: Build, at: Spot) {
   }
 }
 
-function useSpecs({ view, layout, hand, tray, can, on, building, picking, buildings, roads, robber, colors, tiles }: TableProps): Spec[] {
+function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): Spec[] {
   const me = view.you
   const pl = me >= 0 ? view.players[me] : null
   const specs: Spec[] = []
@@ -169,7 +169,25 @@ function useSpecs({ view, layout, hand, tray, can, on, building, picking, buildi
         card({ id, family: 'want', look: `res:${r}`, n: 1, small: true, home: cardHome(id, layout.wants(i), { loose: 0 }), from: layout.bank[i], to: layout.bank[i], enabled: can.wants, onClick: () => on.want(r) })
       })
   }
-  // your waiting pieces
+  // your waiting pieces (the board's pieces aren't bodies: they're fixed where they're built). One you build flies
+  // from here to its spot; a settlement a city replaces comes back from there
+  const lastMine = (what: Build) => {
+    for (let i = view.events.length - 1; i >= 0; i--) {
+      const e = view.events[i]
+      if (e.k === 'build' && e.p === me && e.what === what) return e.at
+    }
+    return null
+  }
+  const spot = (what: Build): Spot | undefined => {
+    const at = lastMine(what)
+    if (at === null) return undefined
+    const [x, z] = what === 'road' ? edgeAt(at) : vertexAt(at)
+    return [x, z]
+  }
+  const yaw = (what: Build) => {
+    const at = lastMine(what)
+    return what === 'road' && at !== null ? -TOPO.edges[at].angle : 0
+  }
   if (pl)
     (['road', 'settlement', 'city'] as const).forEach((w) =>
       specs.push({
@@ -179,32 +197,20 @@ function useSpecs({ view, layout, hand, tray, can, on, building, picking, buildi
         look: pl.color,
         n: pl.pieces[w],
         home: supplyHome(w, layout.supply[w]),
+        to: spot(w),
+        toY: TILE.h,
+        toYaw: yaw(w),
+        from: w === 'settlement' ? spot('city') : undefined,
         lift: building === w ? 12 : 0,
         enabled: can.supply[w] || can.supplyTap || building === w,
         onClick: () => on.supply(w),
       }),
     )
-  // the board: every piece built, and the robber (none of them to be picked up while you're choosing a spot)
-  const still = !picking
-  for (const [v, b] of Object.entries(buildings)) {
-    const [x, z] = vertexAt(Number(v))
-    const color = colors[b.owner]
-    const src = b.owner === me ? layout.supply[b.kind] : homeOf(b.owner)
-    specs.push({ id: `b:${v}:${b.kind}`, kind: b.kind, family: `piece:${b.kind}:${color}`, look: color, n: 1, home: () => ({ x, y: TILE.h, z, yaw: 0 }), from: src, to: src, grab: still })
-  }
-  for (const [e, owner] of Object.entries(roads)) {
-    const [x, z] = edgeAt(Number(e))
-    const color = colors[owner]
-    const src = owner === me ? layout.supply.road : homeOf(owner)
-    specs.push({ id: `r:${e}`, kind: 'road', family: `piece:road:${color}`, look: color, n: 1, home: () => ({ x, y: TILE.h, z, yaw: -TOPO.edges[Number(e)].angle }), from: src, to: src, grab: still })
-  }
-  const [rx, rz] = hexAt(robber)
-  specs.push({ id: 'robber', kind: 'robber', family: 'robber', look: 'robber', n: 1, home: () => ({ x: rx, y: TILE.h + (tiles[robber]?.number !== null ? TOKEN.h : 0), z: rz, yaw: 0 }), grab: still })
   return specs
 }
 
 /** the fixed things the loose ones rest on and bump into */
-function staticsFor(layout: Layout, tray: boolean, tiles: TableProps['tiles']): Record<string, Static[]> {
+function staticsFor(layout: Layout, tray: boolean, { tiles, buildings, roads }: TableProps): Record<string, Static[]> {
   const out: Static[] = [{ box: [5000, 50, 5000], at: [0, -50, 0] }]
   const trayParts: Static[] = []
   // the board, flat at the tiles' tops (pieces never tip into the gaps), its frame, and the number tokens
@@ -241,7 +247,18 @@ function staticsFor(layout: Layout, tray: boolean, tiles: TableProps['tiles']): 
     [(D.w - D.rim) / 2, 0, D.rim / 2, D.d / 2],
   ])
     out.push({ box: [hx, D.h / 2, hz], at: [dx + ox, D.h / 2, dz + oz] })
-  return { base: out, tray: trayParts }
+  // the pieces on the board: fixed, but solid (a card tossed onto the board lands on them, not through them)
+  const pieces: Static[] = []
+  for (const [v, b] of Object.entries(buildings)) {
+    const [x, z] = vertexAt(Number(v))
+    const [w, h, d] = b.kind === 'city' ? [CITY.w, CITY.peak, CITY.d] : [SETTLEMENT.w, SETTLEMENT.peak, SETTLEMENT.d]
+    pieces.push({ box: [w / 2, h / 2, d / 2], at: [x, TILE.h + h / 2, z] })
+  }
+  for (const [e] of Object.entries(roads)) {
+    const [x, z] = edgeAt(Number(e))
+    pieces.push({ box: [ROAD.len / 2, ROAD.h / 2, ROAD.w / 2], at: [x, TILE.h + ROAD.h / 2, z], yaw: -TOPO.edges[Number(e)].angle })
+  }
+  return { base: out, tray: trayParts, pieces }
 }
 
 /** a dark place on the table where an empty pile goes (your hand, someone's cards), still clickable */
@@ -329,7 +346,7 @@ function TableTop() {
 export function TableView(props: TableProps) {
   const { layout, tray, on, can } = props
   const specs = useSpecs(props)
-  const statics = staticsFor(layout, !!tray, props.tiles)
+  const statics = staticsFor(layout, !!tray, props)
   const reach = Math.max(-layout.bounds.minX, layout.bounds.maxX, -layout.bounds.minZ, layout.bounds.maxZ) + 40
   // a card from your hand dropped on the tray goes on the tray
   const onDrop = (t: Thing, at: Vector3) => {
@@ -341,7 +358,7 @@ export function TableView(props: TableProps) {
       <Lights extent={reach} />
       <Fit bounds={layout.bounds} tilt={layout.portrait ? CAMERA.tilt + 0.08 : CAMERA.tilt + 0.14} />
       <TableTop />
-      <BoardContents {...props} pieces={false} />
+      <BoardContents {...props} arrive={VANISH} />
       <Dice dice={props.dice ?? null} rolls={props.rolls ?? 0} onRoll={props.onRoll} at={layout.dice} />
       {tray && <Tray at={layout.tray} mode={tray.mode} />}
       <Slots {...props} />

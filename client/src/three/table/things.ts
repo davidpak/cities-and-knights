@@ -43,6 +43,9 @@ export type PileSpec = {
   /** where new things come from when no loose one fits (else from above); where leftovers go (else up and away) */
   from?: [number, number]
   to?: [number, number]
+  /** leftovers arrive there at this height and turned this way (a piece going onto the board) */
+  toY?: number
+  toYaw?: number
   /** the pile's cards are face down and nobody may know them: once landed, they forget their face */
   hidden?: boolean
   enabled?: boolean
@@ -77,6 +80,7 @@ export type Thing = {
   still: number
   /** where it goes when nothing wants it */
   sink: [number, number] | null
+  sinkPose: { y?: number; yaw?: number }
   /** the look it takes on landing (a card landing face down in a hidden pile) */
   forget: string | null
   /** a settled card's height in its stack */
@@ -93,6 +97,8 @@ export type StaticPart = { box: [number, number, number]; at: [number, number, n
 
 const UP = new Vector3(0, 1, 0)
 const STEP = 1 / 60
+/** how long a piece takes from your supply to the board */
+export const VANISH = 0.55
 const GRAVITY = 6000
 /** a loose card's body is a little thicker than the card (paper-thin bodies sink into things) */
 const LOOSE_CARD = 1.6
@@ -318,6 +324,7 @@ export class Table {
         t.pile = spec.id
         t.slot = slot
         t.sink = spec.to ?? null
+        t.sinkPose = { y: spec.toY, yaw: spec.toYaw }
         list.push(t)
         // a card's face: shown as the pile's (unseen ones take the face they're given); one going into hiding keeps
         // its face till it lands face down, then forgets it
@@ -344,7 +351,9 @@ export class Table {
     for (const t of free) {
       if (t.fly?.vanish) continue
       const [x, z] = t.sink ?? [t.pose.p.x, t.pose.p.z]
-      this.flyTo(t, { p: new Vector3(x, t.sink ? 10 : t.pose.p.y + 260, z), q: t.pose.q.clone() }, now + Math.min(0.6, stagger++ * 0.045), true)
+      const { y, yaw } = t.sinkPose
+      const q = yaw !== undefined ? new Quaternion().setFromAxisAngle(UP, yaw) : t.pose.q.clone()
+      this.flyTo(t, { p: new Vector3(x, t.sink ? (y ?? 10) : t.pose.p.y + 260, z), q }, now, true)
     }
     this.stacksDirty = true
     this.dirty = true
@@ -374,6 +383,7 @@ export class Table {
       away: null,
       still: 0,
       sink: spec.to ?? null,
+      sinkPose: { y: spec.toY, yaw: spec.toYaw },
       forget: null,
       stackY: h.y,
     }
@@ -398,7 +408,9 @@ export class Table {
     if (t.mode === 'settled' && t.kind === 'card') t.pose.p.y = t.stackY
     const from = clone(t.pose)
     const d = from.p.distanceTo(to.p)
-    t.fly = { from, to: clone(to), t0, dur: Math.min(0.85, 0.28 + d / 1400), arc: Math.min(90, 8 + d * 0.16), vanish }
+    // (a leftover piece goes onto the board in a fixed time: the board's own piece appears as it arrives)
+    const dur = vanish && t.kind !== 'card' && t.sink ? VANISH : Math.min(0.85, 0.28 + d / 1400)
+    t.fly = { from, to: clone(to), t0, dur, arc: Math.min(90, 8 + d * 0.16), vanish }
     t.mode = 'fly'
     t.away = null
     this.dropBody(t)

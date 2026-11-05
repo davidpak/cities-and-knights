@@ -16,7 +16,7 @@ import '../lib/toy.ts'
 import { getAtlas } from './atlas.ts'
 import { buildIsland } from './island.ts'
 import { Dice } from './Dice.tsx'
-import { City, Pulse, Road, Robber, Settlement, useRedraw } from './Pieces.tsx'
+import { City, Pulse, Road, Robber, Settlement, boardShown, useRedraw } from './Pieces.tsx'
 import { CAMERA, SEA, TILE, VIEW, edgeAt, hexAt, vertexAt } from './spec.ts'
 import { TestHook } from './TestHook.tsx'
 
@@ -200,20 +200,23 @@ function Pulses({ events, colors }: { events: GameEvent[]; colors: PlayerColor[]
 }
 
 /** the board and everything on it (not the dice: they sit wherever the table puts them) */
-export function BoardContents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, events = [], pieces = true }: BoardProps & { pieces?: boolean }) {
+export function BoardContents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, events = [], arrive = 0 }: BoardProps & { arrive?: number }) {
   const [rx, rz] = hexAt(robber)
+  useState(boardShown)
+  // yours wait for the piece flying over from your supply (on the table; `arrive` s)
+  const wait = (owner: number) => (owner === you ? arrive : 0)
   return (
     <>
       <Island tiles={tiles} harbors={harbors} />
-      {pieces && Object.entries(roads).map(([e, owner]) => {
+      {Object.entries(roads).map(([e, owner]) => {
         const [x, z] = edgeAt(Number(e))
-        return <Road key={`r${e}`} color={colors[owner]} x={x} z={z} angle={TOPO.edges[Number(e)].angle} />
+        return <Road key={`r${e}`} color={colors[owner]} x={x} z={z} angle={TOPO.edges[Number(e)].angle} delay={wait(owner)} />
       })}
-      {pieces && Object.entries(buildings).map(([v, b]) => {
+      {Object.entries(buildings).map(([v, b]) => {
         const [x, z] = vertexAt(Number(v))
-        return b.kind === 'city' ? <City key={`c${v}`} color={colors[b.owner]} x={x} z={z} /> : <Settlement key={`s${v}`} color={colors[b.owner]} x={x} z={z} />
+        return b.kind === 'city' ? <City key={`c${v}`} color={colors[b.owner]} x={x} z={z} delay={wait(b.owner)} /> : <Settlement key={`s${v}`} color={colors[b.owner]} x={x} z={z} delay={wait(b.owner)} />
       })}
-      {pieces && <Robber x={rx} z={rz} />}
+      <Robber x={rx} z={rz} />
       <Pulses events={events} colors={colors} />
       {picking && you >= 0 && <Picker picking={picking} color={colors[you]} onPick={onPick} />}
       <ShadowsOnChange deps={[JSON.stringify(buildings), JSON.stringify(roads), robber, tiles]} />

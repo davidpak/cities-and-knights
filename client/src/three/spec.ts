@@ -54,7 +54,20 @@ export const ROBBER = { r: 11, h: 30 } // [D]
  * Measured in the harbour's own frame: u along the coast (0 = the side's middle), v straight out to sea from it.
  */
 export const HARBOR = {
-  deck: { len: 40, from: 1.5, to: 13, planks: 7, gap: 0.7, h: 2.2, top: 9.5, beam: 1.8 }, // [D] stands just off the tile, over water; a darker beam along its sea edge
+  deck: {
+    // [T] runs the whole side, corner to corner, stopping 1 mm short of each: so it plainly serves those two corners
+    get len() {
+      return TILE.layout - 2
+    },
+    from: 1.5, // [D] just off the tile's edge, over the water
+    to: 13, // [D]
+    planks: 9, // [D]
+    gap: 0.7, // [D]
+    h: 2.2, // [D]
+    top: 9.5, // [D] a little below the tile tops, so a settlement on the corner stands over it
+    beam: 1.8, // [D] a darker beam along its sea edge
+  },
+  corner: { r: 2.2, above: 4.5 }, // [D] a taller post at each of the side's two corners, marking them
   pier: { w: 10, from: 13.5, planks: 3, plank: 2.4, gap: 0.6 }, // [D] a walkway of cross planks from the dock into the sign
   post: { r: 1.5, above: 2.6 }, // [D] the dock's sea-side posts stand a little above the deck
   out: 30, // [D] the sign's centre, from the side's middle
@@ -178,7 +191,22 @@ export function checkBoard(): CheckResult[] {
   let closest = Infinity
   signs.forEach((a, i) => signs.forEach((b, j) => j > i && (closest = Math.min(closest, Math.hypot(a[0] - b[0], a[1] - b[1])))))
   add('harbours never touch each other', closest > 2 * (HARBOR.boat.u + HARBOR.boat.beam), `${f(closest)} mm apart`)
-  add('the dock fits along its side, short of the corners', HARBOR.deck.len < TILE.layout - 2 * 8, `${HARBOR.deck.len} < ${f(TILE.layout - 16)}`)
+  // each dock lies exactly along its side and reaches both of that side's corners (the two that get the rate)
+  let worstOff = 0
+  let worstEnd = 0
+  for (const e of TOPO.harbors) {
+    const fr = harborFrame(e)
+    const [mx, mz] = edgeAt(e)
+    for (const v of [TOPO.edges[e].a, TOPO.edges[e].b]) {
+      const [x, z] = vertexAt(v)
+      const u = (x - mx) * fr.along[0] + (z - mz) * fr.along[1]
+      const w = (x - mx) * fr.out[0] + (z - mz) * fr.out[1]
+      worstOff = Math.max(worstOff, Math.abs(w)) // a corner off the dock's line
+      worstEnd = Math.max(worstEnd, Math.abs(Math.abs(u) - HARBOR.deck.len / 2)) // how far a dock end is from its corner
+    }
+  }
+  add('every dock lies along its side (corners on its line)', worstOff < 0.01, `${worstOff.toFixed(3)} mm off`)
+  add('every dock reaches both its corners', worstEnd <= 1.01, `ends ${f(worstEnd)} mm from the corners`)
   const landR = Math.max(...TOPO.vertices.map((v) => Math.hypot(...toBoard(v.x, v.y))))
   add('the frame clears the land', landR < apothem - 10, `${f(landR)} < ${f(apothem - 10)}`)
 

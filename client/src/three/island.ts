@@ -172,9 +172,12 @@ function harbor(b: Builder, pictures: BufferGeometry[], h: Harbor, n: number, si
   const w = (len - gap * (planks - 1)) / planks
   for (let i = 0; i < planks; i++) box(-len / 2 + w / 2 + i * (w + gap), (from + to) / 2, w, to - from, top, ph, WOOD[i % 2])
   box(0, to - beam / 2, len + 1, beam, top + 0.4, ph + 1, POST)
-  for (const u of [-len / 2 + 1.6, len / 2 - 1.6]) {
-    post(u, from + 1.5, top - ph)
-    post(u, to - beam / 2, top + H.post.above) // stands proud of the deck at the sea corners
+  for (const u of [-len / 2 + 1.6, len / 2 - 1.6]) post(u, from + 1.5, top - ph)
+  // a taller post at each corner of the side: these are the two building spots that get this harbour's rate
+  for (const u of [-len / 2 + H.corner.r, len / 2 - H.corner.r]) {
+    const [x, z] = on(u, to - beam / 2)
+    b.add(UNIT.cyl, POST, at(x, 0, z, [H.corner.r, top + H.corner.above, H.corner.r]))
+    b.add(UNIT.ball, POST, at(x, top + H.corner.above, z, H.corner.r))
   }
   // the pier: a walkway of cross planks from the dock into the sign
   const P_ = H.pier

@@ -1,22 +1,21 @@
 {
   "name": "server",
-  "version": "1.0.0",
-  "main": "index.js",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "tsx index.ts",
+    "dev": "tsx watch index.ts",
+    "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "description": "",
   "dependencies": {
-    "@adminjs/express": "^6.1.1",
-    "adminjs": "^7.8.15",
-    "cors": "^2.8.5",
     "express": "^5.1.0",
-    "react-router-dom": "^7.5.3",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.4",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3"
   }
 }

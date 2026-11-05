@@ -1,0 +1,59 @@
+/**
+ * Every colour in the game, in one short list. The toy look comes from the playbook: matte, warm local colours,
+ * darks that are plum and never black. Terrain colours are chosen first for telling tiles apart at a glance
+ * (forest dark green, pasture light green, fields gold, hills terracotta, mountains slate, desert sand).
+ */
+import type { PlayerColor, Resource, Terrain } from '../../../shared/rules.ts'
+
+export const GAME_NAME = 'Hearth Isles'
+
+export const PAL = {
+  plum: '#3d3656', // the darks: robber, text on tokens
+  plumDeep: '#2b2538', // UI plates
+  cream: '#fff4e6', // UI text, tokens
+  creamDeep: '#f1e2cc', // token rims
+  peach: '#ffd6a0', // UI accents
+  honey: '#d9a877', // the table
+  honeyDeep: '#b9875c',
+  maple: '#e7b98a', // the frame round the sea
+  mapleDeep: '#c99464',
+  sea: '#78b4c6',
+  seaDeep: '#5e97ad',
+  red: '#c8453c', // 6 and 8 on the tokens
+  bg: '#2a2340',
+  bgLow: '#4a3a62',
+} as const
+
+/** each tile: its ground, its sides, and the colours of what stands on it */
+export const TERRAIN: Record<Terrain, { top: string; side: string; a: string; b: string; c: string }> = {
+  forest: { top: '#5f9a5c', side: '#4a7a49', a: '#2f6a43', b: '#3f7f4c', c: '#8a5e3c' }, // canopy dark, canopy light, trunk
+  pasture: { top: '#a8d27a', side: '#86ad5e', a: '#fbf6ee', b: '#4a4060', c: '#8fc263' }, // sheep, sheep face, tufts
+  fields: { top: '#e8c262', side: '#c49d47', a: '#f3d27a', b: '#d9a94a', c: '#b98838' }, // wheat light, wheat, sheaf tie
+  hills: { top: '#d48a5e', side: '#ae6c46', a: '#b8573a', b: '#e0a07a', c: '#9c4a33' }, // brick, mound light, brick dark
+  mountains: { top: '#9a9aae', side: '#7c7b92', a: '#8a879f', b: '#b5b3c5', c: '#fbf6ee' }, // rock, rock light, snow
+  desert: { top: '#ead2a0', side: '#cdb27f', a: '#e0c38c', b: '#8fb069', c: '#cfae78' }, // dune, cactus, stone
+}
+
+/** pieces: clear and distinct first, still matte and warm */
+export const PLAYER: Record<PlayerColor, { body: string; roof: string; ui: string }> = {
+  red: { body: '#e0574c', roof: '#b23e37', ui: '#ef6f63' },
+  blue: { body: '#4f7fd8', roof: '#3a62b0', ui: '#6f9bf0' },
+  orange: { body: '#f2a43a', roof: '#d07f22', ui: '#f6b55a' },
+  white: { body: '#f4efe6', roof: '#cfc6d8', ui: '#f4efe6' },
+}
+
+export const RESOURCE_COLOR: Record<Resource, string> = {
+  lumber: '#3f7f4c',
+  brick: '#c4643f',
+  wool: '#9ccd6e',
+  grain: '#e5b94e',
+  ore: '#8f8ca6',
+}
+
+export const RESOURCE_NAME: Record<Resource, string> = {
+  lumber: 'Lumber',
+  brick: 'Brick',
+  wool: 'Wool',
+  grain: 'Grain',
+  ore: 'Ore',
+}

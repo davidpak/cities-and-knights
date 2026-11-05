@@ -1,8 +1,7 @@
 {
-    "build": {
-      "builder": "NIXPACKS",
-      "buildCommand": "cd server && npm install",
-      "startCommand": "cd server && npm start"
-    }
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "cd client && npm ci --include=dev && npm run build && cd ../server && npm ci --include=dev",
+    "startCommand": "cd server && npm start"
   }
-  
+}

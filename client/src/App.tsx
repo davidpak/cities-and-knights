@@ -1,19 +1,28 @@
-// import { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import HomePage from './pages/HomePage';
-import GamePage from './pages/GamePage';
-import GameBoardPage from './pages/GameBoardPage'
+import { lazy, Suspense, useEffect } from 'react'
+import { connect, playerId, useStore } from './net.ts'
+import { Game } from './ui/Game.tsx'
+import { Home } from './ui/Home.tsx'
+import { Lobby } from './ui/Lobby.tsx'
 
-function App() {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/game/:roomCode" element={<GamePage />} />
-        <Route path="/gameboard/:roomCode" element={<GameBoardPage />} />
-      </Routes>
-    </Router>
-  );
+/** pieces and the board on their own pages (?part=…), for building and checking them alone */
+const Parts = lazy(() => import('./ui/Parts.tsx'))
+
+export default function App() {
+  const part = new URLSearchParams(location.search).get('part')
+  if (part)
+    return (
+      <Suspense fallback={null}>
+        <Parts part={part} />
+      </Suspense>
+    )
+  return <Play />
 }
 
-export default App;
+function Play() {
+  const { room, view, solo } = useStore()
+  useEffect(() => connect(), [])
+  if (!room) return <Home />
+  if (!room.started) return <Lobby info={room} me={solo ? 'you' : playerId} />
+  if (!view) return <div className="home"><div className="plate home-card">Loading the table…</div></div>
+  return <Game view={view} />
+}

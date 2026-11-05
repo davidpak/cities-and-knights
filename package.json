@@ -1,0 +1,19 @@
+{
+  "name": "cities-and-knights",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "tsx --test shared/*.test.ts",
+    "check": "npm --prefix client run check",
+    "typecheck": "tsc -p shared --noEmit && (cd server && npx tsc --noEmit) && (cd client && npx tsc --noEmit)",
+    "e2e": "tsx shared/server.e2e.ts",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "socket.io-client": "^4.8.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

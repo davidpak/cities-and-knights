@@ -358,6 +358,10 @@ input {
   align-items: center;
   gap: calc(var(--u) * 6);
 }
+/* (in a list of everyone, a name starts at its spot) */
+.name.start {
+  transform: translate(0, -50%);
+}
 .name::before {
   content: '';
   width: calc(var(--u) * 10);
@@ -389,21 +393,21 @@ input {
 }
 /* on a phone the levels go on a line of their own under the name (three names side by side must fit) */
 @media (max-width: 600px) {
-  .name:has(.lvs) {
+  .name:not(.start):has(.lvs) {
     flex-wrap: wrap;
     justify-content: center;
     row-gap: 2px;
     width: min-content;
     padding-bottom: 3px;
   }
-  .name:has(.lvs)::before {
+  .name:not(.start):has(.lvs)::before {
     display: none;
   }
   /* (their colour, as a band along the top, where the dot was) */
-  .name:has(.lvs) {
+  .name:not(.start):has(.lvs) {
     border-top: 3px solid var(--pc);
   }
-  .name .lvs {
+  .name:not(.start) .lvs {
     flex-basis: 100%;
     justify-content: center;
   }

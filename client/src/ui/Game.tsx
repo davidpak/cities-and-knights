@@ -219,7 +219,7 @@ export function Game({ view }: { view: View }) {
           hand: (() => {
             const kinds = view.x ? GOODS : RESOURCES
             const h = shownHand
-            const at = packHand(layout.hand, kinds, h)
+            const at = packHand(layout.hand, kinds, h, layout.handEnd)
             return kinds.map((r) => at[r])
           })(),
           bank: layout.bank,
@@ -542,7 +542,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
   return (
     <div className="labels">
       {hand && (() => {
-        const spots = packHand(layout.hand, view.x ? GOODS : RESOURCES, hand)
+        const spots = packHand(layout.hand, view.x ? GOODS : RESOURCES, hand, layout.handEnd)
         return (view.x ? GOODS : RESOURCES).map((r) => count(`h${r}`, spots[r], hand[r]))
       })()}
       {/* the bank shows one card of each kind; only a kind running low says how many are left */}
@@ -562,7 +562,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
         return (
           <span key={`s${p}`}>
             {count(`oh${p}`, parts.hand, op.handCount, parts.small ? CARD.small : 1)}
-            <span className={`name ${view.current === p ? 'turn' : ''}`} style={{ ...at(parts.label), ['--pc' as string]: PLAYER[op.color].ui }}>
+            <span className={`name ${parts.labelStart ? 'start' : ''} ${view.current === p ? 'turn' : ''}`} style={{ ...at(parts.label), ['--pc' as string]: PLAYER[op.color].ui }}>
               {op.name} <b>{op.points}</b>
               {/* the expansion: their three city levels, in the tracks' colours */}
               {view.x && (

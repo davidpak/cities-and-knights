@@ -160,9 +160,10 @@ function useHarvest(view: View) {
 
 /** where each kind in your hand lies: only the kinds you hold, packed from the left in the usual order (a kind you
  *  have none of: where it would go) */
-export function packHand(slots: Spot[], kinds: readonly Good[], hand: Partial<Hand> | null): Record<Good, Spot> {
+export function packHand(slots: Spot[], kinds: readonly Good[], hand: Partial<Hand> | null, end = false): Record<Good, Spot> {
   const out = {} as Record<Good, Spot>
-  let i = 0
+  // (packed against the last slot instead, if `end`: the kinds you hold still run in order, left to right)
+  let i = end ? Math.max(0, slots.length - kinds.filter((r) => (hand?.[r] ?? 0) > 0).length) : 0
   for (const r of kinds) {
     out[r] = slots[Math.min(slots.length - 1, i)]
     if ((hand?.[r] ?? 0) > 0) i++
@@ -182,7 +183,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   const x = view.x
   const K = layout.k
   const kinds: readonly Good[] = x ? GOODS : RESOURCES
-  const spots = packHand(layout.hand, kinds, hand)
+  const spots = packHand(layout.hand, kinds, hand, layout.handEnd)
   const held = hand ? kinds.filter((r) => hand[r] > 0).length : 0
   /** a roll's cards: up out of the tile that gave them, once the dice have landed */
   const fromTile = (p: number, r?: Good) => {

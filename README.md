@@ -21,21 +21,32 @@ expansion, with our own names and wording throughout:
   everyone whose level in that track is high enough for the red die. Hold four at most; point cards go down at once.
 - The **trader**: put it on a tile beside you to trade that tile's resource 2 for 1, and hold a point while it's yours.
 
-On the table: your knights and walls wait beside your pieces. Your three tracks are desk **flip charts** just above
-your hand: each page shows the level reached, the building it has grown to, and what the next step costs; click a
-chart to take its next step and the page goes over the top (everyone else's levels show as three
-coloured numbers in their name tags; on a phone your charts make way for the trade tray while it's out). The barbarians' **voyage** is a little sea board in a maple frame along the board's upper-left side: eight big hexes
-lie on it zig-zagging from the fog out at sea through seven numbered ones to an island with a town. Their longship
-sails a hex on at each ship on the event die, and the hexes it has crossed go dark, so how close they are reads at a
-glance; a signpost on a rock beside the last hex is painted with their strength against the knights standing ready. Click a
+**How the table is laid out.** Each part of the table has its own zone.
+
+- **On a computer:** everyone else sits across the top. The barbarians' voyage stands straight up at the board's
+  left. The bank's fan, the progress decks, the trade tray and the dice are on its right. Your row runs along the
+  bottom: your hand, packed against your three flip charts, which sit in the middle under the board, then your
+  progress cards, points and awards. Your pieces, knights and walls wait at the left, above your name.
+- **On a phone:** everything is one column. At the top, the voyage stands at the left, and beside it everyone else is
+  a list: their name, points and three levels, then their cards, lined up over the progress decks. Below that comes
+  the board, then your flip charts with your name beside them (the trade tray takes the charts' place while it's out),
+  your hand with the dice at its end, your progress cards, and your pieces. The bottom right is left clear for the
+  big buttons.
+
+Your three tracks are desk **flip charts**. Each page shows the level reached, the building it has grown to, and what
+the next step costs. Click a chart to take its next step, and the page goes over the top. The barbarians'
+**voyage** is a straight sea board in a maple frame. Eight big hexes lie on it, zig-zagging down from the fog at its
+top, through seven numbered hexes, to an island with a town. Their longship sails one hex on at each ship on the
+event die, and the hexes it has crossed go dark, so how close they are reads at a glance. A signpost on a rock beside
+the last hex shows their strength against the knights standing ready. Click a
 knight on the board to ready it, click a ready one to pick it up and then where it goes. Click a progress card to play
 it; if it needs a target, the line at the top says what to click.
 
 Every move is a plain click or button press: the board only shows spots where a move is legal, and the server
 decides every result. The board is 3D, tipped a little toward you; two real dice are thrown into a tray beside it.
 
-**Everything is on the table.** Your cards lie in front of you in stacks, only the kinds you hold, side by side from
-the left in the usual order (no empty places, no gaps), with your development cards right after them and your pieces waiting to be built. The bank sits at the side as one card of each kind, fanned like a hand of cards (a kind's count shows only when it
+**Everything is on the table.** Your cards lie in front of you in stacks, only the kinds you hold, side by side in the
+usual order (no empty places, no gaps), with your development cards close by and your pieces waiting to be built. The bank sits at the side as one card of each kind, fanned like a hand of cards (a kind's count shows only when it
 runs low), with its development deck (or the three progress piles), next to the dice
 in their tray. Everyone else's cards lie face down at their places. To do something, you do it to the thing:
 
@@ -152,5 +163,3 @@ bank running short), the robber on a 7 (discard half above 7 cards, move it, ste
 with costs and piece limits, development cards (knight, road building, year of plenty, monopoly, victory point; not
 on the turn you buy them, one per turn), harbours (3:1 and 2:1), trading with the bank and with players, Longest Road
 (5+, cut by others' settlements), Largest Army (3+), and winning at 10 points on your turn.
-
-Not yet: the knights-and-cities expansion layer.

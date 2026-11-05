@@ -96,15 +96,15 @@ function supplyHome(what: Build, at: Spot) {
       const layer = Math.floor(i / 3)
       const k = i % 3
       const across = layer % 2 === 1
-      const off = (k - 1) * 10
+      const off = (k - 1) * 11
       return { x: at[0] + (across ? off : 0), y: layer * ROAD.h, z: at[1] + (across ? 0 : off), yaw: (across ? Math.PI / 2 : 0) + (r() - 0.5) * 0.1 }
     }
     const cols = what === 'city' ? 2 : 3
-    const sx = what === 'city' ? 33 : 21
+    const sx = what === 'city' ? 37 : 22
     const row = Math.floor(i / cols)
     const col = i % cols
     const inRow = Math.min(cols, (what === 'city' ? 4 : 5) - row * cols)
-    return { x: at[0] + (col - (inRow - 1) / 2) * sx + (r() - 0.5) * 2, y: 0, z: at[1] + (row - 0.5) * 22 + (r() - 0.5) * 2, yaw: (r() - 0.5) * 0.4 }
+    return { x: at[0] + (col - (inRow - 1) / 2) * sx + (r() - 0.5) * 2, y: 0, z: at[1] + (row - 0.5) * 24 + (r() - 0.5) * 2, yaw: (r() - 0.5) * 0.3 }
   }
 }
 
@@ -138,16 +138,18 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   for (const { p, at } of layout.seats) {
     const o = view.players[p]
     const parts = seatParts(at, layout.portrait)
-    card({ id: `opp:${p}`, family: 'res', look: 'res:?', n: o.handCount, home: cardHome(`opp:${p}`, parts.hand, { faceDown: true, loose: 3 }), hidden: true, from: parts.hand, to: parts.hand, enabled: can.opponents.includes(p), onClick: () => on.opponent(p) })
-    card({ id: `odev:${p}`, family: 'dev', look: 'dev:?', n: o.cardCount, home: cardHome(`odev:${p}`, parts.dev, { faceDown: true, loose: 2.5 }), hidden: true, from: parts.dev, to: parts.dev })
-    card({ id: `kn:${p}`, family: 'dev', look: 'dev:knight', n: o.knights, home: cardHome(`kn:${p}`, parts.knights, { loose: 4 }), from: parts.knights, to: parts.knights })
+    const small = parts.small
+    card({ id: `opp:${p}`, family: 'res', look: 'res:?', n: o.handCount, small, home: cardHome(`opp:${p}`, parts.hand, { faceDown: true, loose: 3 }), hidden: true, from: parts.hand, to: parts.hand, enabled: can.opponents.includes(p), onClick: () => on.opponent(p) })
+    card({ id: `odev:${p}`, family: 'dev', look: 'dev:?', n: o.cardCount, small, home: cardHome(`odev:${p}`, parts.dev, { faceDown: true, loose: 2.5 }), hidden: true, from: parts.dev, to: parts.dev })
+    card({ id: `kn:${p}`, family: 'dev', look: 'dev:knight', n: o.knights, small, home: cardHome(`kn:${p}`, parts.knights, { loose: 4 }), from: parts.knights, to: parts.knights })
   }
   // the two award cards, with whoever holds them
   const award = (what: 'road' | 'army', p: number | null) => {
     if (p === null || p < 0) return
     const at: Spot = p === me ? layout.awardsMine : seatParts(seatOf(p)?.at ?? [0, -400], layout.portrait).awards
     const [x, z] = what === 'road' ? [at[0], at[1] - 6] : [at[0] + 6, at[1] + 6]
-    card({ id: `${what}:${p}`, family: `award:${what}`, look: `award:${what}`, n: 1, home: cardHome(`${what}:${p}`, [x, z], { turn: what === 'road' ? 0.08 : -0.08, base: what === 'army' ? CT : 0, loose: 0 }) })
+    const small = p !== me && layout.portrait
+    card({ id: `${what}:${p}`, family: `award:${what}`, look: `award:${what}`, n: 1, small, home: cardHome(`${what}:${p}`, [x, z], { turn: what === 'road' ? 0.08 : -0.08, base: what === 'army' ? CT : 0, loose: 0 }) })
   }
   award('road', view.longestRoad)
   award('army', view.largestArmy)
@@ -169,7 +171,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     if (tray.mode === 'trade' && !tray.locked)
       RESOURCES.forEach((r, i) => {
         const id = `want:${r}`
-        card({ id, family: 'want', look: `res:${r}`, n: 1, small: true, home: cardHome(id, layout.wants(i), { loose: 0 }), from: layout.bank[i], to: layout.bank[i], enabled: can.wants, onClick: () => on.want(r) })
+        card({ id, family: 'want', look: `res:${r}`, n: 1, small: true, home: cardHome(id, layout.wants(i), { loose: 0 }), enabled: can.wants, onClick: () => on.want(r) })
       })
   }
   // your waiting pieces (the board's pieces aren't bodies: they're fixed where they're built). One you build flies
@@ -266,10 +268,10 @@ function staticsFor(layout: Layout, tray: boolean, { tiles, buildings, roads }: 
 
 /** a dark place on the table where an empty pile goes (your hand, someone's cards), still clickable */
 function Slots({ view, layout, hand, can, on }: TableProps) {
-  const slots: { id: string; at: Spot; onClick?: () => void }[] = []
-  if (hand) RESOURCES.forEach((r, i) => hand[r] <= 0 && slots.push({ id: `h${r}`, at: layout.hand[i] }))
+  const slots: { id: string; at: Spot; k: number; onClick?: () => void }[] = []
+  if (hand) RESOURCES.forEach((r, i) => hand[r] <= 0 && slots.push({ id: `h${r}`, at: layout.hand[i], k: 1 }))
   for (const { p, at } of layout.seats)
-    if (view.players[p].handCount <= 0) slots.push({ id: `o${p}`, at: seatParts(at, layout.portrait).hand, onClick: can.opponents.includes(p) ? () => on.opponent(p) : undefined })
+    if (view.players[p].handCount <= 0) slots.push({ id: `o${p}`, at: seatParts(at, layout.portrait).hand, k: layout.portrait ? CARD.small : 1, onClick: can.opponents.includes(p) ? () => on.opponent(p) : undefined })
   return (
     <>
       {slots.map((p) => (
@@ -277,7 +279,7 @@ function Slots({ view, layout, hand, can, on }: TableProps) {
           key={p.id}
           geometry={BOX}
           material={mat('#3b2a1d')}
-          scale={[CARD.w, 0.3, CARD.d]}
+          scale={[CARD.w * p.k, 0.3, CARD.d * p.k]}
           position={[p.at[0], 0.15, p.at[1]]}
           receiveShadow
           onClick={(e) => {

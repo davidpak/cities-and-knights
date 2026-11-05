@@ -110,13 +110,16 @@ const HOUSE = 'M12 3l8 7v11H4V10z'
 let atlas: CanvasTexture | null = null
 export function cardAtlas() {
   if (atlas) return atlas
+  // painted at one and a half times its layout size: the cards are big on screen, and their faces stay sharp
+  const R = 1.5
   const cv = document.createElement('canvas')
-  cv.width = W * COLS
-  cv.height = H * ROWS
+  cv.width = W * COLS * R
+  cv.height = H * ROWS * R
   const ctx = cv.getContext('2d')!
   const cell = (i: number, draw: (c: CanvasRenderingContext2D) => void) => {
     ctx.save()
-    ctx.translate((i % COLS) * W, Math.floor(i / COLS) * H)
+    ctx.translate((i % COLS) * W * R, Math.floor(i / COLS) * H * R)
+    ctx.scale(R, R)
     ctx.beginPath()
     ctx.rect(0, 0, W, H)
     ctx.clip()

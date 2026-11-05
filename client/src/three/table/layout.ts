@@ -8,11 +8,11 @@
 export type Spot = [number, number]
 export type Box = { what: string; x: number; z: number; w: number; d: number }
 
-export const CARD = { w: 54, d: 76, t: 0.9, small: 0.62 } // [D] a card lying flat; small ones (on the tray) are 62%
+export const CARD = { w: 64, d: 90, t: 0.9, small: 0.6 } // [D] a card lying flat; small ones (on the tray, and everyone else's on a tall screen) are 60%
 export const TRAY = { w: 200, d: 150, rim: 6, h: 7 } // [D] the trade tray: near half is what you give, far half what you get
 export const DICE_TRAY = { w: 92, d: 62 } // [D] (matches spec DICE.tray)
 /** your pieces waiting to be built: a pile of roads, a cluster of houses, a group of cities */
-export const SUPPLY = { road: { w: 46, d: 46 }, settlement: { w: 62, d: 42 }, city: { w: 66, d: 46 } } // [D]
+export const SUPPLY = { road: { w: 52, d: 52 }, settlement: { w: 72, d: 50 }, city: { w: 76, d: 54 } } // [D]
 
 export type Layout = {
   portrait: boolean
@@ -31,15 +31,24 @@ export type Layout = {
   boxes: Box[]
 }
 
-/** an opponent's area: their hand (face down), their development cards (face down), knights played, awards */
-export const seatParts = (at: Spot, portrait = false) => ({
-  hand: [at[0] - 34, at[1]] as Spot,
-  dev: [at[0] + 34, at[1]] as Spot,
-  knights: [at[0] + (portrait ? 92 : 102), at[1]] as Spot,
-  awards: [at[0] - (portrait ? 92 : 102), at[1]] as Spot,
-  // their name and points, just below their cards (toward the board)
-  label: [at[0], at[1] + (portrait ? 64 : 68)] as Spot,
-})
+/** an opponent's area: their hand (face down), their development cards (face down), knights played, awards.
+ *  On a tall screen their cards are small ones (the width there goes to the board) */
+export const seatParts = (at: Spot, portrait = false) => {
+  const k = portrait ? CARD.small : 1
+  const step = CARD.w * k + 8
+  return {
+    hand: [at[0] - step / 2, at[1]] as Spot,
+    dev: [at[0] + step / 2, at[1]] as Spot,
+    knights: [at[0] + step * 1.5, at[1]] as Spot,
+    awards: [at[0] - step * 1.5, at[1]] as Spot,
+    // their name and points, just below their cards (toward the board)
+    label: [at[0], at[1] + (CARD.d * k) / 2 + 25] as Spot,
+    small: portrait,
+  }
+}
+
+/** the height kept clear at the top for the two lines (whose turn, what just happened) */
+const LINES = 70
 
 export function layoutFor(players: number, you: number, aspect: number): Layout {
   const portrait = aspect < 0.95
@@ -48,38 +57,42 @@ export function layoutFor(players: number, you: number, aspect: number): Layout 
 
   let L: Omit<Layout, 'boxes'>
   if (!portrait) {
-    const xs = spread(others.length, others.length === 2 ? 240 : 440)
+    // the board in the middle; above it everyone else; below it your hand and development cards; on the left the
+    // trade tray and your waiting pieces; on the right the bank, its deck and the dice
+    const xs = spread(others.length, others.length === 2 ? 300 : 430)
     L = {
       portrait,
-      hand: Array.from({ length: 5 }, (_, i): Spot => [-150 + i * 75, 420]),
-      dev: (i) => [210 + i * 62, 420],
-      supply: { road: [-450, 420], settlement: [-372, 420], city: [-285, 420] },
-      awardsMine: [-562, 420],
-      meLabel: [0, 352],
-      tray: [-525, 190],
-      wants: (i) => [-525 + (i - 2) * 38, 190 - TRAY.d / 2 - 30],
-      bank: Array.from({ length: 5 }, (_, i): Spot => [450 + (i % 3) * 68, -62 + Math.floor(i / 3) * 90]),
-      deck: [586, 28],
-      dice: [528, 232],
-      seats: others.map((p, i) => ({ p, at: [xs[i], -425] as Spot })),
-      bounds: { minX: -640, maxX: 640, minZ: -568, maxZ: 498 },
+      hand: Array.from({ length: 5 }, (_, i): Spot => [-300 + i * 78, 392]),
+      dev: (i) => [84 + i * 74, 392],
+      supply: { road: [-590, 190], settlement: [-515, 190], city: [-428, 190] },
+      awardsMine: [-560, 318],
+      meLabel: [-144, 322],
+      tray: [-520, 0],
+      wants: (i) => [-520 + (i - 2) * 44, -130],
+      bank: Array.from({ length: 5 }, (_, i): Spot => [452 + (i % 3) * 74, -100 + Math.floor(i / 3) * 100]),
+      deck: [600, 0],
+      dice: [526, 140],
+      seats: others.map((p, i) => ({ p, at: [xs[i], -395] as Spot })),
+      bounds: { minX: -645, maxX: 645, minZ: -515, maxZ: 450 },
     }
   } else {
-    const xs = spread(others.length, others.length === 2 ? 180 : 272)
+    // stacked: everyone else, the bank and dice, the board, the tray, your hand, then your development cards
+    // and pieces
+    const xs = spread(others.length, others.length === 2 ? 180 : 268)
     L = {
       portrait,
-      hand: Array.from({ length: 5 }, (_, i): Spot => [-150 + i * 75, 620]),
-      dev: (i) => [40 + i * 64, 724],
-      supply: { road: [-335, 724], settlement: [-258, 724], city: [-170, 724] },
+      hand: Array.from({ length: 5 }, (_, i): Spot => [(i - 2) * 76, 620]),
+      dev: (i) => [40 + i * 70, 724],
+      supply: { road: [-330, 724], settlement: [-255, 724], city: [-170, 724] },
       awardsMine: [-300, 620],
-      meLabel: [0, 556],
+      meLabel: [0, 548],
       tray: [0, 450],
-      wants: (i) => [(i - 2) * 38, 450 - TRAY.d / 2 - 30],
-      bank: Array.from({ length: 5 }, (_, i): Spot => [-175 + i * 70, -430]),
-      deck: [175, -430],
-      dice: [300, -430],
-      seats: others.map((p, i) => ({ p, at: [xs[i], -565] as Spot })),
-      bounds: { minX: -392, maxX: 392, minZ: -720, maxZ: 852 },
+      wants: (i) => [(i - 2) * 44, 450 - TRAY.d / 2 - 32],
+      bank: Array.from({ length: 5 }, (_, i): Spot => [-300 + i * 72, -440]),
+      deck: [66, -440],
+      dice: [200, -440],
+      seats: others.map((p, i) => ({ p, at: [xs[i], -560] as Spot })),
+      bounds: { minX: -362, maxX: 362, minZ: -665, maxZ: 852 },
     }
   }
 
@@ -98,7 +111,8 @@ export function layoutFor(players: number, you: number, aspect: number): Layout 
     c('my awards', L.awardsMine),
     ...L.seats.flatMap(({ p, at }) => {
       const s = seatParts(at, portrait)
-      return [c(`p${p} hand`, s.hand), c(`p${p} dev`, s.dev), c(`p${p} knights`, s.knights), c(`p${p} awards`, s.awards)]
+      const k = s.small ? CARD.small : 1
+      return [c(`p${p} hand`, s.hand, CARD.w * k, CARD.d * k), c(`p${p} dev`, s.dev, CARD.w * k, CARD.d * k), c(`p${p} knights`, s.knights, CARD.w * k, CARD.d * k), c(`p${p} awards`, s.awards, CARD.w * k, CARD.d * k)]
     }),
   ]
   // where the few things drawn over the table sit (sizes at the labels' usual scale; they scale with the table):
@@ -106,7 +120,7 @@ export function layoutFor(players: number, you: number, aspect: number): Layout 
   const { maxX, minZ, maxZ } = L.bounds
   const ui = (what: string, x0: number, x1: number, z0: number, z1: number): Box => ({ what: `[${what}]`, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0 })
   boxes.push(
-    ui('top lines', -230, 230, minZ, minZ + 92),
+    ui('top lines', -230, 230, minZ, minZ + LINES),
     ui('history', maxX - 110, maxX, minZ, minZ + 56),
     ui('turn button', maxX - 150, maxX, maxZ - 76, maxZ),
     ui('tray check and cross', L.tray[0] + TRAY.w / 2 + 4, L.tray[0] + TRAY.w / 2 + 62, L.tray[1] - 62, L.tray[1] + 62),

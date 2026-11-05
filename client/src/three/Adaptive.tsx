@@ -3,7 +3,8 @@
  *
  * It watches the time between frames while things move (the table draws nothing when nothing moves, so there's
  * nothing to watch otherwise). If frames run long, it draws fewer pixels: the resolution steps down a fifth at a
- * time, to three quarters of a CSS pixel at the least, and if that's still not enough the shadow map halves.
+ * time, to one pixel per CSS pixel at the least (any lower is blurry), and if that's still not enough the shadow
+ * map halves.
  * Long smooth stretches let it step back up, one step, and never again to a step it already had to leave.
  * What a device managed is remembered for next time (quality.ts), so a weak machine starts where it can keep up.
  *

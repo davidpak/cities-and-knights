@@ -50,10 +50,10 @@ export const TOKEN = { r: 21, h: 4.5, bevel: 1.4 } // [D] seen straight down, bi
  *   city        a tall gabled hall with a lower wing beside it (twice the house, unmistakably bigger)
  *   road        a square bar
  */
-export const SETTLEMENT = { w: 13, d: 17, wall: 9, peak: 16, round: 1.4 } // [D]
-export const CITY = { w: 28, d: 15, hall: 14, wall: 17, peak: 25, wing: 11, round: 1.4 } // [D] hall: its width (left part); wall/peak: its heights; wing: the right part's height
-export const ROAD = { len: 32, w: 7, h: 7, round: 1.6 } // [D]
-export const ROBBER = { r: 11, h: 30 } // [D]
+export const SETTLEMENT = { w: 15, d: 19, wall: 10.5, peak: 18.5, round: 1.5 } // [D]
+export const CITY = { w: 32, d: 17, hall: 16, wall: 19.5, peak: 28.5, wing: 12.5, round: 1.5 } // [D] hall: its width (left part); wall/peak: its heights; wing: the right part's height
+export const ROAD = { len: 36, w: 8, h: 8, round: 1.7 } // [D]
+export const ROBBER = { r: 12.5, h: 34 } // [D]
 
 /**
  * A harbour, as on the usual board: its sign sits out in the water off one coast side, and two short wooden piers

@@ -331,17 +331,17 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
 function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof layoutFor>; hand: Hand | null }) {
   const project = useProjector()
   const me = view.you
-  const corner = ([x, z]: Spot, n: number) => {
-    const [sx, sy] = project(x + CARD.w / 2 - 4, Math.min(n, 12) * (CARD.t + 0.12) + 2, z - CARD.d / 2 + 4)
+  const corner = ([x, z]: Spot, n: number, k = 1) => {
+    const [sx, sy] = project(x + (CARD.w * k) / 2 - 4, n * CARD.t + 2, z - (CARD.d * k) / 2 + 4)
     return { left: sx, top: sy }
   }
   const at = ([x, z]: Spot, y = 4) => {
     const [sx, sy] = project(x, y, z)
     return { left: sx, top: sy }
   }
-  const count = (key: string, spot: Spot, n: number) =>
+  const count = (key: string, spot: Spot, n: number, k = 1) =>
     n > 1 ? (
-      <span key={key} className="count" style={corner(spot, n)}>
+      <span key={key} className="count" style={corner(spot, n, k)}>
         {n}
       </span>
     ) : null
@@ -357,7 +357,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
         const answer = o && o.from === me && o.to === undefined ? (o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait') : null
         return (
           <span key={`s${p}`}>
-            {count(`oh${p}`, parts.hand, op.handCount)}
+            {count(`oh${p}`, parts.hand, op.handCount, parts.small ? CARD.small : 1)}
             <span className={`name ${view.current === p ? 'turn' : ''}`} style={{ ...at(parts.label), ['--pc' as string]: PLAYER[op.color].ui }}>
               {op.name} <b>{op.points}</b>
               {answer === 'yes' && <i className="mark ok">✓</i>}

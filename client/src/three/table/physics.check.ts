@@ -6,6 +6,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import { CITY_OUTLINE, SETTLEMENT_OUTLINE } from '../geometry.ts'
 import { CITY, ROAD, SETTLEMENT } from '../spec.ts'
+import { Vector3 } from 'three'
 import { Table, type PileSpec, type Shapes } from './things.ts'
 
 const prism = (o: [number, number][], d: number) => new Float32Array(o.flatMap(([x, y]) => [x, y, -d / 2, x, y, d / 2]))
@@ -28,7 +29,7 @@ t.attach(RAPIER as never)
 t.setStatics('base', [{ box: [5000, 50, 5000], at: [0, -50, 0] }])
 let now = 0
 const run = (s: number) => {
-  for (let i = 0; i < s * 60; i++) {
+  for (let i = 0; i < Math.round(s * 60); i++) {
     now += 1 / 60
     t.update(now, 1 / 60)
   }
@@ -82,6 +83,46 @@ check('a road shoved through the houses moves them', moved > 0, `${moved} moved`
 run(5)
 check('then everything is home again', offHome() < 4.5, `${offHome().toFixed(2)} mm off at most`)
 check('and asleep', asleep(), `${t.things.filter((x) => (x.body && !x.body.isSleeping()) || x.mode !== 'settled').map((x) => `${x.kind}:${x.mode}`).join(' ') || 'all'}`)
+
+// never into the table: a card flung down hard, and a card turning over on its way to a face-down pile
+const lowestDrawn = (x: (typeof t.things)[number]) => {
+  const q = x.pose.q
+  let low = Infinity
+  for (const sx of [-27, 27]) for (const sz of [-38, 38]) for (const sy of [-0.45, 0.45]) low = Math.min(low, new Vector3(sx, sy, sz).applyQuaternion(q).y)
+  return x.pose.p.y + low
+}
+const card = t.grab(t.things.find((x) => x.pile === 'hand')!)!
+let low = Infinity
+for (let i = 0; i < 20; i++) {
+  t.carry(200 + i * 40, 40 - i * 2, 200)
+  run(1 / 60)
+}
+t.release()
+for (let i = 0; i < 120; i++) {
+  run(1 / 60)
+  low = Math.min(low, lowestDrawn(card))
+}
+check('a card flung at the table never goes into it', low > -0.05, `lowest ${low.toFixed(2)} mm`)
+run(3)
+t.setPiles([cards('bank', -200, 15), cards('hand', 0, 3), { id: 'down', kind: 'card', family: 'res', look: 'res:?', n: 1, hidden: true, home: () => ({ x: 120, y: 0.45, z: 0, yaw: 0.3, flip: true }) }, ...pieces], now)
+const turning = t.things.find((x) => x.pile === 'down')!
+low = Infinity
+for (let i = 0; i < 90; i++) {
+  run(1 / 60)
+  low = Math.min(low, lowestDrawn(turning))
+}
+check('a card turning over on its way stays above the table', low > -0.05 && turning.mode === 'settled', `lowest ${low.toFixed(2)} mm, ${turning.mode}`)
+
+// a road taken off the top of the pile and tossed: it comes back, and the pile goes to sleep (nothing left drawing)
+const top9 = t.grab(t.things.find((x) => x.pile === 'roads' && x.slot === 8)!)!
+for (let i = 0; i < 20; i++) {
+  t.carry(200, 40, 150)
+  run(1 / 60)
+}
+t.release()
+run(6)
+const restless = t.things.filter((x) => (x.body && !x.body.isSleeping()) || x.mode !== 'settled')
+check('a road tossed and back on its pile: the pile sleeps', restless.length === 0 && top9.mode === 'settled', restless.map((x) => `${x.kind}:${x.mode}:${x.slot}`).join(' ') || 'all asleep')
 
 let bad = 0
 for (const r of results) {

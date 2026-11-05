@@ -10,6 +10,7 @@ import { CARDS, CARD_NAME, RESOURCES, type Card, type Resource } from '../../../
 import { CARD_ICON, ICON } from '../../lib/icons.ts'
 import { RESOURCE_COLOR, RESOURCE_NAME } from '../../lib/palette.ts'
 import { FONT } from '../atlas.ts'
+import { QUALITY } from '../quality.ts'
 
 const INK = '#2a1d13'
 const PAPER = '#f4e9d0'
@@ -134,7 +135,7 @@ export function cardAtlas() {
   })
   atlas = new CanvasTexture(cv)
   atlas.colorSpace = SRGBColorSpace
-  atlas.anisotropy = 8
+  atlas.anisotropy = QUALITY.aniso
   return atlas
 }
 
@@ -148,7 +149,7 @@ function paint(key: string, w: number, h: number, draw: (c: CanvasRenderingConte
   draw(cv.getContext('2d')!)
   const t = new CanvasTexture(cv)
   t.colorSpace = SRGBColorSpace
-  t.anisotropy = 8
+  t.anisotropy = QUALITY.aniso
   cache.set(key, t)
   return t
 }

@@ -3,30 +3,32 @@
  * physics throw seeded by the roll's number, see diceSim), so everyone at the table sees the same throw land on the
  * same faces. They draw only while they move. Clicking them rolls, when it's yours to roll.
  */
+import { QUALITY } from './quality.ts'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { useLayoutEffect, useMemo, useRef } from 'react'
-import { CanvasTexture, Group, Quaternion, SRGBColorSpace, Vector3 } from 'three'
+import { CanvasTexture, Group, Quaternion, SRGBColorSpace, Vector3, type BufferGeometry } from 'three'
 import { mat } from '../lib/toy.ts'
 import { PAL } from '../lib/palette.ts'
 import { DIE_FACES, dieGeo, feltGeo, trayGeo } from './geometry.ts'
 import { useRedraw } from './Pieces.tsx'
 import { DICE } from './spec.ts'
-import { FPS, throwDice, type Throw } from './diceSim.ts'
+import { FPS, prepareThrow, throwDice, type Throw } from './diceSim.ts'
 import { useRapier } from './physics.ts'
 
 const NORMALS = [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, -1, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)]
 const UP = new Vector3(0, 1, 0)
 
-const faces = new Map<number, CanvasTexture>()
-function face(v: number) {
-  const hit = faces.get(v)
-  if (hit) return hit
+/** all six faces in one picture (three across, two down), so a die is one draw, not six */
+let atlas: CanvasTexture | null = null
+function faceAtlas() {
+  if (atlas) return atlas
+  const S = 128
   const c = document.createElement('canvas')
-  c.width = c.height = 128
+  c.width = S * 3
+  c.height = S * 2
   const ctx = c.getContext('2d')!
   ctx.fillStyle = '#fbf7ef'
-  ctx.fillRect(0, 0, 128, 128)
-  ctx.fillStyle = v === 1 ? '#c8453c' : '#22170f'
+  ctx.fillRect(0, 0, c.width, c.height)
   const spots: Record<number, [number, number][]> = {
     1: [[0.5, 0.5]],
     2: [[0.28, 0.28], [0.72, 0.72]],
@@ -35,15 +37,42 @@ function face(v: number) {
     5: [[0.28, 0.28], [0.72, 0.28], [0.5, 0.5], [0.28, 0.72], [0.72, 0.72]],
     6: [[0.28, 0.25], [0.72, 0.25], [0.28, 0.5], [0.72, 0.5], [0.28, 0.75], [0.72, 0.75]],
   }
-  for (const [x, y] of spots[v]) {
-    ctx.beginPath()
-    ctx.arc(x * 128, y * 128, v === 1 ? 15 : 11, 0, Math.PI * 2)
-    ctx.fill()
+  for (let v = 1; v <= 6; v++) {
+    const ox = ((v - 1) % 3) * S
+    const oy = Math.floor((v - 1) / 3) * S
+    ctx.fillStyle = v === 1 ? '#c8453c' : '#22170f'
+    for (const [x, y] of spots[v]) {
+      ctx.beginPath()
+      ctx.arc(ox + x * S, oy + y * S, v === 1 ? 15 : 11, 0, Math.PI * 2)
+      ctx.fill()
+    }
   }
-  const t = new CanvasTexture(c)
-  t.colorSpace = SRGBColorSpace
-  faces.set(v, t)
-  return t
+  atlas = new CanvasTexture(c)
+  atlas.colorSpace = SRGBColorSpace
+  atlas.anisotropy = QUALITY.aniso
+  return atlas
+}
+
+/** the die's shape with each face's picture taken from the atlas, all one group */
+let oneDraw: BufferGeometry | null = null
+function dieShape() {
+  if (oneDraw) return oneDraw
+  const g = dieGeo().clone()
+  const uv = g.attributes.uv
+  for (const group of g.groups) {
+    const v = DIE_FACES[group.materialIndex ?? 0]
+    const cx = (v - 1) % 3
+    const cy = Math.floor((v - 1) / 3)
+    for (let i = group.start; i < group.start + group.count; i++) {
+      const k = g.index!.getX(i)
+      if ((uv as unknown as { done?: Set<number> }).done?.has(k)) continue
+      uv.setXY(k, (cx + uv.getX(k)) / 3, 1 - (cy + 1 - uv.getY(k)) / 2)
+      ;((uv as unknown as { done?: Set<number> }).done ??= new Set()).add(k)
+    }
+  }
+  g.clearGroups()
+  oneDraw = g
+  return g
 }
 
 /** the turn that puts face `v` on top, then a spin about the vertical */
@@ -61,7 +90,7 @@ const tmpQb = new Quaternion()
 function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: number; onClick?: () => void; at: [number, number] }) {
   const R = useRapier()
   const g = [useRef<Group>(null), useRef<Group>(null)]
-  const materials = useMemo(() => DIE_FACES.map((v) => mat('#ffffff', { map: face(v) })), [])
+  const material = useMemo(() => mat('#ffffff', { map: faceAtlas() }), [])
   const redraw = useRedraw()
   const seen = useRef<number | null>(null)
   const play = useRef<{ t: Throw; t0: number } | null>(null)
@@ -74,6 +103,15 @@ function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: n
     play.current = { t, t0: seen.current !== null && seen.current !== roll ? performance.now() / 1000 : -1e9 }
     seen.current = roll
     redraw()
+    // the next throw, worked out while nobody's waiting for it
+    const idle = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number }).requestIdleCallback
+    const later = () => prepareThrow(R, roll + 1, at)
+    const id = idle ? idle(later, { timeout: 4000 }) : window.setTimeout(later, 1500)
+    return () => {
+      const cancel = (window as unknown as { cancelIdleCallback?: (n: number) => void }).cancelIdleCallback
+      if (idle && cancel) cancel(id)
+      else clearTimeout(id)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [R, key])
 
@@ -108,8 +146,8 @@ function Pair({ values, roll, onClick, at }: { values: [number, number]; roll: n
       {g.map((r, i) => (
         <group key={i} ref={r}>
           <mesh
-            geometry={dieGeo()}
-            material={materials}
+            geometry={dieShape()}
+            material={material}
             castShadow
             onClick={(e: ThreeEvent<MouseEvent>) => {
               if (!onClick) return

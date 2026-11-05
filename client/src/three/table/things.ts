@@ -96,7 +96,10 @@ export type Shapes = {
 export type StaticPart = { box: [number, number, number]; at: [number, number, number]; yaw?: number } | { hull: Float32Array } | { cyl: [number, number]; at: [number, number, number] }
 
 const UP = new Vector3(0, 1, 0)
-const STEP = 1 / 60
+// 120 steps a second: firm contacts stay steady (a tall pile of roads rocks for ever at 60), and it's cheap: at rest,
+// nothing steps at all
+const STEP = 1 / 120
+const MAX_STEPS = 6
 /** how long a piece takes from your supply to the board */
 export const VANISH = 0.55
 const GRAVITY = 6000
@@ -157,6 +160,8 @@ export class Table {
     world.numSolverIterations = 8
     // things may sink into each other by 0.1 mm at most (the default is a whole mm)
     world.integrationParameters.normalizedAllowedLinearError = 0.0001
+    // firm contacts (the default 30 lets a card flung at the table sink half a millimetre into it for a moment)
+    world.integrationParameters.contact_natural_frequency = 120
     world.timestep = STEP
     this.world = world
     this.dirty = true
@@ -205,8 +210,10 @@ export class Table {
         .setTranslation(t.pose.p.x, t.pose.p.y, t.pose.p.z)
         .setRotation(t.pose.q)
         .setLinearDamping(0.4)
-        .setAngularDamping(0.8)
-        .setCanSleep(true),
+        .setAngularDamping(2)
+        .setCanSleep(true)
+        // a tossed card is thin and quick: swept, so it can never pass into the table or a stack
+        .setCcdEnabled(true),
     )
     if (t.kind === 'card') {
       const c = this.shapes.card
@@ -429,7 +436,13 @@ export class Table {
     }
     const spec = t.pile ? this.specs.get(t.pile) : undefined
     if (spec?.grab === false || t.fly?.vanish) return null
-    if (t.mode === 'settled' && t.kind === 'card') t.pose.p.y = t.stackY
+    if (t.mode === 'settled' && t.kind === 'card') {
+      // out of its stack: the block shrinks first, and the card starts just clear of it
+      t.mode = 'held'
+      this.syncStacks()
+      t.pose.p.y = t.stackY + (LOOSE_CARD - this.shapes.card.t) / 2 + 0.2
+      t.prev.p.copy(t.pose.p)
+    }
     t.fly = null
     this.makeBody(t)
     const b = t.body!
@@ -491,6 +504,10 @@ export class Table {
       t.pose.p.lerpVectors(f.from.p, f.to.p, e)
       t.pose.p.y += Math.sin(Math.PI * e) * f.arc
       t.pose.q.slerpQuaternions(f.from.q, f.to.q, e)
+      // turning over on the way, its edges would dip: lift it so no corner goes below the surfaces it's between
+      const low = this.lowest(t)
+      const under = Math.min(f.from.p.y, f.to.p.y) - this.restLow(t)
+      if (low < under) t.pose.p.y += under - low
       t.prev.p.copy(t.pose.p)
       t.prev.q.copy(t.pose.q)
       if (k >= 1) this.land(t)
@@ -522,9 +539,9 @@ export class Table {
       if (this.stacksDirty) this.syncStacks()
       return moving || this.things.some((t) => t.away !== null || t.fly)
     }
-    this.acc += Math.min(dt, STEP * 3)
+    this.acc += Math.min(dt, STEP * MAX_STEPS)
     let steps = 0
-    while (this.acc >= STEP && steps < 3) {
+    while (this.acc >= STEP && steps < MAX_STEPS) {
       for (const t of this.things) {
         if (!t.body) continue
         t.prev.p.copy(t.pose.p)
@@ -545,6 +562,43 @@ export class Table {
     if (this.stacksDirty) this.syncStacks()
     return true
   }
+
+  /** a thing's bounding corners in its own frame */
+  private corners(t: Thing) {
+    const key = t.kind === 'card' ? (t.small ? 'card-s' : 'card') : t.kind
+    let c = this.cornerCache.get(key)
+    if (!c) {
+      let min = new Vector3(Infinity, Infinity, Infinity)
+      let max = new Vector3(-Infinity, -Infinity, -Infinity)
+      if (t.kind === 'card') {
+        const k = t.small ? this.shapes.card.small : 1
+        max = new Vector3((this.shapes.card.w * k) / 2, this.shapes.card.t / 2, (this.shapes.card.d * k) / 2)
+        min = max.clone().negate()
+      } else
+        for (const pts of this.shapes.hull[t.kind])
+          for (let i = 0; i < pts.length; i += 3) {
+            tmpV.set(pts[i], pts[i + 1], pts[i + 2])
+            min.min(tmpV)
+            max.max(tmpV)
+          }
+      c = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => new Vector3(i & 1 ? max.x : min.x, i & 2 ? max.y : min.y, i & 4 ? max.z : min.z))
+      this.cornerCache.set(key, c)
+    }
+    return c
+  }
+  /** the lowest point of a thing as it's posed now (world height) */
+  private lowest(t: Thing) {
+    let low = Infinity
+    for (const c of this.corners(t)) low = Math.min(low, tmpW.copy(c).applyQuaternion(t.pose.q).y)
+    return t.pose.p.y + low
+  }
+  /** how far its lowest point is below its centre when lying as it should */
+  private restLow(t: Thing) {
+    let low = Infinity
+    for (const c of this.corners(t)) low = Math.min(low, tmpW.copy(c).applyQuaternion(t.home.q).y)
+    return -low
+  }
+  private cornerCache = new Map<string, Vector3[]>()
 
   /** how far between the last two steps to draw (0..1) */
   get alpha() {
@@ -576,18 +630,24 @@ export class Table {
   }
 
   /** what comes to rest: at home, it stays; away from home, it goes back after a moment */
+  /** everything awake has been barely moving for a quarter second: all of it sleeps at once (bodies resting on each
+   *  other would only wake each other again if put to sleep one by one) */
+  private restAll() {
+    const awake = this.things.filter((t) => t.body && t.mode !== 'held' && t.mode !== 'fly' && !t.body.isSleeping())
+    if (awake.length && awake.every((t) => t.still > 0.25)) for (const t of awake) t.body!.sleep()
+  }
+
   private tidy(now: number, dt: number) {
+    this.restAll()
     for (const t of this.things) {
       const b = t.body
       if (!b || t.mode === 'held' || t.mode === 'fly') continue
-      // the engine waits two seconds to put a still body to sleep; a quarter is plenty here
+      // the engine waits two seconds to put a still body to sleep; a quarter is plenty here (see restAll too)
       if (!b.isSleeping()) {
         const v = b.linvel()
         const w = b.angvel()
-        if (Math.hypot(v.x, v.y, v.z) < 12 && Math.hypot(w.x, w.y, w.z) < 0.15) {
-          t.still += dt
-          if (t.still > 0.25) b.sleep()
-        } else t.still = 0
+        if (Math.hypot(v.x, v.y, v.z) < 15 && Math.hypot(w.x, w.y, w.z) < 0.5) t.still += dt
+        else t.still = 0
       }
       const fell = t.pose.p.y < -100
       if (!fell && !b.isSleeping()) continue

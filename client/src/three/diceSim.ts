@@ -58,7 +58,27 @@ function cubeTurn(from: number, to: number) {
   return new Quaternion().setFromUnitVectors(a, b)
 }
 
+/** a throw's path doesn't depend on what it shows (that's the printing's turn, at the end), so the next roll's throw
+ *  can be worked out ahead, while nothing's happening, and is ready the moment the roll comes */
+const cache = new Map<string, { frames: Float32Array; count: number; ends: Quaternion[] }>()
+const keyOf = (roll: number, at: [number, number]) => `${roll}|${at[0]}|${at[1]}`
+
 export function throwDice(R: typeof RAPIER, roll: number, at: [number, number], values: [number, number]): Throw {
+  const { frames, count, ends } = simulate(R, roll, at)
+  const fix = ends.map((q, i) => cubeTurn(DIE_FACES.indexOf(values[i]), upFace(q).face)) as [Quaternion, Quaternion]
+  return { frames, count, fix }
+}
+
+/** work out a roll's throw now, if it isn't already (for the next roll, at an idle moment) */
+export function prepareThrow(R: typeof RAPIER, roll: number, at: [number, number]) {
+  simulate(R, roll, at)
+}
+
+function simulate(R: typeof RAPIER, roll: number, at: [number, number]) {
+  const key = keyOf(roll, at)
+  const hit = cache.get(key)
+  if (hit) return hit
+  if (cache.size > 8) cache.delete(cache.keys().next().value!)
   const T = DICE.tray
   for (let attempt = 0; attempt < 6; attempt++) {
     const rnd = seeded(roll * 7 + attempt * 101 + 3)
@@ -121,8 +141,9 @@ export function throwDice(R: typeof RAPIER, roll: number, at: [number, number], 
     world.free()
     const ok = ends.every(({ p, q }) => upFace(q).dot > 0.985 && Math.abs(p.x - x0) < inW / 2 && Math.abs(p.z - z0) < inD / 2 && p.y < T.felt + h + 1.5)
     if (!ok && attempt < 5) continue
-    const fix = ends.map(({ q }, i) => cubeTurn(DIE_FACES.indexOf(values[i]), upFace(q).face)) as [Quaternion, Quaternion]
-    return { frames: frames.slice(0, count * 14), count, fix }
+    const out = { frames: frames.slice(0, count * 14), count, ends: ends.map((e) => e.q) }
+    cache.set(key, out)
+    return out
   }
   throw new Error('unreachable')
 }

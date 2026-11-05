@@ -23,7 +23,7 @@ const UNIT = {
   cone: new ConeGeometry(1, 1, 8, 1).translate(0, 0.5, 0),
   peak: new ConeGeometry(1, 1, 7, 1).translate(0, 0.5, 0),
   cyl: new CylinderGeometry(1, 1, 1, 8).translate(0, 0.5, 0),
-  ball: new SphereGeometry(1, 12, 8),
+  ball: new SphereGeometry(1, 9, 6),
   brick: new BoxGeometry(1, 1, 1),
 }
 
@@ -222,8 +222,6 @@ export function buildIsland(tiles: Tile[], harbors: Harbor[]) {
   const b = new Builder()
   const pictures: BufferGeometry[] = []
 
-  b.add(seaGeo(), PAL.sea, new Matrix4())
-  b.add(frameGeo(), [PAL.maple, PAL.mapleDeep], new Matrix4())
 
   const tok = tokenGeo()
   tiles.forEach((t, i) => {
@@ -238,6 +236,9 @@ export function buildIsland(tiles: Tile[], harbors: Harbor[]) {
 
   const sign = signGeo()
   harbors.forEach((h, n) => harbor(b, pictures, h, n, sign))
+  // the frame and the sea last: drawn after the tiles that cover most of the sea, the GPU skips what's hidden
+  b.add(frameGeo(), [PAL.maple, PAL.mapleDeep], new Matrix4())
+  b.add(seaGeo(), PAL.sea, new Matrix4())
 
   const painted = mergeGeometries(pictures.map((g) => {
     const out = new BufferGeometry()

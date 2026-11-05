@@ -7,7 +7,7 @@
  */
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import { Color, InstancedMesh, Matrix4, Plane, Quaternion, Raycaster, Vector2, Vector3, type BufferGeometry } from 'three'
+import { Color, InstancedMesh, Matrix4, Plane, Quaternion, Raycaster, Sphere, Vector2, Vector3, type BufferGeometry } from 'three'
 import type { PlayerColor } from '../../../../shared/rules.ts'
 import { PAL, PLAYER } from '../../lib/palette.ts'
 import { CITY_OUTLINE, ROBBER_PROFILE, SETTLEMENT_OUTLINE, cityGeo, roadGeo, robberGeo, settlementGeo } from '../geometry.ts'
@@ -68,13 +68,20 @@ const KINDS: ThingKind[] = ['card', 'road', 'settlement', 'city', 'robber']
 const tmpM = new Matrix4()
 const tmpS = new Vector3()
 const tmpPose: Pose = { p: new Vector3(), q: new Quaternion() }
-const colorOf = (look: string) => new Color(look === 'robber' ? PAL.robber : PLAYER[look as PlayerColor]?.body ?? '#cccccc')
+const colors = new Map<string, Color>()
+const colorOf = (look: string) => {
+  let c = colors.get(look)
+  if (!c) colors.set(look, (c = new Color(look === 'robber' ? PAL.robber : (PLAYER[look as PlayerColor]?.body ?? '#cccccc'))))
+  return c
+}
+/** one sphere round the whole table: pointing tests instances against it, and it never needs working out again */
+const TABLE_SPHERE = new Sphere(new Vector3(), 4000)
 
 export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpec[]; statics: Record<string, Static[]>; onDrop?: (t: Thing, at: Vector3) => void; onHolding?: (t: Thing | null) => void }) {
   const table = useMemo(() => new Table(SHAPES), [])
   if (location.search.includes('test')) (window as unknown as { __table: Table }).__table = table
   const R = useRapier()
-  const { camera, gl, invalidate } = useThree()
+  const { camera, gl, invalidate, size } = useThree()
   const meshes = useRef<Partial<Record<ThingKind, InstancedMesh>>>({})
   const lists = useRef<Record<ThingKind, Thing[]>>({ card: [], road: [], settlement: [], city: [], robber: [] })
   const tiles = useMemo(() => cardTiles(CAP.card), [])
@@ -118,35 +125,65 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
     kick()
   })
 
-  // ---- each frame something moves: step, and draw everything where it is
+  // ---- each frame something moves: step, and draw everything where it is (nothing at all when nothing moved)
+  const order = useRef<{ t: Thing; y: number }[]>([])
   useFrame((_, dt) => {
     const moving = table.update(performance.now() / 1000, dt)
+    if (!moving) return
     const L = lists.current
     for (const k of KINDS) L[k].length = 0
     for (const t of table.things) L[t.kind].push(t)
+    // cards top first: on the GPU each card hides the ones under it before they're shaded (a stack of nineteen
+    // costs about one card, not nineteen)
+    const ord = order.current
+    ord.length = 0
+    for (const t of L.card) {
+      table.drawn(t, tmpPose)
+      ord.push({ t, y: tmpPose.p.y })
+    }
+    ord.sort((a, b) => b.y - a.y)
+    ord.forEach((o, i) => (L.card[i] = o.t))
     for (const k of KINDS) {
       const m = meshes.current[k]
       if (!m) continue
       const list = L[k]
+      let tilesChanged = false
       list.forEach((t, i) => {
         table.drawn(t, tmpPose)
         if (k === 'card') {
           const s = t.small ? CARD.small : 1
           tmpS.set(CARD.w * s, CARD.t, CARD.d * s)
-          tiles.setXY(i, TILE[t.look] ?? 5, BACK_TILE[t.family] ?? 5)
+          const a = TILE[t.look] ?? 5
+          const b = BACK_TILE[t.family] ?? 5
+          if (tiles.getX(i) !== a || tiles.getY(i) !== b) {
+            tiles.setXY(i, a, b)
+            tilesChanged = true
+          }
         } else {
           tmpS.set(1, 1, 1)
           m.setColorAt(i, colorOf(t.look))
         }
         m.setMatrixAt(i, tmpM.compose(tmpPose.p, tmpPose.q, tmpS))
       })
+      if (m.count !== list.length) tilesChanged = true
       m.count = list.length
+      m.visible = list.length > 0
+      // send only the instances in use
+      m.instanceMatrix.clearUpdateRanges()
+      m.instanceMatrix.addUpdateRange(0, list.length * 16)
       m.instanceMatrix.needsUpdate = true
-      if (m.instanceColor) m.instanceColor.needsUpdate = true
-      if (k === 'card') tiles.needsUpdate = true
-      m.computeBoundingSphere()
+      if (m.instanceColor) {
+        m.instanceColor.clearUpdateRanges()
+        m.instanceColor.addUpdateRange(0, list.length * 3)
+        m.instanceColor.needsUpdate = true
+      }
+      if (k === 'card' && tilesChanged) {
+        tiles.clearUpdateRanges()
+        tiles.addUpdateRange(0, list.length * 2)
+        tiles.needsUpdate = true
+      }
     }
-    if (moving) kick()
+    kick()
   })
 
   // ---- pointing: hover, click, carry
@@ -154,9 +191,11 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
   const ray = useMemo(() => new Raycaster(), [])
   const plane = useMemo(() => new Plane(new Vector3(0, 1, 0), 0), [])
   const hit = useMemo(() => new Vector3(), [])
+  const ndc = useMemo(() => new Vector2(), [])
   const pointAt = (cx: number, cy: number, y: number) => {
-    const r = gl.domElement.getBoundingClientRect()
-    ray.setFromCamera(new Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera)
+    // (the canvas's place on the page as react-three-fiber already knows it: asking the page would force a layout)
+    const r = size
+    ray.setFromCamera(ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera)
     plane.constant = -y
     return ray.ray.intersectPlane(plane, hit)
   }
@@ -247,7 +286,7 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
     <>
       <instancedMesh
         ref={(m) => {
-          if (m) meshes.current.card = m
+          if (m && meshes.current.card !== m) (meshes.current.card = m), (m.boundingSphere = TABLE_SPHERE), (m.count = 0)
         }}
         args={[cardGeo, cardMaterial(), CAP.card]}
         castShadow
@@ -255,11 +294,11 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
         frustumCulled={false}
         {...handlers('card')}
       />
-      {(['road', 'settlement', 'city', 'robber'] as const).map((k) => (
+      {(['road', 'settlement', 'city'] as const).map((k) => (
         <instancedMesh
           key={k}
           ref={(m) => {
-            if (m) meshes.current[k] = m
+            if (m && meshes.current[k] !== m) (meshes.current[k] = m), (m.boundingSphere = TABLE_SPHERE), (m.count = 0)
           }}
           args={[GEO[k](), wood(), CAP[k]]}
           castShadow

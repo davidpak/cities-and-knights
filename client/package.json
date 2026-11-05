@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
-    "check": "tsx src/three/spec.check.ts && tsx src/three/table/physics.check.ts && tsx src/three/dice.check.ts"
+    "check": "tsx src/three/spec.check.ts && tsx src/three/table/physics.check.ts && tsx src/three/dice.check.ts && tsx src/three/shadow.check.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",

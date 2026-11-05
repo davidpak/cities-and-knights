@@ -3,12 +3,13 @@
  * still and costs nothing (the scene only redraws when something moves). Ghosts are the same piece, see-through.
  */
 import { useFrame, useThree } from '@react-three/fiber'
-import { useMemo, useRef, type ReactNode } from 'react'
-import { MeshBasicMaterial, RingGeometry, type Group, type Mesh } from 'three'
+import { useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
+import { Color, Matrix4, MeshBasicMaterial, Quaternion, RingGeometry, Vector3, type Group, type InstancedMesh, type Mesh } from 'three'
+import { TOPO } from '../../../shared/board.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
 import { PAL, PLAYER } from '../lib/palette.ts'
 import { cityGeo, roadGeo, robberGeo, settlementGeo } from './geometry.ts'
-import { TILE, TOKEN } from './spec.ts'
+import { TILE, TOKEN, edgeAt, vertexAt } from './spec.ts'
 import { wood } from './wood.ts'
 
 const DROP = 0.2 // seconds
@@ -139,4 +140,93 @@ export function Pulse({ x, z, color, size = 16, onDone }: { x: number; z: number
     redraw()
   })
   return <mesh ref={m} geometry={RING} material={material} position={[x, TILE.h + 0.6, z]} renderOrder={2} />
+}
+
+// ---------------------------------------------------------------- every piece on the board, one draw per kind
+
+const KIND_GEO = { road: roadGeo, settlement: settlementGeo, city: cityGeo } as const
+type Kind = keyof typeof KIND_GEO
+type Placed = { key: string; kind: Kind; x: number; z: number; yaw: number; color: PlayerColor; mine: boolean }
+const tmpMat = new Matrix4()
+const tmpPos = new Vector3()
+const tmpRot = new Quaternion()
+const ONE = new Vector3(1, 1, 1)
+const ZERO = new Vector3(0, 0, 0)
+const AXIS_Y = new Vector3(0, 1, 0)
+const pieceColors = new Map<string, Color>()
+const pieceColor = (c: PlayerColor) => pieceColors.get(c) ?? pieceColors.set(c, new Color(PLAYER[c].body)).get(c)!
+
+/**
+ * All the board's pieces, each kind one instanced draw however many are built (a late game has ninety-odd pieces:
+ * drawn one by one, with their shadows, that was nearly two hundred draws). A new one drops in; one of yours instead
+ * appears the moment the piece flying from your supply arrives (`arrive` s).
+ */
+export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0 }: { buildings: Record<number, { owner: number; kind: 'settlement' | 'city' }>; roads: Record<number, number>; colors: PlayerColor[]; you?: number; arrive?: number }) {
+  const refs = { road: useRef<InstancedMesh>(null), settlement: useRef<InstancedMesh>(null), city: useRef<InstancedMesh>(null) }
+  const born = useRef(new Map<string, number>())
+  const live = useRef(true)
+  const redraw = useRedraw()
+  const placed = useMemo(() => {
+    const out: Placed[] = []
+    for (const [e, owner] of Object.entries(roads)) {
+      const [x, z] = edgeAt(Number(e))
+      out.push({ key: `r${e}`, kind: 'road', x, z, yaw: -TOPO.edges[Number(e)].angle, color: colors[owner], mine: owner === you })
+    }
+    for (const [v, b] of Object.entries(buildings)) {
+      const [x, z] = vertexAt(Number(v))
+      out.push({ key: `${b.kind[0]}${v}`, kind: b.kind, x, z, yaw: 0, color: colors[b.owner], mine: b.owner === you })
+    }
+    return out
+  }, [buildings, roads, colors, you])
+
+  useLayoutEffect(() => {
+    const now = performance.now() / 1000
+    const first = performance.now() - shownAt < 400
+    const keys = new Set(placed.map((p) => p.key))
+    for (const k of born.current.keys()) if (!keys.has(k)) born.current.delete(k)
+    for (const p of placed) if (!born.current.has(p.key)) born.current.set(p.key, first ? -1e9 : now + (p.mine ? arrive : 0))
+    live.current = true
+    redraw()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placed])
+
+  useFrame(() => {
+    if (!live.current) return
+    const now = performance.now() / 1000
+    let moving = false
+    const n = { road: 0, settlement: 0, city: 0 }
+    for (const p of placed) {
+      const m = refs[p.kind].current
+      if (!m) continue
+      const t0 = born.current.get(p.key) ?? -1e9
+      const mine = p.mine && arrive > 0
+      const k = Math.min(1, (now - t0) / DROP)
+      if (k < 1) moving = true
+      const shown = now >= t0
+      tmpPos.set(p.x, TILE.h + (shown && !mine ? FROM * (1 - Math.max(0, k)) ** 2 : 0), p.z)
+      tmpRot.setFromAxisAngle(AXIS_Y, p.yaw)
+      const i = n[p.kind]++
+      m.setMatrixAt(i, tmpMat.compose(tmpPos, tmpRot, shown ? ONE : ZERO))
+      m.setColorAt(i, pieceColor(p.color))
+    }
+    for (const kind of ['road', 'settlement', 'city'] as const) {
+      const m = refs[kind].current
+      if (!m) continue
+      m.count = n[kind]
+      m.visible = n[kind] > 0
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+      m.computeBoundingSphere()
+    }
+    redraw()
+    live.current = moving
+  })
+
+  return (
+    <>
+      {(['road', 'settlement', 'city'] as const).map((k) => (
+        <instancedMesh key={k} ref={refs[k]} args={[KIND_GEO[k](), wood(), k === 'road' ? 64 : 24]} castShadow receiveShadow />
+      ))}
+    </>
+  )
 }

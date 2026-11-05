@@ -10,9 +10,12 @@
  * Cheap however many there are: all the cards are one draw, each kind of piece one more, and nothing steps or draws
  * while everything lies still.
  */
-import { Canvas, useThree } from '@react-three/fiber'
-import { useEffect } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useEffect, useState } from 'react'
 import { BoxGeometry, Vector3 } from 'three'
+import { Adaptive } from '../Adaptive.tsx'
+import { rim } from '../geometry.ts'
+import { Pulse, Robber, Settlement } from '../Pieces.tsx'
 import { TOPO } from '../../../../shared/board.ts'
 import type { View } from '../../../../shared/engine.ts'
 import { CARDS, RESOURCES, type Card, type Hand, type Resource } from '../../../../shared/rules.ts'
@@ -303,19 +306,15 @@ function SupplyMats({ layout, can, building }: TableProps) {
 
 // ---------------------------------------------------------------- the trade tray
 
+let trayRim: ReturnType<typeof rim> | null = null
+/** the trade tray: a wooden floor (its markings painted on) inside one solid rim; two draws */
 function Tray({ at, mode }: { at: Spot; mode: 'trade' | 'discard' }) {
   const [tx, tz] = at
+  trayRim ??= rim(TRAY.w + TRAY.rim, TRAY.d + TRAY.rim, TRAY.rim, TRAY.h)
   return (
     <group>
-      <mesh geometry={BOX} material={[mat('#a87b50'), mat('#a87b50'), mat('#ffffff', { map: trayFace(mode) }), mat('#8a5e3c'), mat('#a87b50'), mat('#a87b50')]} scale={[TRAY.w, TRAY_FLOOR, TRAY.d]} position={[tx, TRAY_FLOOR / 2, tz]} receiveShadow castShadow />
-      {[
-        [0, -TRAY.d / 2, TRAY.w, TRAY.rim],
-        [0, TRAY.d / 2, TRAY.w, TRAY.rim],
-        [-TRAY.w / 2, 0, TRAY.rim, TRAY.d],
-        [TRAY.w / 2, 0, TRAY.rim, TRAY.d],
-      ].map(([x, z, w, d], i) => (
-        <mesh key={i} geometry={BOX} material={mat('#8a5e3c')} scale={[w, TRAY.h, d]} position={[tx + x, TRAY.h / 2, tz + z]} castShadow receiveShadow />
-      ))}
+      <mesh geometry={BOX} material={mat('#ffffff', { map: trayFace(mode) })} scale={[TRAY.w, TRAY_FLOOR, TRAY.d]} position={[tx, TRAY_FLOOR / 2, tz]} receiveShadow castShadow />
+      <mesh geometry={trayRim} material={mat('#8a5e3c')} position={[tx, 0, tz]} castShadow receiveShadow />
     </group>
   )
 }
@@ -339,8 +338,33 @@ function Projector() {
   return null
 }
 
+/** the table top fills the screen, so it's drawn last: wherever something covers it, the GPU skips it */
 function TableTop() {
-  return <mesh geometry={BOX} material={mat('#5a3d29')} scale={[8000, 2, 8000]} position={[0, -1, 0]} receiveShadow />
+  return <mesh geometry={BOX} material={mat('#5a3d29')} scale={[8000, 2, 8000]} position={[0, -1, 0]} receiveShadow renderOrder={1} />
+}
+
+/**
+ * Everything that only appears later (the tray, a ghost piece, the build markers, a pulse), drawn once, tiny and
+ * out of sight, as the table opens: its shaders are built now, while the table loads, not in the middle of a move.
+ */
+function Warmup() {
+  const [frames, setFrames] = useState(0)
+  useFrame(() => {
+    if (frames < 3) setFrames((f) => f + 1)
+  })
+  if (frames >= 3) return null
+  return (
+    <group position={[0, -40, 0]} scale={0.001}>
+      <Tray at={[0, 0]} mode="trade" />
+      <Tray at={[0, 0]} mode="discard" />
+      <Settlement ghost color="red" x={0} z={0} />
+      <Robber ghost x={0} z={0} />
+      <Pulse x={0} z={0} color="#ffffff" onDone={() => {}} />
+      <mesh geometry={BOX} material={mat('#3b2a1d')} />
+      <mesh geometry={BOX} material={mat('#e3a72c')} />
+      <mesh geometry={BOX} material={mat(PAL.cream)} />
+    </group>
+  )
 }
 
 export function TableView(props: TableProps) {
@@ -364,6 +388,8 @@ export function TableView(props: TableProps) {
       <Slots {...props} />
       <SupplyMats {...props} />
       <Physical specs={specs} statics={statics} onDrop={onDrop} />
+      <Warmup />
+      <Adaptive />
       <Projector />
       <TestHook />
     </Canvas>

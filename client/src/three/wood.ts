@@ -3,6 +3,7 @@
  * darker and lighter) under the player's colour, so the pieces read as wooden toys rather than plastic.
  * Shared by every piece of a colour; instanced pieces take their colour per instance instead.
  */
+import { QUALITY } from './quality.ts'
 import { CanvasTexture, MeshLambertMaterial, RepeatWrapping, SRGBColorSpace } from 'three'
 import './../lib/toy.ts'
 
@@ -34,7 +35,7 @@ export function grainTexture() {
   grain.colorSpace = SRGBColorSpace
   grain.wrapS = grain.wrapT = RepeatWrapping
   grain.repeat.set(1 / 40, 1 / 40) // the geometry's UVs are in millimetres
-  grain.anisotropy = 4
+  grain.anisotropy = QUALITY.aniso
   return grain
 }
 

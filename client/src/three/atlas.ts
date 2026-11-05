@@ -2,6 +2,7 @@
  * One texture holding every picture painted on the board: the ten number tokens and the six harbour signs, in a
  * 4 x 4 grid. One texture means every token and sign on the board draws in a single call.
  */
+import { QUALITY } from './quality.ts'
 import { CanvasTexture, SRGBColorSpace } from 'three'
 import { RESOURCES, type HarborKind } from '../../../shared/rules.ts'
 import { paintIcon } from '../lib/icons.ts'
@@ -64,6 +65,6 @@ export function getAtlas() {
   }
   atlas = new CanvasTexture(c)
   atlas.colorSpace = SRGBColorSpace
-  atlas.anisotropy = 4
+  atlas.anisotropy = QUALITY.aniso
   return atlas
 }

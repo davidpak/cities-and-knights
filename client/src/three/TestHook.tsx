@@ -15,7 +15,7 @@ export function publishState(state: unknown) {
 }
 
 export function TestHook() {
-  const { camera, size, gl, invalidate } = useThree()
+  const { camera, size, gl, invalidate, scene } = useThree()
   useEffect(() => {
     if (!TESTING) return
     const w = window as unknown as Record<string, unknown>
@@ -33,12 +33,28 @@ export function TestHook() {
     w.__frames = 0
     gl.info.autoReset = true
     const orig = gl.render.bind(gl)
+    const times: number[] = []
+    w.__times = times
     gl.render = (...a: Parameters<typeof gl.render>) => {
       orig(...a)
+      times.push(performance.now())
+      if (times.length > 2000) times.shift()
       w.__frames = (w.__frames as number) + 1
       w.__perf = { calls: gl.info.render.calls, triangles: gl.info.render.triangles, programs: gl.info.programs?.length }
     }
     w.__redraw = () => ((gl.shadowMap.needsUpdate = true), invalidate())
-  }, [camera, size, gl, invalidate])
+    // the cost of a whole frame (shadows and all), drawn n times and waited for each time: ms per frame
+    w.__bench = (n = 30, shadows = true) => {
+      const ctx = gl.getContext()
+      const px = new Uint8Array(4)
+      const t0 = performance.now()
+      for (let i = 0; i < n; i++) {
+        gl.shadowMap.needsUpdate = shadows
+        orig(scene, camera)
+        ctx.readPixels(0, 0, 1, 1, ctx.RGBA, ctx.UNSIGNED_BYTE, px)
+      }
+      return (performance.now() - t0) / n
+    }
+  }, [camera, size, gl, invalidate, scene])
   return null
 }

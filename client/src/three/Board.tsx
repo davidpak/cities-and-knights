@@ -7,7 +7,7 @@
  */
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, PCFSoftShadowMap, type InstancedMesh, type OrthographicCamera } from 'three'
+import { MeshLambertMaterial, NeutralToneMapping, Object3D, PCFShadowMap, type InstancedMesh, type OrthographicCamera } from 'three'
 import { TOPO } from '../../../shared/board.ts'
 import type { Building, GameEvent, Harbor, Tile } from '../../../shared/engine.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
@@ -16,9 +16,10 @@ import '../lib/toy.ts'
 import { getAtlas } from './atlas.ts'
 import { buildIsland } from './island.ts'
 import { Dice } from './Dice.tsx'
-import { City, Pulse, Road, Robber, Settlement, boardShown, useRedraw } from './Pieces.tsx'
+import { BoardPieces, City, Pulse, Road, Robber, Settlement, boardShown, useRedraw } from './Pieces.tsx'
 import { CAMERA, SEA, TILE, VIEW, edgeAt, hexAt, vertexAt } from './spec.ts'
 import { TestHook } from './TestHook.tsx'
+import { QUALITY } from './quality.ts'
 
 export type PickKind = 'settlement' | 'city' | 'road' | 'robber'
 export type Picking = { kind: PickKind; spots: number[] } | null
@@ -203,19 +204,10 @@ function Pulses({ events, colors }: { events: GameEvent[]; colors: PlayerColor[]
 export function BoardContents({ tiles, harbors, buildings, roads, robber, colors, picking, you = -1, onPick, events = [], arrive = 0 }: BoardProps & { arrive?: number }) {
   const [rx, rz] = hexAt(robber)
   useState(boardShown)
-  // yours wait for the piece flying over from your supply (on the table; `arrive` s)
-  const wait = (owner: number) => (owner === you ? arrive : 0)
   return (
     <>
       <Island tiles={tiles} harbors={harbors} />
-      {Object.entries(roads).map(([e, owner]) => {
-        const [x, z] = edgeAt(Number(e))
-        return <Road key={`r${e}`} color={colors[owner]} x={x} z={z} angle={TOPO.edges[Number(e)].angle} delay={wait(owner)} />
-      })}
-      {Object.entries(buildings).map(([v, b]) => {
-        const [x, z] = vertexAt(Number(v))
-        return b.kind === 'city' ? <City key={`c${v}`} color={colors[b.owner]} x={x} z={z} delay={wait(b.owner)} /> : <Settlement key={`s${v}`} color={colors[b.owner]} x={x} z={z} delay={wait(b.owner)} />
-      })}
+      <BoardPieces buildings={buildings} roads={roads} colors={colors} you={you} arrive={arrive} />
       <Robber x={rx} z={rz} />
       <Pulses events={events} colors={colors} />
       {picking && you >= 0 && <Picker picking={picking} color={colors[you]} onPick={onPick} />}
@@ -234,7 +226,7 @@ export function Lights({ extent = 380 }: { extent?: number }) {
         position={[-260, 900, 380]}
         intensity={1.35}
         color="#fff4e8"
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[QUALITY.shadowSize, QUALITY.shadowSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.8}
         shadow-camera-left={-extent}
@@ -252,13 +244,15 @@ export function canvasProps() {
   return {
     orthographic: true,
     frameloop: 'demand' as const,
-    dpr: [1, 2] as [number, number],
-    shadows: { type: PCFSoftShadowMap },
+    dpr: QUALITY.startDpr,
+    shadows: QUALITY.shadows ? { type: PCFShadowMap } : false,
     camera: { near: 100, far: 4000, position: [0, 1500, 0] as [number, number, number], zoom: 1 },
-    gl: { antialias: true, alpha: true, toneMapping: NeutralToneMapping, powerPreference: 'low-power' as const },
-    onCreated: ({ gl }: { gl: { shadowMap: { autoUpdate: boolean; needsUpdate: boolean } } }) => {
+    // an opaque canvas (the table covers it all; the page needn't blend it), the faster GPU on laptops with two
+    gl: { antialias: QUALITY.antialias, alpha: false, toneMapping: NeutralToneMapping, powerPreference: 'high-performance' as const, stencil: false },
+    onCreated: ({ gl }: { gl: { shadowMap: { autoUpdate: boolean; needsUpdate: boolean }; setClearColor: (c: string) => void } }) => {
       gl.shadowMap.autoUpdate = false
       gl.shadowMap.needsUpdate = true
+      gl.setClearColor('#4a3324')
     },
   }
 }

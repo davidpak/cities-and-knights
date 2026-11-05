@@ -35,10 +35,25 @@ hall with a lower wing), a square road bar, a turned pawn for the robber, all sa
 with a faint grain under the paint. Stacks of cards are one solid block each in the physics world, as table-top
 simulators do it, so twenty paper-thin cards never jitter; a card is a body of its own only while it's loose.
 
-**Fast on any computer:** the table draws only when something moves (nothing at all while you think), the whole
-island is two draw calls, every card on the table is one more and each kind of piece one more (about 50 in all),
-shadows are recomputed only when something moves, sleeping bodies cost nothing, and the home screen loads without
-three.js (the physics engine follows in the background).
+**Fast on any computer.** Measured, not guessed: a frame-cost benchmark on a software GPU (a stand-in for the
+weakest hardware) showed where the time goes, and each fix was kept only if it paid.
+
+- Nothing draws while nothing moves: zero frames while you think.
+- About 40 draw calls a frame: the island is two, every card on the table one, each kind of piece one (on the board
+  and in your supply alike, however many are built), each die one, the trade tray two.
+- Cards are drawn top first, so a stack of nineteen costs the GPU about one card: the cards under the top are
+  rejected before they're shaded. The table top is drawn last for the same reason.
+- Soft shadows take four hardware-filtered samples with no trigonometry (three.js's own take five with a sine, a
+  cosine and a noise term each, for every pixel), one on a weak GPU. The shadow map is redrawn only while something
+  moves.
+- Weak GPUs (integrated Intel, phone and tablet GPUs, software renderers) are recognised by name and start without
+  multisampling, at one pixel per CSS pixel, with a smaller shadow map. High-density screens never multisample.
+- While things move, the frame time is watched; if frames run long the resolution steps down (and then the shadow
+  map), remembered per device. A step that doesn't help is undone, so a display that's simply slow is left alone.
+- No shader is compiled mid-game (everything that appears later is drawn once, out of sight, as the table opens),
+  the next dice throw is worked out while nothing's happening, and the drawing code allocates nothing per frame.
+- The canvas is opaque, and laptops with two GPUs use the faster one.
+- The home screen loads without three.js; the physics engine follows in the background.
 
 ## Layout
 

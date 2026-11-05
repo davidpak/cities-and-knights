@@ -14,13 +14,13 @@ const memo = <T>(f: () => T) => {
 }
 
 /** an outline drawn in the board plane (x right, z toward you), extruded upward by h with a soft bevel */
-function slab(outline: (s: Shape) => Shape, h: number, bevel: number, curve = 6) {
+function slab(outline: (s: Shape) => Shape, h: number, bevel: number, curve = 4) {
   const g = new ExtrudeGeometry(outline(new Shape()), {
     depth: Math.max(0.01, h - 2 * bevel),
     bevelEnabled: true,
     bevelThickness: bevel,
     bevelSize: bevel,
-    bevelSegments: 3,
+    bevelSegments: 2,
     curveSegments: curve,
   })
   g.rotateX(-Math.PI / 2) // shape y becomes -z, extrusion becomes +y
@@ -41,12 +41,12 @@ export const tileGeo = memo(() => slab((s) => roundedPolygon(hexPoints(TILE.r - 
 /** a puck with a rounded top edge; the top face is its own disc, so a picture can be painted on it */
 function puck(r: number, h: number, b: number) {
   const pts: Vector2[] = [new Vector2(0, 0), new Vector2(r - 0.6, 0), new Vector2(r, 0.6), new Vector2(r, h - b)]
-  for (let i = 1; i <= 6; i++) {
-    const a = (i / 6) * (Math.PI / 2)
+  for (let i = 1; i <= 3; i++) {
+    const a = (i / 3) * (Math.PI / 2)
     pts.push(new Vector2(r - b + b * Math.cos(a), h - b + b * Math.sin(a)))
   }
-  const side = new LatheGeometry(pts, 48)
-  const top = new CircleGeometry(r - b, 48)
+  const side = new LatheGeometry(pts, 32)
+  const top = new CircleGeometry(r - b, 32)
   top.rotateX(-Math.PI / 2)
   top.translate(0, h, 0)
   return { side, top }
@@ -142,14 +142,14 @@ export const ROBBER_PROFILE = (): Pt[] => {
     [5.4, 27.4], [3.6, 29.3], [0, 30],
   ].map(([x, y]) => [x * k, (y * ROBBER.h) / 30] as Pt)
 }
-export const robberGeo = memo(() => new LatheGeometry(ROBBER_PROFILE().map(([x, y]) => new Vector2(x, y)), 32))
+export const robberGeo = memo(() => new LatheGeometry(ROBBER_PROFILE().map(([x, y]) => new Vector2(x, y)), 20))
 
 /** a die: a box with six faces (each its own material group), its edges pushed out to round corners */
 export const dieGeo = memo(() => {
   const s = DICE.size
   const h = s / 2
   const r = DICE.round
-  const g = new BoxGeometry(s, s, s, 6, 6, 6)
+  const g = new BoxGeometry(s, s, s, 4, 4, 4)
   const p = g.attributes.position
   const n = g.attributes.normal
   const v = new Vector3()
@@ -167,6 +167,15 @@ export const dieGeo = memo(() => {
 
 /** which value faces each box side (+x, -x, +y, -y, +z, -z); opposite faces add to 7 */
 export const DIE_FACES = [2, 5, 1, 6, 3, 4]
+
+/** a rounded rectangular wooden rim, w by d outside, rim wide, h tall (one solid piece) */
+export function rim(w: number, d: number, width: number, h: number, round = 3) {
+  return slab((s) => {
+    roundedRect(w, d, round + width / 2, s)
+    s.holes.push(roundedRect(w - 2 * width, d - 2 * width, round, new Path()))
+    return s
+  }, h, 1)
+}
 
 /** the dice tray: a rounded wooden ring round a felt floor */
 export const trayGeo = memo(() => {

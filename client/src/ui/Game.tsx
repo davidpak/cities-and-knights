@@ -228,7 +228,7 @@ export function Game({ view }: { view: View }) {
           wants: layout.hand.map((_, i) => layout.wants(i)),
           supply: layout.supply,
           k: layout.k,
-          seats: layout.seats.map((s) => ({ p: s.p, hand: seatParts(s.at).hand })),
+          seats: layout.seats.map((s) => ({ p: s.p, hand: seatParts(s.at, layout).hand })),
           tray: layout.tray,
         },
       }),
@@ -556,7 +556,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
 
       {layout.seats.map(({ p, at: spot }) => {
         const op = view.players[p]
-        const parts = seatParts(spot, layout.portrait)
+        const parts = seatParts(spot, layout)
         // during your open offer: who has said yes (click their cards to trade) and who said no
         const answer = o && o.from === me && o.to === undefined ? (o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait') : null
         return (
@@ -564,6 +564,16 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
             {count(`oh${p}`, parts.hand, op.handCount, parts.small ? CARD.small : 1)}
             <span className={`name ${view.current === p ? 'turn' : ''}`} style={{ ...at(parts.label), ['--pc' as string]: PLAYER[op.color].ui }}>
               {op.name} <b>{op.points}</b>
+              {/* the expansion: their three city levels, in the tracks' colours */}
+              {view.x && (
+                <span className="lvs">
+                  {TRACKS.map((t) => (
+                    <i key={t} className="lv" style={{ background: TRACK_COLOR[t] }} title={TRACK_NAME[t]}>
+                      {view.x!.levels[p][t]}
+                    </i>
+                  ))}
+                </span>
+              )}
               {answer === 'yes' && <i className="mark ok">✓</i>}
               {answer === 'no' && <i className="mark no">✕</i>}
             </span>

@@ -372,6 +372,42 @@ input {
 .name.turn {
   box-shadow: 0 calc(var(--u) * 3) 0 var(--pc);
 }
+.name .lv {
+  font-style: normal;
+  display: inline-grid;
+  place-items: center;
+  min-width: max(calc(var(--u) * 19), 17px);
+  height: max(calc(var(--u) * 19), 17px);
+  border-radius: max(calc(var(--u) * 4), 4px);
+  color: #fff;
+  font-weight: 800;
+  font-size: max(calc(var(--u) * 13), 12px);
+}
+.name .lvs {
+  display: inline-flex;
+  gap: 2px;
+}
+/* on a phone the levels go on a line of their own under the name (three names side by side must fit) */
+@media (max-width: 600px) {
+  .name:has(.lvs) {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 2px;
+    width: min-content;
+    padding-bottom: 3px;
+  }
+  .name:has(.lvs)::before {
+    display: none;
+  }
+  /* (their colour, as a band along the top, where the dot was) */
+  .name:has(.lvs) {
+    border-top: 3px solid var(--pc);
+  }
+  .name .lvs {
+    flex-basis: 100%;
+    justify-content: center;
+  }
+}
 .name .mark {
   font-style: normal;
   display: inline-grid;

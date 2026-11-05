@@ -177,7 +177,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   const specs: Spec[] = []
   const card = (s: Omit<Spec, 'kind'>) => specs.push({ kind: 'card', ...s })
   const seatOf = (p: number) => layout.seats.find((x) => x.p === p)
-  const homeOf = (p: number): Spot => (p === me ? layout.hand[2] : seatParts(seatOf(p)?.at ?? [0, -400], layout.portrait).hand)
+  const homeOf = (p: number): Spot => (p === me ? layout.hand[2] : seatParts(seatOf(p)?.at ?? [0, -400], layout).hand)
 
   const x = view.x
   const K = layout.k
@@ -223,13 +223,13 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   if (x && K)
     TRACKS.forEach((t) => {
       const id = `deck:${t}`
-      card({ id, family: 'prog', look: `prog:?${t}`, n: x.decks[t], small: true, home: cardHome(id, K.decks[t], { faceDown: true, loose: 0.6 }), hidden: true, from: K.decks[t], to: K.decks[t] })
+      card({ id, family: 'prog', look: `prog:?${t}`, n: x.decks[t], home: cardHome(id, K.decks[t], { faceDown: true, loose: 0.6 }), hidden: true, from: K.decks[t], to: K.decks[t] })
     })
   else card({ id: 'deck', family: 'dev', look: 'dev:?', n: view.pile, home: cardHome('deck', layout.deck, { faceDown: true, loose: 0.8 }), hidden: true, from: layout.deck, to: layout.deck, enabled: can.deck, onClick: on.deck })
   // everyone else: their cards face down, their development cards face down, the knights they've played
   for (const { p, at } of layout.seats) {
     const o = view.players[p]
-    const parts = seatParts(at, layout.portrait)
+    const parts = seatParts(at, layout)
     const small = parts.small
     card({ id: `opp:${p}`, family: 'res', look: 'res:?', n: o.handCount, small, home: cardHome(`opp:${p}`, parts.hand, { faceDown: true, loose: 3 }), hidden: true, from: parts.hand, to: parts.hand, enabled: can.opponents.includes(p), onClick: () => on.opponent(p), ...fromTile(p) })
     if (x) card({ id: `oprog:${p}`, family: 'prog', look: 'prog:?', n: o.progressCount, small, home: cardHome(`oprog:${p}`, parts.dev, { faceDown: true, loose: 2.5 }), hidden: true, from: parts.dev, to: parts.dev })
@@ -239,9 +239,9 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   // the two award cards, with whoever holds them
   const award = (what: 'road' | 'army', p: number | null) => {
     if (p === null || p < 0) return
-    const at: Spot = p === me ? layout.awardsMine : seatParts(seatOf(p)?.at ?? [0, -400], layout.portrait).awards
+    const at: Spot = p === me ? layout.awardsMine : seatParts(seatOf(p)?.at ?? [0, -400], layout).awards
     const [x, z] = what === 'road' ? [at[0], at[1] - 6] : [at[0] + 6, at[1] + 6]
-    const small = p !== me && layout.portrait
+    const small = p !== me && !!layout.seatSmall
     card({ id: `${what}:${p}`, family: `award:${what}`, look: `award:${what}`, n: 1, small, home: cardHome(`${what}:${p}`, [x, z], { turn: what === 'road' ? 0.08 : -0.08, base: what === 'army' ? CT : 0, loose: 0 }) })
   }
   award('road', view.longestRoad)
@@ -249,8 +249,8 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   // the expansion's points on the table: defender cards, and point cards laid down
   if (x && K)
     view.players.forEach((_, p) => {
-      const at: Spot = p === me ? K.points : seatParts(seatOf(p)?.at ?? [0, -400], layout.portrait).awards
-      const small = p !== me && layout.portrait
+      const at: Spot = p === me ? K.points : seatParts(seatOf(p)?.at ?? [0, -400], layout).awards
+      const small = p !== me && !!layout.seatSmall
       const under = p !== me && view.longestRoad === p ? 2 * CT : 0
       card({ id: `def:${p}`, family: 'defender', look: 'defender', n: x.defenders[p], small, home: cardHome(`def:${p}`, at, { base: under, turn: 0.05, loose: 1.5 }) })
       PROGRESS_POINTS.forEach((c, j) => {
@@ -423,7 +423,7 @@ function Slots({ view, layout, hand, can, on }: TableProps) {
   // (your own empty kinds leave nothing behind: an empty place only where you might click someone with no cards)
   void hand
   for (const { p, at } of layout.seats)
-    if (view.players[p].handCount <= 0) slots.push({ id: `o${p}`, at: seatParts(at, layout.portrait).hand, k: layout.portrait ? CARD.small : 1, onClick: can.opponents.includes(p) ? () => on.opponent(p) : undefined })
+    if (view.players[p].handCount <= 0) slots.push({ id: `o${p}`, at: seatParts(at, layout).hand, k: layout.seatSmall ? CARD.small : 1, onClick: can.opponents.includes(p) ? () => on.opponent(p) : undefined })
   return (
     <>
       {slots.map((p) => (

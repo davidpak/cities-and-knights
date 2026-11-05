@@ -8,7 +8,7 @@
  *                    matters: their strength (a city each) against the strength of the knights standing ready
  *   flip charts      your three tracks, each a desk flip chart on a wooden stand: its page shows the level reached,
  *                    the building that grows with it, and what the next step costs. Click one to take its next step;
- *                    the page goes over the top. Everyone else's stand small beside their cards
+ *                    the page goes over the top. (Everyone else's levels show as numbers by their names)
  *
  * All of it is a few draws: the charts are three instanced draws however many there are (stands, rings, pages, every
  * page out of one picture), the voyage a handful.
@@ -22,7 +22,7 @@ import {
 import type { View } from '../../../../shared/engine.ts'
 import { BARBARIAN_STEPS, MAX_LEVEL, TRACKS, TRACK_GOOD, TRACK_LEVELS, TRACK_NAME, type Track } from '../../../../shared/rules.ts'
 import { ICON, SHIELD } from '../../lib/icons.ts'
-import { PAL, PLAYER, TRACK_COLOR } from '../../lib/palette.ts'
+import { PAL, TRACK_COLOR } from '../../lib/palette.ts'
 import { mat } from '../../lib/toy.ts'
 import { FONT } from '../atlas.ts'
 import { useRedraw } from '../Pieces.tsx'
@@ -32,7 +32,7 @@ import { CHART, ISLAND, chartGeo, chartTop, hullGeo, islandGeo, meadowGeo, pageG
 import { rim } from '../geometry.ts'
 import { wood } from '../wood.ts'
 import { atlasMaterial } from './cardMesh.ts'
-import { SEAT_TRACKS, TRACKS_BOX, raidToTable, seatParts, type Layout, type Raid } from './layout.ts'
+import { raidToTable, tracksBox, type Layout, type Raid } from './layout.ts'
 
 const BOX = new BoxGeometry(1, 1, 1)
 const dummy = new Object3D()
@@ -551,18 +551,15 @@ function FlipCharts({ view, layout, can, onImprove, mineShown }: { view: View; l
   const me = view.you
   const charts: Chart[] = useMemo(() => {
     const out: Chart[] = []
-    if (me >= 0 && mineShown)
+    if (me >= 0 && mineShown) {
+      const scale = K.tracksScale
+      const { stand } = tracksBox(scale)
       TRACKS.forEach((t, i) =>
-        out.push({ key: `${me}:${t}`, x: K.tracks[0] + (i - 1) * TRACKS_BOX.stand, z: K.tracks[1], scale: SEAT_TRACKS.mine, track: t, level: x.levels[me][t], mine: true, color: TRACK_COLOR[t] }),
-      )
-    for (const { p, at } of layout.seats) {
-      const [sx, sz] = seatParts(at, layout.portrait).knights
-      TRACKS.forEach((t, i) =>
-        out.push({ key: `${p}:${t}`, x: sx + (i - 1) * 60 * SEAT_TRACKS.scale, z: sz + 4, scale: SEAT_TRACKS.scale, track: t, level: x.levels[p][t], mine: false, color: PLAYER[view.players[p].color].ui }),
+        out.push({ key: `${me}:${t}`, x: K.tracks[0] + (i - 1) * stand, z: K.tracks[1], scale, track: t, level: x.levels[me][t], mine: true, color: TRACK_COLOR[t] }),
       )
     }
     return out
-  }, [x.levels, me, layout, K.tracks, view.players, mineShown])
+  }, [x.levels, me, K.tracks, K.tracksScale, mineShown])
 
   const stands = useRef<InstancedMesh>(null)
   const rings = useRef<InstancedMesh>(null)

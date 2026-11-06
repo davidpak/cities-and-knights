@@ -7,7 +7,7 @@
 import { useSyncExternalStore, type ReactNode } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { botAction } from '../../shared/bot.ts'
-import { apply, newGame, viewFor, type Action, type GameState, type View } from '../../shared/engine.ts'
+import { OFFER_MS, apply, newGame, viewFor, type Action, type GameState, type View } from '../../shared/engine.ts'
 import type { Ack, ClientToServer, RoomInfo, ServerToClient } from '../../shared/protocol.ts'
 import type { Progress } from '../../shared/rules.ts'
 
@@ -148,6 +148,18 @@ if (typeof window !== 'undefined' && /[?&]test/.test(location.search))
 
 function soloPublish() {
   if (!solo) return
+  // a new offer gets its time; when that runs out (and it's still open), it closes
+  for (const o of solo.offers) {
+    if (o.expires) continue
+    o.expires = Date.now() + OFFER_MS
+    setTimeout(() => {
+      if (!solo?.offers.some((x) => x.id === o.id)) return
+      const r = apply(solo, o.from, { type: 'cancelOffer', id: o.id })
+      if (!r.ok) return
+      solo = r.state
+      soloPublish()
+    }, OFFER_MS)
+  }
   const you = solo.players.findIndex((p) => p.id === 'you')
   set({ view: viewFor(solo, you) })
   clearTimeout(soloTimer)

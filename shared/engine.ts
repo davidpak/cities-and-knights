@@ -99,7 +99,9 @@ export type Phase =
  * `any` asks for that many more cards of the answerer's choosing (a wildcard): each yes says which (`picks`).
  * Several offers may be open at once.
  */
-export type Offer = { id: number; from: number; to?: number; give: Hand; get: Hand; any: number; accepted: number[]; declined: number[]; picks: Record<number, Hand> }
+export type Offer = { id: number; from: number; to?: number; give: Hand; get: Hand; any: number; accepted: number[]; declined: number[]; picks: Record<number, Hand>; expires?: number }
+/** how long an offer stays open (ms): then it closes by itself (the server keeps the time, and writes `expires`) */
+export const OFFER_MS = 30_000
 /** at most this many offers open at once */
 export const MAX_OFFERS = 4
 

@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Server, type Socket } from 'socket.io'
 import { botAction } from '../shared/bot.ts'
-import { apply, newGame, viewFor, type GameState } from '../shared/engine.ts'
+import { OFFER_MS, apply, newGame, viewFor, type GameState } from '../shared/engine.ts'
 import { MAX_SEATS, NAME_MAX, type ClientToServer, type RoomInfo, type Seat, type ServerToClient } from '../shared/protocol.ts'
 
 type Room = { code: string; host: string; seats: Seat[]; game: GameState | null; knights: boolean; botTimer?: NodeJS.Timeout; emptySince?: number }
@@ -53,7 +53,24 @@ function info(r: Room): RoomInfo {
   return { code: r.code, host: r.host, seats: r.seats, started: r.game !== null, knights: r.knights }
 }
 
+/** a new offer gets its time: when that runs out (and it's still open), it closes */
+function armOffers(r: Room) {
+  for (const o of r.game?.offers ?? []) {
+    if (o.expires) continue
+    o.expires = Date.now() + OFFER_MS
+    setTimeout(() => {
+      const g = r.game
+      if (!g || !g.offers.some((x) => x.id === o.id)) return
+      const res = apply(g, o.from, { type: 'cancelOffer', id: o.id })
+      if (!res.ok) return
+      r.game = res.state
+      send(r)
+    }, OFFER_MS)
+  }
+}
+
 function send(r: Room) {
+  armOffers(r)
   for (const seat of r.seats) {
     for (const s of sockets.get(seat.id) ?? []) {
       s.emit('room', info(r))

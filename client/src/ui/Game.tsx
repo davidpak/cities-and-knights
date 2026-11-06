@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  affordable, canAct, canPlay, chaseSpots, citySpots, improveCost, knightMoves, knightSpots, pickTargets, promoteSpots,
+  OFFER_MS, affordable, canAct, canPlay, chaseSpots, citySpots, improveCost, knightMoves, knightSpots, pickTargets, promoteSpots,
   roadSpots, robberSpots, settlementSpots, tradeRatios, wallSpots, type PickNeed, type View,
 } from '../../../shared/engine.ts'
 import { BARBARIAN_STEPS, CARD_TEXT, TRACK_GOOD, TRACK_LEVELS, TRACK_PERK, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
@@ -840,6 +840,13 @@ function trayActs({ view, deal, setDeal, owe, drop }: { view: View; deal: Deal |
   return { ok: null, no: null, okLive: false, okWord: '', noWord: '' }
 }
 
+/** an offer's time left: a thin bar along the bottom of its row, running down */
+function OfferTimer({ o }: { o: View['offers'][number] }) {
+  if (!o.expires) return null
+  const left = Math.max(0, o.expires - Date.now())
+  return <i className="op-timer" key={o.expires} style={{ animationDuration: `${left}ms`, width: `${(left / OFFER_MS) * 100}%` }} />
+}
+
 /** a wildcard: "?" at the tray's corner asks for one more card of their choosing */
 function AnyButton({ layout, onAdd }: { layout: ReturnType<typeof layoutFor>; onAdd: () => void }) {
   const project = useProjector()
@@ -888,6 +895,7 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
         const asked = view.players.map((_, i) => i).filter((i) => i !== me && (o.to === undefined || i === o.to))
         return (
           <div key={o.id} className="op-row">
+            <OfferTimer o={o} />
             {what}
             {asked.map((p) => {
               const st = o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait'
@@ -910,6 +918,7 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
       const picking = pickFor?.id === o.id
       return (
         <div key={o.id} className="op-row">
+          <OfferTimer o={o} />
           {chip(o.from)}
           {what}
           {answered ? (

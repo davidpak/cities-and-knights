@@ -418,6 +418,8 @@ input {
 }
 /* one open offer: what goes each way, then who */
 .op-row {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1640,4 +1642,18 @@ input {
 @keyframes snatch-glow {
   from { opacity: 0.45; transform: translate(-50%, -50%) scale(0.92); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+}
+
+/* an offer's time running down */
+.op-timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: #e3a72c;
+  animation: op-timer linear forwards;
+  pointer-events: none;
+}
+@keyframes op-timer {
+  to { width: 0; }
 }

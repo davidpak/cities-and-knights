@@ -9,6 +9,7 @@ import { TOPO } from '../../../shared/board.ts'
 import type { GameEvent, View } from '../../../shared/engine.ts'
 import { CARD_NAME, PROGRESS, RESOURCES, TRACK_NAME, type Good, type Hand } from '../../../shared/rules.ts'
 import { PLAYER } from '../lib/palette.ts'
+import { faceURL } from '../three/table/faces.ts'
 import { Bundle, Icon, PieceIcon, Pips } from './Cards.tsx'
 
 export function Who({ view, p, you = true }: { view: View; p: number; you?: boolean }) {
@@ -337,12 +338,22 @@ export function Announcer({ view }: { view: View }) {
   }, [now, queue])
   useEffect(() => {
     if (!now) return
-    const t = setTimeout(() => setNow(null), queue.length ? 1000 : 1700)
+    // (a card played stays up longer: there's a card to read)
+    const card = now.k === 'play' || now.k === 'progress'
+    const t = setTimeout(() => setNow(null), card ? (queue.length ? 1800 : 2600) : queue.length ? 1000 : 1700)
     return () => clearTimeout(t)
   }, [now, queue.length])
   if (!now) return null
   const line = describe(view, now)
   if (!line) return null
+  // a card played: the card itself, big, with who played it
+  if (now.k === 'play' || now.k === 'progress')
+    return (
+      <div className="announcer card-flash" key={now.n}>
+        <img src={faceURL(now.k === 'play' ? `dev:${now.card}` : `prog:${now.card}`)} alt="" />
+        <div>{line}</div>
+      </div>
+    )
   return (
     <div className={`announcer ${now.k}`} key={now.n}>
       {line}

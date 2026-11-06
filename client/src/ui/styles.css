@@ -1530,3 +1530,20 @@ input {
 .zoom-btn.go:disabled {
   opacity: 0.4;
 }
+
+/* someone played a card: the card, with who */
+.announcer.card-flash {
+  top: 40%;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  white-space: normal;
+  text-align: center;
+  animation-duration: 2.6s;
+}
+.announcer.card-flash img {
+  width: clamp(110px, 26vw, 170px);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}

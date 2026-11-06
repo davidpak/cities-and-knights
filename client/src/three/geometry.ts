@@ -265,7 +265,16 @@ export const towerGeo = memo(() =>
   sawn([[-TOWER.w / 2, 0], [TOWER.w / 2, 0], [TOWER.w / 2, TOWER.wall], [0, TOWER.peak], [-TOWER.w / 2, TOWER.wall]], TOWER.d, 1.2),
 )
 
-/** the trader: a small turned cone */
-export const traderGeo = memo(() =>
-  new LatheGeometry([new Vector2(0, 0), new Vector2(TRADER.r, 0), new Vector2(TRADER.r * 0.9, 1.5), new Vector2(TRADER.r * 0.35, TRADER.h * 0.75), new Vector2(TRADER.r * 0.55, TRADER.h * 0.86), new Vector2(0, TRADER.h)].map(([x, y]) => new Vector2(x as unknown as number, y as unknown as number)), 16),
-)
+/** the trader: a merchant turned in one piece (a wide robe, a round head, a broad-brimmed hat) */
+export const traderGeo = memo(() => {
+  const r = TRADER.r
+  const h = TRADER.h
+  const pts: [number, number][] = [
+    [0, 0], [r, 0], [r, 1.6], [r * 0.82, h * 0.18], [r * 0.48, h * 0.5], [r * 0.3, h * 0.56],
+    // the head
+    [r * 0.42, h * 0.6], [r * 0.46, h * 0.67], [r * 0.4, h * 0.73],
+    // the hat: brim, then crown
+    [r * 0.82, h * 0.75], [r * 0.8, h * 0.79], [r * 0.4, h * 0.8], [r * 0.34, h * 0.96], [0, h],
+  ]
+  return new LatheGeometry(pts.map(([x, y]) => new Vector2(x, y)), 20)
+})

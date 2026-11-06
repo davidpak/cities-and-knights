@@ -27,7 +27,7 @@ import { setProjector } from '../labels.ts'
 import { CAMERA, CITY, DICE, ROAD, SEA, SETTLEMENT, TILE, TOKEN, WALL, edgeAt, hexAt, vertexAt } from '../spec.ts'
 import { TestHook } from '../TestHook.tsx'
 import { trayFace } from './faces.ts'
-import { CARD, TRAY, fanPose, seatParts, type Layout, type Spot } from './layout.ts'
+import { BANK_STACK, CARD, TRAY, fanPose, seatParts, type Layout, type Spot } from './layout.ts'
 import { Physical, type Static } from './Physical.tsx'
 import { ExpansionTable } from './Expansion.tsx'
 import { VANISH, seeded, type Home, type PileSpec, type Thing } from './things.ts'
@@ -220,9 +220,9 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   // (one card of each kind, fanned: cards taken come from it and cards paid go into it)
   kinds.forEach((r, i) => {
     const id = `bank:${r}`
-    const f = fanPose(layout.fan, kinds.length, i)
+    const f = fanPose(layout.fan, kinds.length, i, layout.fanSpread)
     const spot: Spot = [f.x, f.z]
-    card({ id, family: 'res', look: `res:${r}`, n: Math.min(1, view.bank[r]), home: () => ({ x: f.x, y: f.base + CT / 2, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0 && (!can.bankGoods || !!can.bankGoods[r]), dim: !!can.bankGoods && !can.bankGoods[r], onClick: () => on.bank(r) })
+    card({ id, family: 'res', look: `res:${r}`, n: Math.min(BANK_STACK, view.bank[r]), home: (k) => ({ x: f.x, y: f.base + (k + 0.5) * CT, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0 && (!can.bankGoods || !!can.bankGoods[r]), dim: !!can.bankGoods && !can.bankGoods[r], onClick: () => on.bank(r) })
   })
   if (x && K)
     TRACKS.forEach((t) => {

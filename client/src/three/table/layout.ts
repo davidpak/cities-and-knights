@@ -59,24 +59,28 @@ export function raidToTable(R: Raid, [a, b]: Spot): Spot {
  * and a point on the part of it that shows (to click).
  */
 export const FAN = { reach: 50, step8: 10.5, step5: 13 } // [D] the card's middle from the pivot (mm); degrees between cards
-export function fanPose(pivot: Spot, n: number, i: number) {
-  const step = ((n > 5 ? FAN.step8 : FAN.step5) * Math.PI) / 180
+/** a bank card's place in the fan; `spread` opens the fan wider (where there's room) and each card is a stack of
+ *  up to BANK_STACK, so the next card lies above the whole stack */
+export const BANK_STACK = 4
+export function fanPose(pivot: Spot, n: number, i: number, spread = 1) {
+  const step = ((n > 5 ? FAN.step8 : FAN.step5) * spread * Math.PI) / 180
   const th = (i - (n - 1) / 2) * step
   const at = (d: number, off = 0): Spot => [pivot[0] + d * Math.sin(th + off), pivot[1] - d * Math.cos(th + off)]
-  const [x, z] = at(FAN.reach)
+  const reach = FAN.reach * spread
+  const [x, z] = at(reach)
   // the next card covers this one's right side; what shows is a wedge on its left, widest near the top
-  const d = FAN.reach + CARD.d / 2 - 8
-  const tap = i === n - 1 ? at(FAN.reach + 10) : at(d, -Math.atan(CARD.w / 2 / d) + step / 2)
-  return { x, z, yaw: -th, base: i * CARD.t, tap }
+  const d = reach + CARD.d / 2 - 8
+  const tap = i === n - 1 ? at(reach + 10) : at(d, -Math.atan(CARD.w / 2 / d) + step / 2)
+  return { x, z, yaw: -th, base: i * BANK_STACK * CARD.t, tap }
 }
 /** the fan's footprint (for the layout check) */
-function fanBox(pivot: Spot, n: number): { x0: number; x1: number; z0: number; z1: number } {
+function fanBox(pivot: Spot, n: number, spread = 1): { x0: number; x1: number; z0: number; z1: number } {
   let x0 = Infinity
   let x1 = -Infinity
   let z0 = Infinity
   let z1 = -Infinity
   for (let i = 0; i < n; i++) {
-    const p = fanPose(pivot, n, i)
+    const p = fanPose(pivot, n, i, spread)
     for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
       const ax = (lx * CARD.w) / 2
       const az = (lz * CARD.d) / 2
@@ -102,6 +106,8 @@ export type Layout = SeatStyle & {
   dev: (i: number, held?: number) => Spot
   supply: { road: Spot; settlement: Spot; city: Spot }
   awardsMine: Spot
+  /** the bank's fan opened wider than usual (on a wide table) */
+  fanSpread?: number
   /** the basic game: the knights you've played, face up beside your awards (Largest Army in the making) */
   armyMine?: Spot
   meLabel: Spot
@@ -184,6 +190,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       marks: 'right',
       wants: (i) => [-520 + (i - 2) * 44, -130],
       fan: [520, -10],
+      fanSpread: 1.3,
       bank: [],
       deck: [520, 95],
       dice: [526, 205],
@@ -214,6 +221,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
         marks: 'left',
         wants: (i) => [540 + ((i % 4) - 1.5) * 42, i < 4 ? -45 : 13],
         fan: [540, -205],
+        fanSpread: 1.3,
         deck: [540, -130],
         dice: [560, 262],
         flash: [540, 120],
@@ -310,7 +318,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
   }
 
   const kinds = knights ? 8 : 5
-  L.bank = Array.from({ length: kinds }, (_, i) => fanPose(L.fan, kinds, i).tap)
+  L.bank = Array.from({ length: kinds }, (_, i) => fanPose(L.fan, kinds, i, L.fanSpread).tap)
   const c = (what: string, [x, z]: Spot, w = CARD.w, d = CARD.d): Box => ({ what, x, z, w, d })
   const boxes: Box[] = [
     ...L.hand.map((s, i) => c(`hand ${i}`, s)),
@@ -324,7 +332,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
     c('tray', L.tray, TRAY.w, TRAY.d),
     ...L.hand.map((_, i) => c(`want ${i}`, L.wants(i), CARD.w * CARD.small, CARD.d * CARD.small)),
     (() => {
-      const f = fanBox(L.fan, kinds)
+      const f = fanBox(L.fan, kinds, L.fanSpread)
       return { what: 'bank fan', x: (f.x0 + f.x1) / 2, z: (f.z0 + f.z1) / 2, w: f.x1 - f.x0, d: f.z1 - f.z0 }
     })(),
     ...(L.k ? [] : [c('deck', L.deck)]),

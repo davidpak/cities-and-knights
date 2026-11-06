@@ -355,7 +355,7 @@ export function Game({ view }: { view: View }) {
     },
   }
 
-  const acts = trayActs({ deal, setDeal, owe, drop })
+  const acts = trayActs({ view, deal, setDeal, owe, drop })
 
   // your turn, while you're in another tab: the tab says so
   useEffect(() => {
@@ -635,7 +635,16 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
     <div className="labels">
       {hand && (() => {
         const spots = packHand(layout.hand, view.x ? GOODS : RESOURCES, hand, layout.handEnd)
-        return (view.x ? GOODS : RESOURCES).map((r) => count(`h${r}`, spots[r], hand[r]))
+        // and under a stack you trade with the bank for less than 4 (a harbour, the trader, a charter, trade level 3), its rate
+        const ratios = tradeRatios(view, me)
+        return (view.x ? GOODS : RESOURCES).flatMap((r) => [
+          count(`h${r}`, spots[r], hand[r]),
+          hand[r] > 0 && ratios[r] < 4 ? (
+            <span key={`rate${r}`} className="rate" style={at([spots[r][0], spots[r][1] + CARD.d / 2 - 2], hand[r] * CARD.t + 2)}>
+              {ratios[r]}:1
+            </span>
+          ) : null,
+        ])
       })()}
       {/* the bank shows one card of each kind; only a kind running low says how many are left */}
       {(view.x ? GOODS : RESOURCES).map((r, i) =>
@@ -686,13 +695,27 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
 
 type TrayActs = { ok: (() => void) | null; no: (() => void) | null; okLive: boolean; okWord: string; noWord: string }
 /** what the tray's two buttons do now (and what they say, where there's room to say it) */
-function trayActs({ deal, setDeal, owe, drop }: { deal: Deal | null; setDeal: (d: Deal | null) => void; owe: number; drop: Hand }): TrayActs {
+/** a tray that is exactly one bank trade (n of one kind at your rate, for one card, nobody picked): what it is */
+function bankDeal(view: View, deal: Deal): { give: Good; get: Good } | null {
+  if (typeof deal.to === 'number' || deal.any) return null
+  const gives = GOODS.filter((r) => deal.give[r] > 0)
+  const gets = GOODS.filter((r) => deal.get[r] > 0)
+  if (gives.length !== 1 || gets.length !== 1 || deal.get[gets[0]] !== 1 || gives[0] === gets[0]) return null
+  return deal.give[gives[0]] === tradeRatios(view, view.you)[gives[0]] && view.bank[gets[0]] > 0 ? { give: gives[0], get: gets[0] } : null
+}
+
+function trayActs({ view, deal, setDeal, owe, drop }: { view: View; deal: Deal | null; setDeal: (d: Deal | null) => void; owe: number; drop: Hand }): TrayActs {
   if (owe) return { ok: () => act({ type: 'discard', cards: drop }), okLive: handSize(drop) === owe, okWord: `Discard ${owe}`, no: null, noWord: '' }
   if (deal)
     // the check puts it to everyone, or to the one player picked (by a tap on their cards); the tray then clears
     // for the next one
     return {
-      ok: () => void act({ type: 'offerTrade', give: deal.give, get: deal.get, any: deal.any ?? 0, ...(typeof deal.to === 'number' ? { to: deal.to } : {}) }).then((ok) => ok && setDeal(null)),
+      ok: () => {
+        // exactly the bank's rate of one kind for one card (and not meant for a player): that's a bank trade
+        const bank = bankDeal(view, deal)
+        if (bank) return void act({ type: 'bankTrade', ...bank }).then((ok) => ok && setDeal(null))
+        void act({ type: 'offerTrade', give: deal.give, get: deal.get, any: deal.any ?? 0, ...(typeof deal.to === 'number' ? { to: deal.to } : {}) }).then((ok) => ok && setDeal(null))
+      },
       okLive: handSize(deal.give) > 0 && handSize(deal.get) + (deal.any ?? 0) > 0 && !GOODS.some((r) => deal.give[r] && deal.get[r]),
       okWord: 'Offer',
       no: () => setDeal(null),

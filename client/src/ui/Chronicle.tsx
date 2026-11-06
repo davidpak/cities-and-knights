@@ -246,7 +246,12 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
         </>
       )
     case 'swap':
-      return <>{W(e.p)} swapped two number tokens</>
+      // (the tiles as they are now: each holds the other's old number)
+      return (
+        <>
+          {W(e.p)} swapped <b>{view.tiles[e.b].number}</b> ({TERRAIN_WORD[view.tiles[e.a].terrain]}) ⇄ <b>{view.tiles[e.a].number}</b> ({TERRAIN_WORD[view.tiles[e.b].terrain]})
+        </>
+      )
     case 'unroad':
       return (
         <>

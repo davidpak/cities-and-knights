@@ -65,7 +65,7 @@ export const ROBBER = { r: 12.5, h: 34 } // [D]
 export const KNIGHT = { r: 7, h: [0, 11, 17, 24] as const, rs: [0, 0.82, 1, 1.22] as const } // [D] (by strength: height, and width as a share of r)
 export const WALL = { w: 44, d: 30, rim: 3.2, h: 6 } // [D] (round a city: CITY.w 32 x CITY.d 17, with room)
 export const TOWER = { w: 11, d: 11, wall: 30, peak: 38 } // [D]
-export const TRADER = { r: 5.5, h: 17 } // [D]
+export const TRADER = { r: 11, h: 36 } // [D] a merchant: robe, round head, broad hat; big enough to spot at once
 
 /**
  * A harbour, as on the usual board: its sign sits out in the water off one coast side, and two short wooden piers

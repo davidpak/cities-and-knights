@@ -207,7 +207,7 @@ export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0, ex
       }
       if (extras.merchant) {
         const [x, z] = hexAt(extras.merchant.hex)
-        out.push({ key: `m${extras.merchant.hex}`, kind: 'trader', x: x + 26, y: 0, z: z + 6, yaw: 0, color: colors[extras.merchant.owner], mine: false })
+        out.push({ key: `m${extras.merchant.hex}`, kind: 'trader', x: x + 26, z: z + 6, yaw: 0, color: colors[extras.merchant.owner], mine: false })
       }
     }
     return out

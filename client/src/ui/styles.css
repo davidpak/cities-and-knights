@@ -1474,3 +1474,16 @@ input {
   vertical-align: -2px;
   margin-right: 2px;
 }
+
+/* under a hand stack: its bank rate, when better than 4:1 */
+.rate {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #2f7d4f;
+  color: #fff;
+  font-weight: 800;
+  font-size: max(calc(var(--u) * 12), 11px);
+  pointer-events: none;
+}

@@ -8,6 +8,7 @@
  * game replays exactly from its seed and actions. The seed and the card pile are stripped from what clients see.
  */
 import { TOPO } from './board.ts'
+import { newStats, tally, type Stats } from './stats.ts'
 import {
   BANK_EACH, BARBARIAN_STEPS, CARD_NAME, CARD_SET, CITY_YIELD, COMMODITIES, COMMODITY_EACH, COST, EVENT_FACES, GOODS,
   HAND_LIMIT, HAND_LIMIT_PER_WALL, HARBOR_SET, KNIGHT_COST, KNIGHT_PIECES, KNIGHT_POINTS, LARGEST_ARMY_MIN,
@@ -186,6 +187,8 @@ export type GameState = {
   snatch: { id: number; thief: number; victim: number } | null
   /** the turn each player last tried a snatch (once a turn) */
   snatched: Record<number, number>
+  /** the game's numbers so far (shown when it ends) */
+  stats?: Stats
   longestRoad: number | null
   largestArmy: number | null
   log: LogEntry[]
@@ -314,6 +317,7 @@ export function newGame(seats: Seat[], seed: number, opts: Options = {}): GameSt
     pieces: { ...PIECES, knight: { ...KNIGHT_PIECES }, wall: knights ? WALLS : 0 },
     progress: [],
   }))
+  s.stats = newStats(s.players.length)
   if (knights) {
     const deck = (t: Track) => shuffle(s, PROGRESS_CARDS.filter((c) => PROGRESS[c].track === t).flatMap((c) => Array<Progress>(PROGRESS[c].count).fill(c)))
     s.x = {
@@ -653,7 +657,9 @@ function log(s: GameState, text: string, player?: number) {
 }
 
 function ev(s: GameState, e: EventBody) {
-  s.events.push({ ...e, n: s.eventCount++ } as GameEvent)
+  const full = { ...e, n: s.eventCount++ } as GameEvent
+  if (s.stats) tally(s.stats, full)
+  s.events.push(full)
   if (s.events.length > 80) s.events.splice(0, s.events.length - 80)
 }
 
@@ -1778,6 +1784,8 @@ export function viewFor(s: GameState, you: number): View {
     if (e.k === 'take' && e.card && you !== e.p && you !== e.from) return { ...e, card: undefined }
     return e
   }).filter((e): e is GameEvent => e !== null)
+  // the game's numbers: shown when it's over (until then they'd tell secrets: who stole what, what was drawn)
+  if (!over) delete base.stats
   // a snatch under way: the victim sees that it's happening, not who; the thief sees theirs; nobody else anything
   if (base.snatch && you !== base.snatch.thief) base.snatch = you === base.snatch.victim ? { ...base.snatch, thief: -1 } : null
   const xv = x ? { ...structuredClone(x), decks: { trade: x.decks.trade.length, politics: x.decks.politics.length, science: x.decks.science.length } } : null

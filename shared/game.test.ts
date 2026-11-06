@@ -524,3 +524,31 @@ test('sneaking a card: caught means giving one back; not caught means a card tak
   assert.equal(t.players[1].hand.wool, 1)
   assert.equal(t.phase.kind, 'main')
 })
+
+test('the game keeps its numbers, and shows them only once it is over', () => {
+  const n = 3
+  let s = newGame(seats(n), 4242)
+  const rnd = rng(9)
+  let midway: ReturnType<typeof viewFor> | null = null
+  for (let steps = 0; s.phase.kind !== 'over' && steps < 6000; steps++) {
+    for (let p = 0; p < n; p++) {
+      const a = botAction(viewFor(s, p), p, rnd)
+      if (!a) continue
+      s = must(s, p, a)
+      break
+    }
+    if (steps === 200) midway = viewFor(s, 0)
+  }
+  assert.equal(s.phase.kind, 'over')
+  const st = s.stats!
+  assert.equal(st.rolls.reduce((a, b) => a + b, 0), s.rolls, 'every roll counted')
+  assert.equal(st.players.reduce((a, p) => a + p.rolled, 0), s.rolls)
+  const built = (i: number) => Object.values(s.buildings).filter((b) => b.owner === i)
+  for (let i = 0; i < n; i++) {
+    // (two settlements are placed free; a city stands where a settlement was)
+    assert.ok(st.players[i].settlements + 2 >= built(i).length, 'settlements built')
+    assert.equal(st.players[i].cities, built(i).filter((b) => b.kind === 'city').length)
+  }
+  assert.equal(midway?.stats, undefined, 'hidden while playing')
+  assert.ok(viewFor(s, 1).stats, 'shown at the end')
+})

@@ -22,6 +22,7 @@ import { publishState } from '../three/TestHook.tsx'
 import { Bundle } from './Cards.tsx'
 import { Announcer, Chronicle, describe, Who } from './Chronicle.tsx'
 import { Costs, Rules } from './Reference.tsx'
+import { GameStats } from './Stats.tsx'
 
 type Build = 'road' | 'settlement' | 'city' | 'knight' | 'wall'
 type Deal = { give: Hand; get: Hand; to: 'bank' | number | null; any?: number }
@@ -1398,11 +1399,19 @@ function RollFlash({ view, layout }: { view: View; layout: ReturnType<typeof lay
 
 function GameOver({ view }: { view: View }) {
   const ph = view.phase
+  // (the results can be put aside to look at the table, and brought back)
+  const [away, setAway] = useState(false)
   if (ph.kind !== 'over') return null
   const order = view.players.map((p, i) => ({ p, i })).sort((a, b) => b.p.points - a.p.points)
+  if (away)
+    return (
+      <button className="stamp-btn go results-btn" onClick={() => setAway(false)}>
+        Results
+      </button>
+    )
   return (
     <div className="dialog-back">
-      <div className="paper dialog">
+      <div className="paper dialog results">
         <div className="dialog-head">{ph.winner === view.you ? 'You win' : `${view.players[ph.winner].name} wins`}</div>
         <div className="scores">
           {order.map(({ p, i }) => (
@@ -1412,7 +1421,11 @@ function GameOver({ view }: { view: View }) {
             </div>
           ))}
         </div>
+        <GameStats view={view} />
         <div className="dialog-foot">
+          <button className="stamp-btn" onClick={() => setAway(true)}>
+            Board
+          </button>
           <button className="stamp-btn go" onClick={() => room.leave()}>
             Menu
           </button>

@@ -1686,3 +1686,189 @@ input {
   width: 3px;
   height: 3px;
 }
+
+/* the end of the game: results and numbers */
+.dialog.results {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.dialog.results .dialog-foot {
+  gap: 8px;
+  position: sticky;
+  bottom: -16px;
+  padding: 10px 0 2px;
+  background: var(--paper);
+}
+.results-btn {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+}
+.game-stats h4 {
+  margin: 16px 0 6px;
+  font-size: 15px;
+}
+.gs-heads {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.gs-head {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--paper-2);
+  border-left: 5px solid var(--pc);
+}
+.gs-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gs-num {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.gs-num b {
+  font-size: 20px;
+  color: var(--ink);
+}
+.gs-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.gs-table-wrap {
+  overflow-x: auto;
+}
+.gs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.gs-table th,
+.gs-table td {
+  padding: 5px 8px;
+  text-align: right;
+  border-bottom: 1px solid rgba(42, 29, 19, 0.1);
+  white-space: nowrap;
+}
+.gs-table th:first-child,
+.gs-table td:first-child {
+  text-align: left;
+  color: var(--ink-2);
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: var(--paper);
+}
+.gs-table thead th {
+  border-bottom: 2px solid rgba(42, 29, 19, 0.2);
+}
+/* the dice: a bar per total, a dashed tick for fair dice */
+.dice-chart {
+  display: grid;
+  gap: 4px;
+}
+.dc-plot {
+  height: 150px;
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  gap: 2px;
+  align-items: end;
+  border-bottom: 1px solid rgba(42, 29, 19, 0.25);
+}
+.dc-col {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: default;
+}
+.dc-bar {
+  width: min(70%, 34px);
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: #8a5a3b;
+}
+.dc-col.on .dc-bar {
+  background: #6b4228;
+}
+.dc-exp {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  border-top: 2px dashed var(--ink);
+  opacity: 0.55;
+}
+.dc-val {
+  position: absolute;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.dc-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.dc-axis {
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  gap: 2px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.dc-axis .red {
+  color: #c0392b;
+}
+.dc-key {
+  font-size: 12px;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.dc-key-bar {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: #8a5a3b;
+}
+.dc-key-exp {
+  width: 14px;
+  border-top: 2px dashed var(--ink);
+  opacity: 0.55;
+  margin-left: 6px;
+}
+
+/* (the cards of each kind: wrapped in their cell, so every player's column fits) */
+.gs-each .bundle {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 6px;
+  max-width: 130px;
+  white-space: normal;
+}
+.gs-table td:has(.gs-each) {
+  white-space: normal;
+}

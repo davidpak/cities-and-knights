@@ -125,12 +125,8 @@ function decorate(b: Builder, terrain: Terrain, seed: number, cx: number, cz: nu
       })
       break
     case 'hills': {
-      const mounds = ring(3, rnd)
-      mounds.forEach((p) => put(UNIT.ball, c.b, at(p.x, 0, p.z, [11 * p.s, 7 * p.s, 9 * p.s])))
-      ring(2, rnd).forEach((p, i) => {
-        const g = at((p.x + mounds[i].x) / 2, 0, (p.z + mounds[i].z) / 2, 1, p.a)
-        ;[[-3.3, 0], [3.3, 0], [0, 1]].forEach(([bx, row], j) => put(UNIT.brick, j === 2 ? c.c : c.a, at(bx, 1.8 + row * 3.6, 0, [6.2, 3.4, 3.6]), g))
-      })
+      // clay mounds (no loose bricks: at table distance they read as stray bits)
+      ring(4, rnd).forEach((p) => put(UNIT.ball, c.b, at(p.x, 0, p.z, [11 * p.s, 7 * p.s, 9 * p.s])))
       break
     }
     case 'mountains': {

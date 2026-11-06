@@ -108,7 +108,8 @@ const STEP = 1 / 120
 const MAX_STEPS = 6
 /** how long a piece takes from your supply to the board */
 export const VANISH = 0.55
-const GRAVITY = 6000
+/** mm/s² (gentler than real: a card let go floats down rather than slams) */
+const GRAVITY = 3000
 /** a loose card's body is a little thicker than the card (paper-thin bodies sink into things) */
 const LOOSE_CARD = 1.6
 const tmpV = new Vector3()

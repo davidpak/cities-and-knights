@@ -14,7 +14,8 @@ import { act, playerId, room, useStore } from '../net.ts'
 import { GLOW_AT, type PickKind, type Picking } from '../three/Board.tsx'
 import { useProjector } from '../three/labels.ts'
 import { TableView, packHand, type TrayContents } from '../three/table/Table.tsx'
-import { CARD, TRAY, layoutFor, seatParts, type Spot } from '../three/table/layout.ts'
+import { CARD, TRAY, layoutFor, raidToTable, seatParts, type Spot } from '../three/table/layout.ts'
+import { SHIELD } from '../lib/icons.ts'
 import { faceURL, paintFace } from '../three/table/faces.ts'
 import { publishState } from '../three/TestHook.tsx'
 import { Bundle } from './Cards.tsx'
@@ -457,6 +458,7 @@ export function Game({ view }: { view: View }) {
       <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} toMe={toMe[toMe.length - 1] ?? null} armed={armed && !!picking} />
 
       <Labels view={view} layout={layout} hand={shownHand} />
+      {view.x && <BarbarianOdds view={view} layout={layout} />}
 
       {tray && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} />}
       <Offers view={view} layout={layout} target={typeof deal?.to === 'number' ? deal.to : null} pickFor={pickFor} onPick={setPickFor} />
@@ -661,6 +663,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
                       {view.x!.levels[p][t]}
                     </i>
                   ))}
+                  <KnightPower view={view} p={p} />
                 </span>
               )}
             </span>
@@ -672,6 +675,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
         <span className={`name mine ${view.current === me ? 'turn' : ''}`} style={{ ...at(layout.meLabel), ['--pc' as string]: PLAYER[pl.color].ui }}>
           {pl.name} <b>{pl.points}</b>
           {pl.hand && <i className="hc">{handSize(pl.hand)}</i>}
+          {view.x && <KnightPower view={view} p={me} />}
         </span>
       )}
     </div>
@@ -820,6 +824,54 @@ function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; act
           ✕
         </button>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- knights against the barbarians
+
+/** each player's strength in ready knights */
+const defenseOf = (view: View) => view.players.map((_, i) => Object.values(view.x?.knights ?? {}).reduce((n, k) => n + (k.owner === i && k.active ? k.level : 0), 0))
+
+/** on a name tag: their ready knights' strength, and a crown for the one strongest (alone at the top) */
+function KnightPower({ view, p }: { view: View; p: number }) {
+  const d = defenseOf(view)
+  const top = Math.max(...d)
+  const crown = top > 0 && d[p] === top && d.filter((x) => x === top).length === 1
+  return (
+    <i className={`kp ${crown ? 'crown' : ''}`} title="Ready knights">
+      {crown && (
+        <svg viewBox="0 0 24 24" className="kp-crown">
+          <path d="M3 8l4.5 4L12 5l4.5 7L21 8l-1.6 10H4.6z" />
+        </svg>
+      )}
+      <svg viewBox="0 0 24 24" className="kp-shield">
+        <path d={SHIELD} />
+      </svg>
+      {d[p]}
+    </i>
+  )
+}
+
+/** by the barbarians' island: their strength (the cities on the island) against all the ready knights */
+function BarbarianOdds({ view, layout }: { view: View; layout: ReturnType<typeof layoutFor> }) {
+  const project = useProjector()
+  const R = layout.k?.raid
+  if (!R) return null
+  const strength = Object.values(view.buildings).filter((b) => b.kind === 'city').length
+  const defense = defenseOf(view).reduce((a, b) => a + b, 0)
+  const [ix, iz] = raidToTable(R, R.island)
+  const [x, y] = project(ix, 12, iz)
+  return (
+    <div className={`raid-odds ${defense >= strength ? 'hold' : 'lose'}`} style={{ left: x, top: y }}>
+      <span title="Barbarians">⚔ {strength}</span>
+      <span className="vs">vs</span>
+      <span title="Ready knights">
+        <svg viewBox="0 0 24 24">
+          <path d={SHIELD} />
+        </svg>
+        {defense}
+      </span>
     </div>
   )
 }

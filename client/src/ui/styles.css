@@ -1670,3 +1670,19 @@ input {
   padding-right: 0;
   min-width: 52px;
 }
+
+/* the red die faces that draw a card, by level */
+.tz-dice {
+  display: inline-flex;
+  gap: 2px;
+}
+.tz-dice .die {
+  width: 16px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 3px;
+}
+.tz-dice .die i {
+  width: 3px;
+  height: 3px;
+}

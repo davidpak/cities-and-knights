@@ -168,8 +168,17 @@ export function Game({ view }: { view: View }) {
     if (main && building === 'road') return { kind: 'road', spots: roadSpots(view, me) }
     if (main && building === 'settlement') return { kind: 'settlement', spots: settlementSpots(view, me) }
     if (main && building === 'city') return { kind: 'city', spots: citySpots(view, me) }
-    // otherwise your knights on the board can be clicked (to ready one, or to pick up a ready one)
-    if (main && myKnights.length && !deal) return { kind: 'quiet', spots: myKnights }
+    // otherwise every road, settlement and city you can build is marked, tap twice to build (and your knights on the
+    // board can be clicked, to ready one or to pick up a ready one)
+    if (main && !deal) {
+      const layers = [
+        can.road ? { kind: 'road' as const, spots: roadSpots(view, me) } : null,
+        can.settlement ? { kind: 'settlement' as const, spots: settlementSpots(view, me) } : null,
+        can.city ? { kind: 'city' as const, spots: citySpots(view, me) } : null,
+        myKnights.length ? { kind: 'quiet' as const, spots: myKnights } : null,
+      ].filter((l): l is NonNullable<typeof l> => !!l && l.spots.length > 0)
+      if (layers.length) return { ...layers[0], more: layers.slice(1), twice: true }
+    }
     return null
   }, [mine, main, ph, building, view, me, selected, deal])
 
@@ -291,7 +300,12 @@ export function Game({ view }: { view: View }) {
     trayAny: () => deal && setDeal({ ...deal, any: Math.max(0, (deal.any ?? 0) - 1) }),
     snatch: (p: number) => void act({ type: 'snatch', victim: p }),
     // a piece dropped on the board: built at the nearest spot it can go, if one is close
+    // a piece of your supply picked up: its spots light up (let go on one to build it there)
+    holdPiece: (w: Build | null) => {
+      if (w && main && (w === 'road' || w === 'settlement' || w === 'city') && can[w]) setBuilding(w)
+    },
     dropPiece: (w: Build, x: number, z: number) => {
+      setBuilding(null)
       if (!main || (w !== 'road' && w !== 'settlement' && w !== 'city') || !can[w]) return
       const spots = w === 'road' ? roadSpots(view, me) : w === 'settlement' ? settlementSpots(view, me) : citySpots(view, me)
       const at = (id: number) => (w === 'road' ? edgeAt(id) : vertexAt(id))
@@ -1125,12 +1139,17 @@ function TrackZoom({ track, level, onClose, onImprove }: { track: Track; level: 
                 {i === 2 && <small>{TRACK_PERK[track]}</small>}
                 {i === 3 && <small>First here: metropolis, +2</small>}
               </span>
+              <span className="tz-dice" title="Red die rolls that draw a card">
+                {Array.from({ length: Math.min(6, i + 2) }, (_, f) => (
+                  <DieFace key={f} v={f + 1} kind="red" />
+                ))}
+              </span>
               <Bundle of={{ [good]: i + 1 }} />
             </li>
           ))}
         </ol>
         <div className="tz-note">
-          <span className="tz-gate" /> on the event die: a card if the red die ≤ level + 1
+          <span className="tz-gate" /> on the event die + a red die shown: a card
         </div>
         <div className="zoom-row">
           {onImprove && (

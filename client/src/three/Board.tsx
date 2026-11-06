@@ -24,7 +24,12 @@ import { QUALITY } from './quality.ts'
 /** what's being picked on the board: a spot to build (shown with the piece), the robber's tile, or (the expansion) a
  *  corner, a side or a tile for some other purpose (shown with a ring); 'quiet': your knights, ready to be clicked */
 export type PickKind = 'settlement' | 'city' | 'road' | 'robber' | 'vertex' | 'edge' | 'hex' | 'quiet'
-export type Picking = { kind: PickKind; spots: number[] } | null
+/**
+ * What can be picked on the board: spots of one kind, and (`more`) of other kinds at once (on your turn with nothing
+ * in hand: every road, settlement and city you can build). `twice`: a building spot takes a second tap to build
+ * (the first shows the piece there).
+ */
+export type Picking = { kind: PickKind; spots: number[]; more?: { kind: PickKind; spots: number[] }[]; twice?: boolean } | null
 
 export type BoardProps = {
   tiles: Tile[]
@@ -154,30 +159,44 @@ function Markers({ kind, spots }: { kind: PickKind; spots: number[] }) {
  * shows it there and a second tap on it places it (a tap elsewhere moves it).
  */
 function Picker({ picking, color, onPick, onArm }: { picking: NonNullable<Picking>; color: PlayerColor; onPick?: BoardProps['onPick']; onArm?: BoardProps['onArm'] }) {
-  const [hover, setHover] = useState<number | null>(null)
-  const { kind, spots } = picking
+  type Spot = { kind: PickKind; id: number }
+  const [hover, setHover] = useState<Spot | null>(null)
+  // (tap-twice building: the spot tapped once, showing its piece)
+  const [armed, setArmed] = useState<Spot | null>(null)
+  const layers = useMemo(() => [{ kind: picking.kind, spots: picking.spots }, ...(picking.more ?? [])], [picking])
   const { camera } = useThree()
   const touch = useRef(false)
-  useEffect(() => setHover(null), [kind, spots])
-  useEffect(() => onArm?.(touch.current && hover !== null), [hover, onArm])
+  useEffect(() => {
+    setHover(null)
+    setArmed(null)
+  }, [picking])
+  useEffect(() => onArm?.((touch.current && hover !== null) || armed !== null), [hover, armed, onArm])
   useEffect(() => () => onArm?.(false), [onArm])
-  const nearest = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
-    let best: number | null = null
-    // (an orthographic camera's zoom is pixels per millimetre)
-    let bestD = Math.max(REACH[kind], (touch.current ? 26 : 12) / Math.max(0.05, camera.zoom))
-    for (const id of spots) {
-      const d = distTo(kind, id, e.point.x, e.point.z)
-      if (d < bestD) {
-        best = id
-        bestD = d
+  const same = (a: Spot | null, b: Spot | null) => !!a && !!b && a.kind === b.kind && a.id === b.id
+  const nearest = (e: ThreeEvent<PointerEvent | MouseEvent>): Spot | null => {
+    let best: Spot | null = null
+    let bestD = Infinity
+    for (const l of layers) {
+      // (an orthographic camera's zoom is pixels per millimetre)
+      const reach = Math.max(REACH[l.kind], (touch.current ? 26 : 12) / Math.max(0.05, camera.zoom))
+      for (const id of l.spots) {
+        const d = distTo(l.kind, id, e.point.x, e.point.z)
+        if (d < reach && d < bestD) {
+          best = { kind: l.kind, id }
+          bestD = d
+        }
       }
     }
     return best
   }
-  const [hx, hz] = hover !== null ? spotAt(kind, hover) : [0, 0]
+  const shown = armed ?? hover
+  const [hx, hz] = shown !== null ? spotAt(shown.kind, shown.id) : [0, 0]
+  const k = shown?.kind
   return (
     <>
-      <Markers kind={kind} spots={spots} />
+      {layers.map((l) => (
+        <Markers key={l.kind} kind={l.kind} spots={l.spots} />
+      ))}
       <mesh
         position={[0, TILE.h + 1, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -188,7 +207,7 @@ function Picker({ picking, color, onPick, onArm }: { picking: NonNullable<Pickin
           if (e.nativeEvent.pointerType === 'touch') return
           touch.current = false
           const n = nearest(e)
-          if (n !== hover) setHover(n)
+          if (!same(n, hover)) setHover(n)
           document.body.style.cursor = n !== null ? 'pointer' : ''
         }}
         onPointerLeave={(e) => {
@@ -198,26 +217,30 @@ function Picker({ picking, color, onPick, onArm }: { picking: NonNullable<Pickin
         }}
         onClick={(e) => {
           const n = nearest(e)
-          if (touch.current && n !== hover) {
+          if (n === null) return setArmed(null)
+          // a building spot when nothing was picked first: tap once to see it, again to build
+          const twice = picking.twice && n.kind !== 'quiet'
+          if (twice && !same(n, armed)) return setArmed(n)
+          if (!twice && touch.current && !same(n, hover)) {
             // a finger: show it here first
             setHover(n)
             return
           }
-          if (n === null) return
           setHover(null)
+          setArmed(null)
           document.body.style.cursor = ''
-          onPick?.(kind, n)
+          onPick?.(n.kind, n.id)
         }}
       >
         <circleGeometry args={[SEA.inner * 0.95, 48]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
       </mesh>
-      {hover !== null && kind === 'settlement' && <Settlement ghost color={color} x={hx} z={hz} />}
-      {hover !== null && kind === 'city' && <City ghost color={color} x={hx} z={hz} />}
-      {hover !== null && kind === 'road' && <Road ghost color={color} x={hx} z={hz} angle={TOPO.edges[hover].angle} />}
-      {hover !== null && kind === 'robber' && <Robber ghost x={hx} z={hz} />}
-      {hover !== null && (kind === 'vertex' || kind === 'edge' || kind === 'hex' || kind === 'quiet') && (
-        <mesh geometry={RING_MARK} material={kind === 'hex' || hover < 0 ? GOLD : MARK} position={[hx, TILE.h + (kind === 'hex' || hover < 0 ? 5.6 : 1.2), hz]} scale={kind === 'hex' || hover < 0 ? 27 : 11} renderOrder={2} />
+      {shown !== null && k === 'settlement' && <Settlement ghost color={color} x={hx} z={hz} />}
+      {shown !== null && k === 'city' && <City ghost color={color} x={hx} z={hz} />}
+      {shown !== null && k === 'road' && <Road ghost color={color} x={hx} z={hz} angle={TOPO.edges[shown.id].angle} />}
+      {shown !== null && k === 'robber' && <Robber ghost x={hx} z={hz} />}
+      {shown !== null && (k === 'vertex' || k === 'edge' || k === 'hex' || k === 'quiet') && (
+        <mesh geometry={RING_MARK} material={k === 'hex' || shown.id < 0 ? GOLD : MARK} position={[hx, TILE.h + (k === 'hex' || shown.id < 0 ? 5.6 : 1.2), hz]} scale={k === 'hex' || shown.id < 0 ? 27 : 11} renderOrder={2} />
       )}
     </>
   )

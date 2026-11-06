@@ -297,6 +297,9 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
     },
     onPointerDown: (e: ThreeEvent<PointerEvent>) => {
       const t = thingOf(k, e)
+      // a card still flying (to the tray, say) lets the press through to what's under it: tap a stack again and
+      // again without waiting for the last card to land
+      if (t?.mode === 'fly') return
       const spec = specOf(t)
       if (!t || (!spec?.enabled && !grabbable(t))) return
       const touch = e.nativeEvent.pointerType === 'touch'

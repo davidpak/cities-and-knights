@@ -75,6 +75,7 @@ export type TableProps = BoardProps & {
      *  supply onto the board (build there), a bank card into your hand (trade for it) */
     snatch?: (p: number) => void
     dropPiece?: (w: Build, x: number, z: number) => void
+    holdPiece?: (w: Build | null) => void
     want: (r: Good) => void
     bank: (r: Good) => void
     deck: () => void
@@ -610,7 +611,7 @@ export function TableView(props: TableProps) {
       {tray && <Tray at={layout.tray} mode={tray.mode} />}
       <Slots {...props} />
       <SupplyMats {...props} />
-      <Physical specs={specs} statics={statics} onDrop={onDrop} />
+      <Physical specs={specs} statics={statics} onDrop={onDrop} onHolding={(t) => on.holdPiece?.(t?.pile?.startsWith('supply:') ? (t.pile.slice(7) as Build) : null)} />
       <Warmup />
       <Adaptive />
       <Projector />

@@ -402,6 +402,24 @@ const PAGE = { w: 256, h: 280 } // px per page in the picture of all pages
 const PAGE_COLS = MAX_LEVEL + 1
 
 /** a building for a level: a hut at one, a hall with a tower at four, a palace at five (in the track's colour) */
+/** a small red die face (white pips), for the pages: which red-die rolls draw a card */
+function redFace(g: CanvasRenderingContext2D, x: number, y: number, s: number, v: number) {
+  g.fillStyle = '#c0392b'
+  g.beginPath()
+  g.roundRect(x, y, s, s, s * 0.2)
+  g.fill()
+  g.strokeStyle = '#fffaf0'
+  g.lineWidth = 2
+  g.stroke()
+  g.fillStyle = '#fffaf0'
+  const pip: Record<number, [number, number][]> = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]], 5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] }
+  for (const [cx, cy] of pip[v]) {
+    g.beginPath()
+    g.arc(x + s * (0.22 + cx * 0.28), y + s * (0.22 + cy * 0.28), s * 0.09, 0, Math.PI * 2)
+    g.fill()
+  }
+}
+
 function building(g: CanvasRenderingContext2D, level: number, color: string, cx: number, base: number) {
   g.fillStyle = color
   const house = (x: number, w: number, h: number, roof: number) => {
@@ -469,6 +487,12 @@ function pages() {
       g.textAlign = 'left'
       g.textBaseline = 'middle'
       g.fillText(TRACK_NAME[t], 16, 29)
+      // the red die's faces that draw this track's card at this level (1 up to level + 1), small, under the header
+      if (level > 0) {
+        const n = Math.min(6, level + 1)
+        const sz = 24
+        for (let f = 1; f <= n; f++) redFace(g, PAGE.w - 8 - (n - f + 1) * (sz + 4) + 4, 60, sz, f)
+      }
       // the level, big, beside the building it has grown to
       g.fillStyle = INK
       g.textAlign = 'center'

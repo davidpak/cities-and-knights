@@ -304,7 +304,9 @@ export class Table {
       list.sort((a, b) => a.slot - b.slot)
       const n = this.specs.get(id)!.n
       while (list.length > n) {
-        const t = list.pop()!
+        // (one lying loose, say a piece just dropped on the board, is the one that goes, rather than the top one)
+        const i = list.findIndex((x) => x.mode === 'loose' || x.mode === 'held')
+        const t = i >= 0 ? list.splice(i, 1)[0] : list.pop()!
         t.pile = null
         free.push(t)
       }

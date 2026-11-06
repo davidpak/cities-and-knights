@@ -481,7 +481,7 @@ function pages() {
       g.restore()
       g.fillStyle = INK
       g.font = `700 24px ${FONT}`
-      g.fillText(level ? TRACK_LEVELS[t][level - 1] : 'Nothing yet', PAGE.w / 2, 210)
+      g.fillText(level ? TRACK_LEVELS[t][level - 1] : '', PAGE.w / 2, 210)
       // what the next step costs, as commodity marks (or done)
       if (level < MAX_LEVEL) {
         const n = level + 1

@@ -55,12 +55,12 @@ export function getAtlas() {
     const [x, y] = at(cellOf({ harbor: k }))
     ctx.fillStyle = PAL.plum
     if (k === 'any') {
-      ctx.font = `800 104px ${FONT}`
-      ctx.fillText('3:1', x, y + 4)
+      ctx.font = `800 132px ${FONT}`
+      ctx.fillText('3:1', x, y + 6)
     } else {
-      paintIcon(ctx, k, x, y - 32, 112, RESOURCE_COLOR[k])
-      ctx.font = `800 76px ${FONT}`
-      ctx.fillText('2:1', x, y + 70)
+      paintIcon(ctx, k, x, y - 30, 160, RESOURCE_COLOR[k])
+      ctx.font = `800 80px ${FONT}`
+      ctx.fillText('2:1', x, y + 82)
     }
   }
   atlas = new CanvasTexture(c)

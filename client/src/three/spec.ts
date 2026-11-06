@@ -74,7 +74,7 @@ export const TRADER = { r: 5.5, h: 17 } // [D]
  */
 export const HARBOR = {
   out: 23, // [D] the sign's centre, out from the side's middle: close in, so the piers stay short
-  signR: 14, // [D] big enough to read the rate
+  signR: 18, // [D] big enough to read the rate at a glance, on a phone too
   signH: 4, // [D]
   pier: {
     w: 7.5, // [D] a walkway, not a stick
@@ -87,7 +87,7 @@ export const HARBOR = {
     rail: 1.1, // [D] a darker beam down each side
   },
   post: { r: 1.4 }, // [D] at each end of each pier, both sides
-  boat: { u: 24, v: 17, len: 18, beam: 7, h: 4, mast: 16 }, // [D] moored beside the sign
+  boat: { u: 28, v: 15, len: 18, beam: 7, h: 4, mast: 16 }, // [D] moored beside the sign
 }
 
 /** two real dice, thrown into a little wooden tray on the table beside the frame (front right) */

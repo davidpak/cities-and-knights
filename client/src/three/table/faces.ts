@@ -253,21 +253,14 @@ function paint(key: string, w: number, h: number, draw: (c: CanvasRenderingConte
   return t
 }
 
-/** the tray's floor: plain wood, a line down the middle */
+/** the tray's floor: plain wood (a trade's two halves split by a line) */
 export function trayFace(mode: 'trade' | 'discard') {
   return paint(`tray-${mode}`, 400, 300, (c) => {
     c.fillStyle = '#cfae7f'
     c.fillRect(0, 0, 400, 300)
-    c.fillStyle = 'rgba(42, 29, 19, 0.5)'
-    c.font = `700 20px ${FONT}`
-    c.textAlign = 'left'
-    c.textBaseline = 'middle'
     if (mode === 'trade') {
       c.fillStyle = 'rgba(42, 29, 19, 0.28)'
       c.fillRect(14, 148, 372, 4)
-      c.fillStyle = 'rgba(42, 29, 19, 0.5)'
-      c.fillText('YOU GET', 16, 22)
-      c.fillText('YOU GIVE', 16, 280)
-    } else c.fillText('DISCARD', 16, 280)
+    }
   })
 }

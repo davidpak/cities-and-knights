@@ -8,9 +8,9 @@ import {
   affordable, canAct, canPlay, chaseSpots, citySpots, improveCost, knightMoves, knightSpots, pickTargets, promoteSpots,
   roadSpots, robberSpots, settlementSpots, tradeRatios, wallSpots, type PickNeed, type View,
 } from '../../../shared/engine.ts'
-import { BARBARIAN_STEPS, CARD_TEXT, COST, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
+import { BARBARIAN_STEPS, CARD_TEXT, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
 import { PLAYER, TRACK_COLOR } from '../lib/palette.ts'
-import { act, room, toast as say, useStore } from '../net.ts'
+import { act, room, useStore } from '../net.ts'
 import { GLOW_AT, type PickKind, type Picking } from '../three/Board.tsx'
 import { useProjector } from '../three/labels.ts'
 import { TableView, packHand, type TrayContents } from '../three/table/Table.tsx'
@@ -166,10 +166,9 @@ export function Game({ view }: { view: View }) {
     if (kind === 'quiet') {
       const k = view.x!.knights[id]
       if (!k.active) {
-        if (!hand || !hasAll(hand, KNIGHT_COST.activate)) return say(<Bundle of={KNIGHT_COST.activate} />)
+        if (!hand || !hasAll(hand, KNIGHT_COST.activate)) return
         await act({ type: 'activateKnight', vertex: id })
-      } else if (!canAct(view, id)) say('Active next turn')
-      else setSelected(id)
+      } else if (canAct(view, id)) setSelected(id)
       return
     }
     if (building === 'knight') {
@@ -268,7 +267,7 @@ export function Game({ view }: { view: View }) {
       const all: readonly Good[] = view.x ? GOODS : RESOURCES
       const kinds = all.filter((g) => g !== r && give[g] >= ratios[g])
       const g = kinds.find((k) => give[k] === ratios[k]) ?? kinds[0]
-      if (!g) return say(`Bank ${Math.min(...all.filter((k) => k !== r).map((k) => ratios[k]))}:1`)
+      if (!g) return
       if (await act({ type: 'bankTrade', give: g, get: r })) {
         const left = add(give, g, -ratios[g])
         setDeal(handSize(left) || handSize(deal?.get ?? emptyHand()) ? { ...(deal as Deal), give: left } : null)
@@ -276,7 +275,7 @@ export function Game({ view }: { view: View }) {
     },
     deck: () => {
       if (!main) return
-      if (!affordable(view, me, 'card')) return say(<Bundle of={COST.card} />)
+      if (!affordable(view, me, 'card')) return
       act({ type: 'buyCard' })
     },
     dev: (c: Card) => setZoom({ kind: 'dev', card: c }),
@@ -296,31 +295,23 @@ export function Game({ view }: { view: View }) {
     knight: () => {
       setSelected(null)
       if (building === 'knight') return setBuilding(null)
-      if (!can.knight) return say(view.players[me].pieces.knight[1] === 0 && promoteSpots(view, me).length === 0 ? 'No knights left' : <Bundle of={KNIGHT_COST.knight} />)
+      if (!can.knight) return
       setBuilding('knight')
     },
     wall: () => {
       if (building === 'wall') return setBuilding(null)
-      if (!can.wall) return say(view.players[me].pieces.wall === 0 ? 'No walls left' : wallSpots(view, me).length ? <Bundle of={KNIGHT_COST.wall} /> : 'Needs a city')
+      if (!can.wall) return
       setBuilding('wall')
     },
     improve: (t: Track) => {
       if (!main) return
-      if (!canImprove[t]) {
-        const cost = improveCost(view, me, t)
-        return say(cost ? <Bundle of={cost} /> : view.x!.levels[me][t] >= 5 ? 'Maxed' : 'Needs a city')
-      }
+      if (!canImprove[t]) return
       act({ type: 'improve', track: t })
     },
     supply: (w: Build) => {
       if (building === w) return setBuilding(null)
       if (w === 'knight' || w === 'wall') return
-      if (!can[w]) {
-        const pieces = view.players[me].pieces[w] as number
-        if (!pieces) return say(`No ${w === 'city' ? 'cities' : w + 's'} left`)
-        if (!affordable(view, me, w as 'road')) return say(<Bundle of={COST[w as 'road']} />)
-        return say('No spot')
-      }
+      if (!can[w]) return
       setBuilding(w)
     },
     opponent: (p: number) => {
@@ -328,7 +319,7 @@ export function Game({ view }: { view: View }) {
       if (victims.includes(p)) return act({ type: 'steal', victim: p })
       if (myOffer && myOffer.to === undefined && myOffer.accepted.includes(p)) return act({ type: 'confirmTrade', with: p })
       if (!trading || !deal) return
-      if (!handSize(deal.give) || !handSize(deal.get)) return say(handSize(deal.give) ? 'Pick cards to get' : 'Pick cards to give')
+      if (!handSize(deal.give) || !handSize(deal.get)) return
       act({ type: 'offerTrade', give: deal.give, get: deal.get, to: p })
     },
   }
@@ -430,24 +421,14 @@ export function Game({ view }: { view: View }) {
         const held = zoom.kind === 'dev' ? devs.some((c) => c.card === zoom.card) : myProgress.some((c) => c.card === zoom.card)
         if (!held) return null
         const close = () => setZoom(null)
-        let word = 'Play'
-        let live = false
-        let why = ''
-        if (zoom.kind === 'prog') {
-          live = progressPlayable(zoom.card)
-          if (progressOwed) word = 'Discard'
-          why = !mine ? 'Not your turn' : myOffer ? 'Trade pending' : zoom.card === 'augury' ? 'Before rolling' : ph.kind === 'roll' ? 'Roll first' : 'Not now'
-        } else {
-          live = playable(zoom.card)
-          why = zoom.card === 'victoryPoint' ? '' : !mine ? 'Not your turn' : ph.kind === 'roll' && zoom.card !== 'knight' ? 'Roll first' : 'Not now'
-        }
+        const live = zoom.kind === 'prog' ? progressPlayable(zoom.card) : playable(zoom.card)
+        const word = zoom.kind === 'prog' && progressOwed ? 'Discard' : 'Play'
         return (
           <CardZoom
             look={`${zoom.kind}:${zoom.card}`}
             caption={zoom.kind === 'dev' ? CARD_TEXT[zoom.card] : null}
             onClose={close}
             action={live ? { word, go: () => (close(), zoom.kind === 'dev' ? on.playDev(zoom.card) : on.playProgress(zoom.card)) } : null}
-            why={live ? '' : why}
           />
         )
       })()}
@@ -702,7 +683,7 @@ function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; act
 
 // ---------------------------------------------------------------- a card held up close
 
-function CardZoom({ look, caption, action, why, onClose }: { look: string; caption: string | null; action: { word: string; go: () => void } | null; why: string; onClose: () => void }) {
+function CardZoom({ look, caption, action, onClose }: { look: string; caption: string | null; action: { word: string; go: () => void } | null; onClose: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     if (ref.current) paintFace(look, ref.current, 2 * Math.min(2, window.devicePixelRatio || 1))
@@ -715,12 +696,10 @@ function CardZoom({ look, caption, action, why, onClose }: { look: string; capti
         <canvas ref={ref} className="zoom-card" />
         {caption && <div className="zoom-cap">{caption}</div>}
         <div className="zoom-row">
-          {action ? (
+          {action && (
             <button className="zoom-btn go" onClick={action.go}>
               {action.word}
             </button>
-          ) : (
-            why && <span className="zoom-why">{why}</span>
           )}
           <button className="zoom-btn" onClick={onClose} aria-label="Close">
             ✕

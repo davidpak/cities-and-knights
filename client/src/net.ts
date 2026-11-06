@@ -57,7 +57,7 @@ export function connect() {
   // no game server here (a static host with no server set): say so, rather than "connecting" forever
   socket.on('connect_error', () => ++failures >= 3 && !store.serverDown && set({ serverDown: true }))
   socket.on('disconnect', () => set({ connected: false }))
-  socket.on('room', (room) => !store.solo && set({ room }))
+  socket.on('room', (room) => !store.solo && set(room?.started ? { room } : { room, view: null }))
   socket.on('game', (view) => !store.solo && set({ view }))
 }
 
@@ -87,6 +87,11 @@ export const room = {
   knights: (on: boolean) => socket?.emit('room:knights', on),
   removeSeat: (id: string) => socket?.emit('room:removeSeat', id),
   start: () => call('room:start'),
+  /** the host ends the game for everyone (solo: back to the start) */
+  end: () => {
+    if (store.solo) return endSolo()
+    socket?.emit('room:end')
+  },
 }
 
 /** does a move; says why not when it can't */
@@ -107,6 +112,13 @@ const autoStop = () => {
   return n > 0 && (solo?.turn ?? 0) >= n
 }
 let soloTimer: ReturnType<typeof setTimeout> | undefined
+/** (?test: a browser test may hold the bots still, to look at a moment) */
+let held = false
+if (typeof window !== 'undefined' && /[?&]test/.test(location.search))
+  (window as unknown as { __hold: (on: boolean) => void }).__hold = (on) => {
+    held = on
+    soloPublish()
+  }
 
 function soloPublish() {
   if (!solo) return
@@ -118,12 +130,12 @@ function soloPublish() {
   // (?test&auto: a bot plays your seat too, for looking at a game in progress)
   const auto = AUTO && !autoStop()
   const next = g.players.map((_, i) => i).find((i) => (auto || i !== you) && botAction(viewFor(g, i), i, Math.random) !== null)
-  if (next === undefined) return
+  if (next === undefined || held) return
   soloTimer = setTimeout(() => {
     if (!solo) return
     const a = botAction(viewFor(solo, next), next, Math.random)
     if (a) soloAct(next, a, true)
-  }, AUTO ? 40 : solo.phase.kind === 'setup' ? 450 : 700)
+  }, AUTO ? 40 : solo.phase.kind === 'setup' ? 450 : solo.phase.kind === 'steal' ? 2500 : 700)
 }
 
 // (?test: a browser test may hand your seat some cards from the bank, to try things that cost them)
@@ -137,6 +149,15 @@ if (typeof window !== 'undefined' && /[?&]test/.test(location.search))
       g.bank[k as keyof typeof g.bank] -= take
       g.players[you].hand[k as keyof typeof g.bank] += take
     }
+    solo = g
+    soloPublish()
+  }
+// (or change the game any way at all, to set up a moment to look at)
+if (typeof window !== 'undefined' && /[?&]test/.test(location.search))
+  (window as unknown as { __edit: (f: (g: GameState, you: number) => void) => void }).__edit = (f) => {
+    if (!solo) return
+    const g = structuredClone(solo)
+    f(g, g.players.findIndex((p) => p.id === 'you'))
     solo = g
     soloPublish()
   }

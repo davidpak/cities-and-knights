@@ -354,6 +354,20 @@ input {
 .name.turn {
   box-shadow: 0 calc(var(--u) * 3) 0 var(--pc);
 }
+/* how many cards in your hand: a little card with the number */
+.name .hc {
+  font-style: normal;
+  display: inline-grid;
+  place-items: center;
+  min-width: max(calc(var(--u) * 17), 16px);
+  height: max(calc(var(--u) * 22), 20px);
+  padding: 0 2px;
+  border-radius: 3px;
+  background: #b4824f;
+  color: #fff;
+  font-weight: 800;
+  font-size: max(calc(var(--u) * 13), 12px);
+}
 .name .lv {
   font-style: normal;
   display: inline-grid;
@@ -655,6 +669,10 @@ input {
   height: 2px;
   background: var(--pc);
   border-radius: 2px;
+}
+.drawer-foot {
+  display: flex;
+  justify-content: space-between;
 }
 .drawer .link {
   margin: 6px;
@@ -1006,4 +1024,133 @@ input {
   .rf-total { font-size: 44px; }
   .die { width: 34px; height: 34px; padding: 4px; border-radius: 7px; }
   .die i { width: 7px; height: 7px; }
+}
+
+/* your turn: a big band across the middle, for a moment */
+.turn-banner {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  pointer-events: none;
+  padding: 14px 44px;
+  border-radius: 14px;
+  background: var(--paper);
+  border-bottom: 6px solid var(--pc);
+  color: var(--ink);
+  font-size: clamp(30px, 7vw, 54px);
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  animation: turn-banner 1.3s ease-out forwards;
+}
+@keyframes turn-banner {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
+  25% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* what someone else just did: a short flash over the board */
+.announcer {
+  position: fixed;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  pointer-events: none;
+  max-width: calc(100vw - 24px);
+  padding: 8px 18px;
+  border-radius: 10px;
+  background: rgba(42, 29, 19, 0.86);
+  color: var(--paper);
+  font-size: clamp(15px, 3.6vw, 20px);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: announce 1.7s ease-out forwards;
+}
+.announcer .muted {
+  color: rgba(246, 236, 213, 0.7);
+}
+@keyframes announce {
+  0% { opacity: 0; transform: translate(-50%, -40%); }
+  12% { opacity: 1; transform: translate(-50%, -50%); }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-banner, .announcer { animation-duration: 0.01s; animation-fill-mode: none; }
+}
+
+/* robbing: the victim's cards in a fan, face down, to pick one */
+.fan-back {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(20, 12, 6, 0.45);
+  display: grid;
+  place-items: center;
+  animation: op-in 0.15s ease-out;
+}
+.fan {
+  --w: clamp(56px, 13vw, 84px);
+  --step: min(calc(var(--w) * 0.62), calc((min(92vw, 640px) - var(--w)) / max(1, var(--n) - 1)));
+  display: flex;
+  padding: 30px 0 10px;
+}
+.fan-card {
+  width: var(--w);
+  aspect-ratio: 200 / 280;
+  margin-left: calc(var(--step) - var(--w));
+  border: none;
+  border-radius: 8px;
+  background-size: cover;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transform: translateY(calc(var(--a) * 4px)) rotate(calc(var(--i) * 4deg));
+  transform-origin: 50% 120%;
+  transition: transform 0.12s;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.fan-card:first-child {
+  margin-left: 0;
+}
+.fan-card:hover,
+.fan-card:focus-visible,
+.fan-card.sel {
+  transform: translateY(calc(var(--a) * 4px - 22px)) rotate(calc(var(--i) * 4deg));
+}
+.fan-card.sel {
+  outline: 3px solid var(--gold);
+}
+/* being robbed: your own fan, small, at the bottom; tap two cards to swap them */
+.my-fan {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 0 10px 8px;
+  border-radius: 12px;
+  background: rgba(42, 29, 19, 0.8);
+}
+.fan.small {
+  --w: clamp(40px, 10vw, 56px);
+  --step: min(calc(var(--w) * 0.7), calc((min(80vw, 480px) - var(--w)) / max(1, var(--n) - 1)));
+}
+.fan-shuffle {
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 22px;
+  font-weight: 700;
+  touch-action: manipulation;
 }

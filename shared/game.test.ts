@@ -42,7 +42,7 @@ test('the layout: 19 hexes, 54 corners, 72 sides, 30 coast sides, 9 harbours', (
   assert.equal(new Set(corners).size, 18)
 })
 
-test('a new board deals the right tiles and keeps 6 and 8 apart', () => {
+test('a new board deals the right tiles, keeps 6 and 8 apart, and never puts a number next to itself', () => {
   for (let seed = 1; seed < 60; seed++) {
     const s = newGame(seats(3), seed)
     assert.equal(s.tiles.filter((t) => t.terrain === 'desert').length, 1)
@@ -50,6 +50,7 @@ test('a new board deals the right tiles and keeps 6 and 8 apart', () => {
     const red = (i: number) => s.tiles[i].number === 6 || s.tiles[i].number === 8
     TOPO.hexes.forEach((h, i) => {
       if (red(i)) for (const n of h.neighbors) assert.ok(!red(n), `seed ${seed}`)
+      for (const n of h.neighbors) if (s.tiles[i].number !== null) assert.notEqual(s.tiles[i].number, s.tiles[n].number, `seed ${seed}`)
     })
     assert.equal(s.pile.length, 25)
   }
@@ -418,4 +419,39 @@ test('cards: not the turn you buy them, one per turn, knights build an army', ()
   }
   assert.equal(s.players[0].knights, 3)
   assert.equal(s.largestArmy, 0)
+})
+
+test('robbing: the thief picks a card from the victim\'s fan; the victim may arrange it; nobody else sees it', () => {
+  const s0 = newGame(seats(3), 5)
+  // P1 has a settlement on a tile, with 1 brick and 2 ore; P0 is moving the robber there
+  const hex = TOPO.hexes.findIndex((_, i) => i !== s0.robber)
+  const v = TOPO.hexes[hex].vertices[0]
+  const s: GameState = structuredClone(s0)
+  s.buildings = { [v]: { owner: 1, kind: 'settlement' } }
+  s.players.forEach((p) => (p.hand = emptyHand()))
+  s.players[1].hand.brick = 1
+  s.players[1].hand.ore = 2
+  s.current = 0
+  s.phase = { kind: 'robber', then: 'main' }
+  let r = apply(s, 0, { type: 'moveRobber', hex })
+  assert.ok(r.ok)
+  let t = r.state
+  assert.equal(t.phase.kind, 'steal', 'one victim still stops for a pick')
+  if (t.phase.kind !== 'steal') return
+  assert.equal(t.phase.fans[1].length, 3)
+  // others see the fan's size, not its order
+  const seen = viewFor(t, 2).phase
+  assert.ok(seen.kind === 'steal' && seen.fans[1].length === 3 && seen.fans[1].every((g) => g === 'lumber'))
+  // the victim puts the brick first; a wrong set of cards is refused
+  assert.ok(!apply(t, 1, { type: 'arrange', order: ['brick', 'brick', 'ore'] }).ok)
+  assert.ok(!apply(t, 2, { type: 'arrange', order: ['brick', 'ore', 'ore'] }).ok, 'only a victim arranges')
+  r = apply(t, 1, { type: 'arrange', order: ['brick', 'ore', 'ore'] })
+  assert.ok(r.ok)
+  t = r.state
+  assert.ok(!apply(t, 0, { type: 'steal', victim: 1, index: 3 }).ok)
+  r = apply(t, 0, { type: 'steal', victim: 1, index: 0 })
+  assert.ok(r.ok)
+  assert.equal(r.state.players[0].hand.brick, 1)
+  assert.equal(r.state.players[1].hand.brick, 0)
+  assert.equal(r.state.phase.kind, 'main')
 })

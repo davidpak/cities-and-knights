@@ -77,7 +77,8 @@ export type Phase =
   | { kind: 'roll' }
   | { kind: 'discard'; owed: Record<number, number>; then?: 'robber' | 'main' }
   | { kind: 'robber'; then: 'roll' | 'main'; all?: boolean }
-  | { kind: 'steal'; hex: number; victims: number[]; then: 'roll' | 'main' }
+  /** the robber picks one card, face down, from a victim's fan (each victim's fan is theirs to arrange, and secret) */
+  | { kind: 'steal'; hex: number; victims: number[]; then: 'roll' | 'main'; fans: Record<number, Good[]> }
   | { kind: 'main' }
   | { kind: 'roadBuilding'; left: number }
   /** a progress card waiting for its target (step counts the targets taken; data what they were) */
@@ -169,7 +170,8 @@ export type Action =
   | { type: 'roll' }
   | { type: 'discard'; cards: Hand }
   | { type: 'moveRobber'; hex: number }
-  | { type: 'steal'; victim: number }
+  | { type: 'steal'; victim: number; index?: number }
+  | { type: 'arrange'; order: Good[] }
   | { type: 'buyCard' }
   | { type: 'playKnight' }
   | { type: 'playRoadBuilding' }
@@ -289,7 +291,7 @@ export function newGame(seats: Seat[], seed: number, opts: Options = {}): GameSt
 
 export const winPoints = (s: { mode: GameState['mode'] }) => (s.mode === 'knights' ? KNIGHT_POINTS : WIN_POINTS)
 
-/** tiles and numbers, shuffled until no two red numbers (6 and 8) touch */
+/** tiles and numbers, shuffled until no two red numbers (6 and 8) touch and no two touching tiles share a number */
 function dealTiles(s: GameState): Tile[] {
   for (;;) {
     const terrains = shuffle(s, TILE_SET)
@@ -297,7 +299,7 @@ function dealTiles(s: GameState): Tile[] {
     let n = 0
     const tiles = terrains.map((terrain) => ({ terrain, number: terrain === 'desert' ? null : numbers[n++] }))
     const red = (i: number) => tiles[i].number === 6 || tiles[i].number === 8
-    const ok = TOPO.hexes.every((h, i) => !red(i) || h.neighbors.every((j) => !red(j)))
+    const ok = TOPO.hexes.every((h, i) => h.neighbors.every((j) => !(red(i) && red(j)) && (tiles[i].number === null || tiles[i].number !== tiles[j].number)))
     if (ok) return tiles
   }
 }
@@ -901,20 +903,24 @@ function rollDice(s: GameState, p: number, forced?: number) {
   s.phase = Object.keys(owed).length ? { kind: 'discard', owed, then: robs ? 'robber' : 'main' } : robs ? { kind: 'robber', then: 'main' } : { kind: 'main' }
 }
 
+const bagOf = (h: Hand) => GOODS.flatMap((r) => Array<Good>(h[r]).fill(r))
+/** a hand as a fan of face-down cards, in a random order */
+const fanOf = (s: GameState, h: Hand) => shuffle(s, bagOf(h))
+/** is this order exactly the cards of this hand? */
+const sameCards = (order: Good[], h: Hand) => order.length === handSize(h) && GOODS.every((r) => order.filter((g) => g === r).length === h[r])
+
 function afterRobber(s: GameState, hex: number, then: 'roll' | 'main') {
   const victims = victimsAt(s, hex, s.current)
   if (victims.length === 0) s.phase = { kind: then }
-  else if (victims.length === 1) {
-    steal(s, victims[0])
-    s.phase = { kind: then }
-  } else s.phase = { kind: 'steal', hex, victims, then }
+  else s.phase = { kind: 'steal', hex, victims, then, fans: Object.fromEntries(victims.map((v) => [v, fanOf(s, s.players[v].hand)])) }
 }
 
-function steal(s: GameState, victim: number) {
+/** the thief takes the card at `index` of the victim's fan (or, without one, a card at random) */
+function steal(s: GameState, victim: number, fan?: Good[], index?: number) {
   const h = s.players[victim].hand
-  const bag = GOODS.flatMap((r) => Array<Good>(h[r]).fill(r))
+  const bag = fan && sameCards(fan, h) ? fan : bagOf(h)
   if (bag.length === 0) return
-  const r = bag[Math.floor(rand(s) * bag.length)]
+  const r = index !== undefined && fan === bag ? bag[index] : bag[Math.floor(rand(s) * bag.length)]
   h[r]--
   s.players[s.current].hand[r]++
   ev(s, { k: 'steal', thief: s.current, victim, r })
@@ -956,6 +962,12 @@ function step(s: GameState, p: number, a: Action): string | void {
     ev(s, { k: 'discard', p, count: n })
     log(s, `${me.name} discards ${n}.`, p)
     if (Object.keys(ph.owed).length === 0) s.phase = ph.then === 'main' ? { kind: 'main' } : { kind: 'robber', then: 'main' }
+    return
+  }
+  if (a.type === 'arrange') {
+    if (ph.kind !== 'steal' || !ph.victims.includes(p)) return 'Nothing to arrange.'
+    if (!Array.isArray(a.order) || !sameCards(a.order, me.hand)) return 'Those are not your cards.'
+    ph.fans[p] = [...a.order]
     return
   }
   if (a.type === 'discardProgress') {
@@ -1118,7 +1130,9 @@ function step(s: GameState, p: number, a: Action): string | void {
     case 'steal': {
       if (ph.kind !== 'steal') return 'There is nobody to steal from.'
       if (!ph.victims.includes(a.victim)) return 'Pick someone next to the robber.'
-      steal(s, a.victim)
+      const fan = ph.fans?.[a.victim]
+      if (a.index !== undefined && (!Number.isInteger(a.index) || a.index < 0 || a.index >= handSize(s.players[a.victim].hand))) return 'Pick one of their cards.'
+      steal(s, a.victim, fan, a.index)
       s.phase = { kind: ph.then }
       return
     }
@@ -1603,6 +1617,8 @@ export function viewFor(s: GameState, you: number): View {
   const { rng: _r, pile, players, x, ...rest } = s
   void _r
   const base = structuredClone(rest)
+  // a fan's order is its holder's secret: others see only how many cards are in it
+  if (base.phase.kind === 'steal') base.phase.fans = Object.fromEntries(Object.entries(base.phase.fans ?? {}).map(([v, f]) => [v, Number(v) === you ? f : f.map(() => 'lumber' as Good)]))
   base.events = base.events.map((e) => {
     if (over) return e
     if (e.k === 'steal' && you !== e.thief && you !== e.victim) return { ...e, r: undefined }

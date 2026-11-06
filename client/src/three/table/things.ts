@@ -58,6 +58,8 @@ export type PileSpec = {
   grab?: boolean
   /** shown raised by this many mm (ready to play, the piece being built) */
   lift?: number
+  /** shown greyed (there, but not to be had now) */
+  dim?: boolean
 }
 
 export type Pose = { p: Vector3; q: Quaternion }

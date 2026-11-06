@@ -77,7 +77,7 @@ function scheduleBots(r: Room) {
     if (res.ok) r.game = res.state
     else console.warn(`bot ${next.p.name} tried ${a.type}: ${res.error}`)
     send(r)
-  }, r.game.phase.kind === 'setup' ? 500 : 750)
+  }, r.game.phase.kind === 'setup' ? 500 : r.game.phase.kind === 'steal' ? 2500 : 750)
 }
 
 function leave(player: string) {
@@ -217,6 +217,17 @@ io.on('connection', (raw) => {
     if (!room.seats.every((s) => s.ready || s.id === player)) return ack({ ok: false, error: 'Everyone needs to be ready.' })
     room.game = newGame(room.seats.map((s) => ({ id: s.id, name: s.name })), (Math.random() * 2 ** 31) | 0, { knights: room.knights })
     ack({ ok: true })
+    send(room)
+  })
+
+  // the host ends the game: everyone is back in the room, to play again
+  socket.on('room:end', () => {
+    const room = myRoom()
+    if (!room || room.host !== player || !room.game) return
+    clearTimeout(room.botTimer)
+    room.botTimer = undefined
+    room.game = null
+    for (const s of room.seats) s.ready = !!s.bot
     send(room)
   })
 

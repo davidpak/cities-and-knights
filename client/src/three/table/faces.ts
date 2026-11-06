@@ -195,6 +195,19 @@ export function paintFace(look: string, cv: HTMLCanvasElement, scale: number) {
   c.scale(scale, scale)
   if (look.startsWith('prog:')) progress(c, look.slice(5) as Progress)
   else if (look.startsWith('dev:')) dev(c, look.slice(4) as Card)
+  else if (look === 'res:?') back(c, RES_BACK, HOUSE, '#f4e3c2')
+  else if (look.startsWith('res:')) resource(c, look.slice(4) as Good)
+}
+const urls = new Map<string, string>()
+/** a card's face as an image address (for cards drawn on the page, not the table) */
+export function faceURL(look: string) {
+  let u = urls.get(look)
+  if (!u) {
+    const cv = document.createElement('canvas')
+    paintFace(look, cv, 1)
+    urls.set(look, (u = cv.toDataURL()))
+  }
+  return u
 }
 export const FACE = { w: W, h: H }
 

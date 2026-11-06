@@ -82,6 +82,8 @@ const colorOf = (look: string) => {
   if (!c) colors.set(look, (c = new Color(look === 'robber' ? PAL.robber : (PLAYER[look as PlayerColor]?.body ?? '#cccccc'))))
   return c
 }
+const PLAIN = new Color('#ffffff')
+const DIM = new Color('#6f6a64')
 /** one sphere round the whole table: pointing tests instances against it, and it never needs working out again */
 const TABLE_SPHERE = new Sphere(new Vector3(), 4000)
 
@@ -167,6 +169,7 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
             tiles.setXY(i, a, b)
             tilesChanged = true
           }
+          m.setColorAt(i, t.pile && table.specs.get(t.pile)?.dim ? DIM : PLAIN)
         } else {
           tmpS.set(1, 1, 1)
           m.setColorAt(i, colorOf(t.look))

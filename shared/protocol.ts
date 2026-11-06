@@ -20,6 +20,7 @@ export interface ClientToServer {
   'room:addBot': () => void
   'room:removeSeat': (id: string) => void
   'room:start': (ack: (a: Ack) => void) => void
+  'room:end': () => void
   'room:knights': (on: boolean) => void
   'game:action': (a: Action, ack: (a: Ack) => void) => void
 }

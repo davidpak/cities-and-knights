@@ -49,6 +49,8 @@ export type TableProps = BoardProps & {
     tray: boolean
     wants: boolean
     bank: boolean
+    /** while trading: which bank cards can be had (the rest are dimmed) */
+    bankGoods?: Partial<Record<Good, boolean>>
     deck: boolean
     supply: Record<Build, boolean>
     supplyTap: boolean
@@ -219,7 +221,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     const id = `bank:${r}`
     const f = fanPose(layout.fan, kinds.length, i)
     const spot: Spot = [f.x, f.z]
-    card({ id, family: 'res', look: `res:${r}`, n: Math.min(1, view.bank[r]), home: () => ({ x: f.x, y: f.base + CT / 2, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0, onClick: () => on.bank(r) })
+    card({ id, family: 'res', look: `res:${r}`, n: Math.min(1, view.bank[r]), home: () => ({ x: f.x, y: f.base + CT / 2, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0 && (!can.bankGoods || !!can.bankGoods[r]), dim: !!can.bankGoods && !can.bankGoods[r], onClick: () => on.bank(r) })
   })
   if (x && K)
     TRACKS.forEach((t) => {
@@ -268,8 +270,10 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
       shown.forEach((r, i) => {
         const id = `tray:${side}:${r}`
         const at: Spot = [tx + (i - (shown.length - 1) / 2) * (CARD.w * CARD.small + 6), z]
-        // an offer to you: your side comes out of your hand, theirs from their cards; what you ask for, from the bank
-        const src = side === 'give' ? spots[r] : view.offer && view.offer.from !== me ? homeOf(view.offer.from) : layout.bank[kinds.indexOf(r)]
+        // an offer to you: what they ask for appears on the tray (your hand keeps it until you accept), what they give
+        // comes from their cards; your own trade: from your hand, and what you ask for from the bank
+        const theirs = !!view.offer && view.offer.from !== me
+        const src = side === 'give' ? (theirs ? at : spots[r]) : theirs ? homeOf(view.offer!.from) : layout.bank[kinds.indexOf(r)]
         card({ id, family: 'res', look: `res:${r}`, n: h[r] ?? 0, small: true, home: cardHome(id, at, { base: TRAY_FLOOR, loose: 1.8 }), from: src, to: src, enabled: can.tray && !tray.locked, onClick: () => (side === 'give' ? on.trayGive(r) : on.trayGet(r)) })
       })
     }

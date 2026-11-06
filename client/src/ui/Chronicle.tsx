@@ -294,10 +294,11 @@ export function Chronicle({ view }: { view: View }) {
   )
 }
 
-/** which moments get the big headline: everything that changes the table, said once, in order */
-const HEADLINE = new Set<GameEvent['k']>(['roll', 'trade', 'steal', 'seven', 'monopoly', 'award', 'win', 'bank', 'build', 'play', 'plenty'])
+/** which moments flash up: what others do that changes the table (rolls have their own flash) */
+const HEADLINE = new Set<GameEvent['k']>(['trade', 'steal', 'seven', 'monopoly', 'award', 'bank', 'build', 'play', 'plenty', 'progress', 'metropolis', 'attack', 'robber', 'take', 'unroad', 'swap', 'wall', 'knight', 'improve'])
+const actor = (e: GameEvent): number | null => ('p' in e && typeof e.p === 'number' ? e.p : e.k === 'trade' ? e.from : e.k === 'steal' ? e.thief : null)
 
-/** new events since you arrived, one headline at a time across the top of the board */
+/** what others just did, one short flash at a time over the board (your own moves you saw yourself) */
 export function Announcer({ view }: { view: View }) {
   const seen = useRef(view.events[view.events.length - 1]?.n ?? -1)
   const [queue, setQueue] = useState<GameEvent[]>([])
@@ -306,9 +307,8 @@ export function Announcer({ view }: { view: View }) {
     const fresh = view.events.filter((e) => e.n > seen.current)
     if (!fresh.length) return
     seen.current = fresh[fresh.length - 1].n
-    // setup placements and your own building don't need a headline; a roll and what it paid are shown together
-    const keep = fresh.filter((e) => HEADLINE.has(e.k) && !(e.k === 'build' && (e.free || e.p === view.you)) && !(e.k === 'bank' && e.p === view.you))
-    if (keep.length) setQueue((q) => [...q, ...keep].slice(-6))
+    const keep = fresh.filter((e) => HEADLINE.has(e.k) && !(e.k === 'build' && e.free) && (actor(e) !== view.you || e.k === 'attack'))
+    if (keep.length) setQueue((q) => [...q, ...keep].slice(-4))
   }, [view.events, view.you])
   useEffect(() => {
     if (now || !queue.length) return
@@ -317,16 +317,15 @@ export function Announcer({ view }: { view: View }) {
   }, [now, queue])
   useEffect(() => {
     if (!now) return
-    const t = setTimeout(() => setNow(null), queue.length > 1 ? 1100 : 2000)
+    const t = setTimeout(() => setNow(null), queue.length ? 1000 : 1700)
     return () => clearTimeout(t)
   }, [now, queue.length])
   if (!now) return null
-  // a roll's headline carries what it paid out
-  const gain = now.k === 'roll' ? view.events.find((e) => e.n === now.n + 1 && e.k === 'gain') : undefined
+  const line = describe(view, now)
+  if (!line) return null
   return (
     <div className={`announcer ${now.k}`} key={now.n}>
-      <div className="announce-line">{describe(view, now)}</div>
-      {gain && <div className="announce-sub">{describe(view, gain)}</div>}
+      {line}
     </div>
   )
 }

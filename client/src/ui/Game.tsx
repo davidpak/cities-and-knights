@@ -10,15 +10,15 @@ import {
 } from '../../../shared/engine.ts'
 import { BARBARIAN_STEPS, CARD_TEXT, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
 import { PLAYER, TRACK_COLOR } from '../lib/palette.ts'
-import { act, room, useStore } from '../net.ts'
+import { act, playerId, room, useStore } from '../net.ts'
 import { GLOW_AT, type PickKind, type Picking } from '../three/Board.tsx'
 import { useProjector } from '../three/labels.ts'
 import { TableView, packHand, type TrayContents } from '../three/table/Table.tsx'
 import { CARD, TRAY, layoutFor, seatParts, type Spot } from '../three/table/layout.ts'
-import { paintFace } from '../three/table/faces.ts'
+import { faceURL, paintFace } from '../three/table/faces.ts'
 import { publishState } from '../three/TestHook.tsx'
 import { Bundle } from './Cards.tsx'
-import { Chronicle, describe, Who } from './Chronicle.tsx'
+import { Announcer, Chronicle, describe, Who } from './Chronicle.tsx'
 
 type Build = 'road' | 'settlement' | 'city' | 'knight' | 'wall'
 type Deal = { give: Hand; get: Hand; to: 'bank' | number | null }
@@ -53,7 +53,8 @@ function useAspect() {
 }
 
 export function Game({ view }: { view: View }) {
-  const { toast } = useStore()
+  const { toast, room: info, solo } = useStore()
+  const host = !!info && info.host === (solo ? 'you' : playerId)
   const me = view.you
   const ph = view.phase
   const mine = me >= 0 && view.current === me
@@ -196,10 +197,25 @@ export function Game({ view }: { view: View }) {
   }
 
   const victims = ph.kind === 'steal' && mine ? ph.victims : []
+  // robbing: whose fan you're picking from (one victim: theirs at once)
+  const [robFrom, setRobFrom] = useState<number | null>(null)
+  useEffect(() => setRobFrom(null), [ph.kind])
+  const robbing = ph.kind === 'steal' && mine ? (ph.victims.length === 1 ? ph.victims[0] : robFrom) : null
+  // being robbed: your own fan, to arrange while the robber chooses
+  const myFan = ph.kind === 'steal' && !mine && ph.victims.includes(me) ? ph.fans?.[me] ?? null : null
   const progressOwed = ph.kind === 'progressDiscard' ? ph.owed[me] ?? 0 : 0
   const myProgress = view.players[me]?.progress ?? []
   const progressPlayable = (c: Progress) => progressOwed > 0 || (mine && !myOffer && (c === 'augury' ? ph.kind === 'roll' : ph.kind === 'main'))
   const trading = main && !myOffer && !plenty && !monopoly
+  // while trading: the bank cards that can be had (the bank has one, and some other kind meets its rate)
+  const bankKinds: readonly Good[] = view.x ? GOODS : RESOURCES
+  const bankGoods: Partial<Record<Good, boolean>> | undefined =
+    trading && hand
+      ? (() => {
+          const ratios = tradeRatios(view, me)
+          return Object.fromEntries(bankKinds.map((r) => [r, view.bank[r] > 0 && bankKinds.some((g) => g !== r && hand[g] >= ratios[g])]))
+        })()
+      : undefined
   const openDeal = (d: Partial<Deal>) => setDeal((cur) => ({ give: cur?.give ?? emptyHand(), get: cur?.get ?? emptyHand(), to: cur?.to ?? null, ...d }))
   const playable = (c: Card) => mine && c !== 'victoryPoint' && canPlay(view, me, c) && (c === 'knight' ? ph.kind === 'roll' || ph.kind === 'main' : ph.kind === 'main')
 
@@ -210,7 +226,8 @@ export function Game({ view }: { view: View }) {
   else if (owe) tray = { mode: 'discard', give: drop, get: {} }
   else if (deal) tray = { mode: 'trade', give: deal.give, get: deal.get }
   // what's on the tray came out of your hand (an offer to you shows what you'd hand over)
-  const onTray = owe ? drop : myOffer ? myOffer.give : inOffer ? inOffer.get : deal ? deal.give : {}
+  // (an offer to you takes nothing from your hand until you accept it)
+  const onTray = owe ? drop : myOffer ? myOffer.give : inOffer ? {} : deal ? deal.give : {}
   const shownHand = hand ? minus(hand, onTray) : null
   useEffect(
     () =>
@@ -260,15 +277,16 @@ export function Game({ view }: { view: View }) {
         if (await act({ type: 'playMonopoly', resource: r as Resource })) setMonopoly(false)
         return
       }
-      if (!trading) return
+      if (!trading || !hand) return
       const ratios = tradeRatios(view, me)
       const give = deal?.give ?? emptyHand()
-      // what on the tray pays for it: exactly the bank's rate of one kind, or else enough of one kind
-      const all: readonly Good[] = view.x ? GOODS : RESOURCES
-      const kinds = all.filter((g) => g !== r && give[g] >= ratios[g])
-      const g = kinds.find((k) => give[k] === ratios[k]) ?? kinds[0]
+      // what pays for it: what's on the tray (exactly the bank's rate of one kind, or else enough of one kind), or
+      // with nothing fit on the tray, straight from the hand (the best rate; of those, the kind held most)
+      const kinds = bankKinds.filter((g) => g !== r && give[g] >= ratios[g])
+      const fromTray = kinds.find((k) => give[k] === ratios[k]) ?? kinds[0]
+      const g = fromTray ?? bankKinds.filter((k) => k !== r && hand[k] >= ratios[k]).sort((a, b) => ratios[a] - ratios[b] || hand[b] - hand[a])[0]
       if (!g) return
-      if (await act({ type: 'bankTrade', give: g, get: r })) {
+      if ((await act({ type: 'bankTrade', give: g, get: r })) && fromTray) {
         const left = add(give, g, -ratios[g])
         setDeal(handSize(left) || handSize(deal?.get ?? emptyHand()) ? { ...(deal as Deal), give: left } : null)
       }
@@ -316,11 +334,12 @@ export function Game({ view }: { view: View }) {
     },
     opponent: (p: number) => {
       if (pickPhase && targets.includes(p)) return act({ type: 'pick', target: p })
-      if (victims.includes(p)) return act({ type: 'steal', victim: p })
+      if (victims.includes(p)) return setRobFrom(p)
       if (myOffer && myOffer.to === undefined && myOffer.accepted.includes(p)) return act({ type: 'confirmTrade', with: p })
-      if (!trading || !deal) return
-      if (!handSize(deal.give) || !handSize(deal.get)) return
-      act({ type: 'offerTrade', give: deal.give, get: deal.get, to: p })
+      if (!trading) return
+      // a full deal goes to them at once; otherwise they become who it's for (a second tap: everyone again)
+      if (deal && handSize(deal.give) && handSize(deal.get) && !GOODS.some((r) => deal.give[r] && deal.get[r])) return act({ type: 'offerTrade', give: deal.give, get: deal.get, to: p })
+      openDeal({ to: deal?.to === p ? null : p })
     },
   }
 
@@ -337,10 +356,25 @@ export function Game({ view }: { view: View }) {
     return () => document.removeEventListener('visibilitychange', f)
   }, [mine])
 
-  // keys: R roll, E end turn, Esc put everything back
+  const zoomRef = useRef(zoom)
+  const buildingRef = useRef(building)
+  const dealRef = useRef(deal)
+  const plentyRef = useRef(plenty)
+  const monopolyRef = useRef(monopoly)
+  const selectedRef = useRef(selected)
+  zoomRef.current = zoom
+  buildingRef.current = building
+  dealRef.current = deal
+  plentyRef.current = plenty
+  monopolyRef.current = monopoly
+  selectedRef.current = selected
+
+  // keys: R roll, E end turn, Esc put everything back (or open the menu)
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // put back whatever is in hand; with nothing in hand, the menu
+        const busy = zoomRef.current || buildingRef.current || dealRef.current || plentyRef.current || monopolyRef.current || selectedRef.current !== null || (ph.kind === 'pick' && ph.step === 0 && mine)
         setZoom(null)
         setBuilding(null)
         setDeal(null)
@@ -348,6 +382,7 @@ export function Game({ view }: { view: View }) {
         setMonopoly(false)
         setSelected(null)
         if (ph.kind === 'pick' && ph.step === 0 && mine) act({ type: 'cancelPick' })
+        if (!busy) setHistory((h) => !h)
       }
       if (!mine) return
       if (e.key.toLowerCase() === 'r' && ph.kind === 'roll') act({ type: 'roll' })
@@ -395,11 +430,12 @@ export function Game({ view }: { view: View }) {
           tray: (trading && !!deal) || owe > 0,
           wants: trading,
           bank: trading || !!plenty || monopoly || (!!pickPhase && ['resource', 'commodity', 'good'].includes(pickPhase.need)),
+          bankGoods,
           deck: main && !view.x,
           supply: { road: can.road, settlement: can.settlement, city: can.city },
           supplyTap: main,
           dev: Object.fromEntries(devs.map((c) => [c.card, playable(c.card)])),
-          opponents: pickPhase?.need === 'player' ? (targets as number[]) : victims.length ? victims : trading ? layout.seats.map((s) => s.p) : [],
+          opponents: pickPhase?.need === 'player' ? (targets as number[]) : victims.length ? victims : trading ? layout.seats.map((s) => s.p).filter((p) => view.players[p].handCount > 0) : [],
           progress: Object.fromEntries(myProgress.map((c) => [c.card, progressPlayable(c.card)])),
           knight: can.knight,
           wall: can.wall,
@@ -413,9 +449,15 @@ export function Game({ view }: { view: View }) {
       <Labels view={view} layout={layout} hand={shownHand} />
 
       {tray && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} />}
-      {offerUp && <OfferStrip view={view} layout={layout} />}
+      {(offerUp || typeof deal?.to === 'number') && <OfferStrip view={view} layout={layout} target={offerUp ? null : (deal!.to as number)} />}
 
       <RollFlash view={view} layout={layout} />
+      <Announcer view={view} />
+      {robbing !== null && ph.kind === 'steal' && (
+        <StealFan n={ph.fans?.[robbing]?.length ?? view.players[robbing].handCount} onPick={(i) => act({ type: 'steal', victim: robbing, index: i })} onClose={ph.victims.length > 1 ? () => setRobFrom(null) : undefined} />
+      )}
+      {myFan && myFan.length > 0 && <MyFan order={myFan} />}
+      <TurnBanner view={view} />
 
       {zoom && (() => {
         const held = zoom.kind === 'dev' ? devs.some((c) => c.card === zoom.card) : myProgress.some((c) => c.card === zoom.card)
@@ -458,15 +500,22 @@ export function Game({ view }: { view: View }) {
         )}
       </div>
 
-      <button className="history-btn stamp-btn" onClick={() => setHistory((h) => !h)}>
-        {history ? 'Close' : 'History'}
+      <button className="history-btn stamp-btn" onClick={() => setHistory((h) => !h)} aria-label="Menu">
+        {history ? '✕' : '☰'}
       </button>
       {history && (
         <aside className="drawer paper">
           <Chronicle view={view} />
-          <button className="link" onClick={() => confirm('Leave this game?') && room.leave()}>
-            Leave the game
-          </button>
+          <div className="drawer-foot">
+            {host && (
+              <button className="link" onClick={() => confirm('End game?') && room.end()}>
+                End game
+              </button>
+            )}
+            <button className="link" onClick={() => confirm('Leave?') && room.leave()}>
+              Leave
+            </button>
+          </div>
         </aside>
       )}
 
@@ -487,7 +536,7 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   if (mine && ph.kind === 'setup') todo = ph.step === 'settlement' ? 'Place settlement' : 'Place road'
   if (ph.kind === 'discard') todo = owe ? `Discard ${owe}` : 'Discarding…'
   if (mine && ph.kind === 'robber') todo = 'Move robber'
-  if (mine && ph.kind === 'steal') todo = 'Pick player to rob'
+  if (mine && ph.kind === 'steal') todo = ph.victims.length > 1 ? 'Pick player to rob' : 'Pick a card'
   if (mine && ph.kind === 'roadBuilding') todo = `Place ${ph.left} road${ph.left > 1 ? 's' : ''}`
   if (mine && plenty) todo = `Pick ${2 - plenty.length} from bank`
   if (mine && monopoly) todo = 'Pick resource'
@@ -591,6 +640,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
       {pl && (
         <span className={`name mine ${view.current === me ? 'turn' : ''}`} style={{ ...at(layout.meLabel), ['--pc' as string]: PLAYER[pl.color].ui }}>
           {pl.name} <b>{pl.points}</b>
+          {pl.hand && <i className="hc">{handSize(pl.hand)}</i>}
         </span>
       )}
     </div>
@@ -614,9 +664,9 @@ function trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop }: { view: Vie
   if (myOffer) return { ok: null, okLive: false, okWord: '', no: () => act({ type: 'cancelOffer' }), noWord: 'Cancel' }
   if (owe) return { ok: () => act({ type: 'discard', cards: drop }), okLive: handSize(drop) === owe, okWord: `Discard ${owe}`, no: null, noWord: '' }
   if (deal)
-    // the check puts it to everyone; to offer one player, click their cards
+    // the check puts it to everyone, or to the one player picked (by a tap on their cards)
     return {
-      ok: () => act({ type: 'offerTrade', give: deal.give, get: deal.get }),
+      ok: () => act({ type: 'offerTrade', give: deal.give, get: deal.get, ...(typeof deal.to === 'number' ? { to: deal.to } : {}) }),
       okLive: handSize(deal.give) > 0 && handSize(deal.get) > 0 && !GOODS.some((r) => deal.give[r] && deal.get[r]),
       okWord: 'Offer',
       no: () => setDeal(null),
@@ -626,35 +676,40 @@ function trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop }: { view: Vie
 }
 
 /**
- * An open offer: a row of chips over the tray, one per player it's put to, each with ✓, ✕ or … . The one who
- * offered taps a ✓ chip to trade.
+ * Chips over the tray. Your open offer: one per player it's put to, with ✓, ✕ or … (tap a ✓ to trade). An offer
+ * to you: who it's from. A trade you're putting together for one player: who.
  */
-function OfferStrip({ view, layout }: { view: View; layout: ReturnType<typeof layoutFor> }) {
+function OfferStrip({ view, layout, target }: { view: View; layout: ReturnType<typeof layoutFor>; target: number | null }) {
   const project = useProjector()
   const o = view.offer
-  if (!o) return null
   const me = view.you
-  const mineOffer = o.from === me
-  const asked = view.players.map((_, i) => i).filter((i) => i !== o.from && i !== me && (o.to === undefined || i === o.to))
-  if (!asked.length) return null
+  const chip = (p: number, mark: React.ReactNode = null, cls = '') => (
+    <span key={p} className={`pchip ${cls}`} style={{ ['--pc' as string]: PLAYER[view.players[p].color].ui }}>
+      {view.players[p].name} {mark !== null && <b>{mark}</b>}
+    </span>
+  )
+  let chips: React.ReactNode[] = []
+  if (o && o.from === me)
+    chips = view.players
+      .map((_, i) => i)
+      .filter((i) => i !== me && (o.to === undefined || i === o.to))
+      .map((p) => {
+        const st = o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait'
+        if (st === 'yes')
+          return (
+            <button key={p} className="pchip yes go" style={{ ['--pc' as string]: PLAYER[view.players[p].color].ui }} onClick={() => act({ type: 'confirmTrade', with: p })}>
+              {view.players[p].name} <b>⇄</b>
+            </button>
+          )
+        return chip(p, st === 'no' ? '✕' : <i className="dots" />, st)
+      })
+  else if (o) chips = [chip(o.from, '⇄')]
+  else if (target !== null) chips = [chip(target, '→')]
+  if (!chips.length) return null
   const [x, top] = project(layout.tray[0], 0, layout.tray[1] - TRAY.d / 2)
   return (
     <div className="offer-strip" style={{ left: x, top }}>
-      {asked.map((p) => {
-        const st = o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait'
-        const pl = view.players[p]
-        const style = { ['--pc' as string]: PLAYER[pl.color].ui }
-        const mark = st === 'yes' ? '✓' : st === 'no' ? '✕' : <i className="dots" />
-        return mineOffer && st === 'yes' ? (
-          <button key={p} className="pchip yes go" style={style} onClick={() => act({ type: 'confirmTrade', with: p })} title={`Trade with ${pl.name}`}>
-            {pl.name} <b>⇄</b>
-          </button>
-        ) : (
-          <span key={p} className={`pchip ${st}`} style={style}>
-            {pl.name} <b>{mark}</b>
-          </span>
-        )
-      })}
+      {chips}
     </div>
   )
 }
@@ -677,6 +732,79 @@ function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; act
           ✕
         </button>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- robbing
+
+/** the victim's cards, face down in a fan: tap one to take it */
+function StealFan({ n, onPick, onClose }: { n: number; onPick: (i: number) => void; onClose?: () => void }) {
+  const back = faceURL('res:?')
+  return (
+    <div className="fan-back" onClick={(e) => e.target === e.currentTarget && onClose?.()}>
+      <div className="fan" style={{ ['--n' as string]: n }}>
+        {Array.from({ length: n }, (_, i) => (
+          <button key={i} className="fan-card" style={{ ['--i' as string]: i - (n - 1) / 2, ['--a' as string]: Math.abs(i - (n - 1) / 2), backgroundImage: `url(${back})` }} onClick={() => onPick(i)} aria-label={`Card ${i + 1}`} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** being robbed: your cards, face up, in the order the robber sees them face down; tap two to swap them */
+function MyFan({ order }: { order: Good[] }) {
+  const [sel, setSel] = useState<number | null>(null)
+  const tap = (i: number) => {
+    if (sel === null) return setSel(i)
+    if (sel !== i) {
+      const next = [...order]
+      ;[next[sel], next[i]] = [next[i], next[sel]]
+      act({ type: 'arrange', order: next })
+    }
+    setSel(null)
+  }
+  const shuffle = () => {
+    const next = [...order]
+    for (let i = next.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[next[i], next[j]] = [next[j], next[i]]
+    }
+    act({ type: 'arrange', order: next })
+  }
+  return (
+    <div className="my-fan">
+      <div className="fan small" style={{ ['--n' as string]: order.length }}>
+        {order.map((g, i) => (
+          <button key={i} className={`fan-card ${sel === i ? 'sel' : ''}`} style={{ ['--i' as string]: i - (order.length - 1) / 2, ['--a' as string]: Math.abs(i - (order.length - 1) / 2), backgroundImage: `url(${faceURL(`res:${g}`)})` }} onClick={() => tap(i)} aria-label={g} />
+        ))}
+      </div>
+      <button className="fan-shuffle" onClick={shuffle} aria-label="Shuffle">
+        ⤮
+      </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- your turn, big, for a moment
+
+function TurnBanner({ view }: { view: View }) {
+  const mine = view.you >= 0 && view.current === view.you && view.phase.kind !== 'over'
+  const [shown, setShown] = useState(0)
+  const was = useRef(mine)
+  useEffect(() => {
+    if (mine && !was.current) setShown((n) => n + 1)
+    was.current = mine
+  }, [mine])
+  useEffect(() => {
+    if (!shown) return
+    const t = setTimeout(() => setShown(0), 1300)
+    return () => clearTimeout(t)
+  }, [shown])
+  if (!shown || !mine) return null
+  return (
+    <div className="turn-banner" key={shown} style={{ ['--pc' as string]: PLAYER[view.players[view.you].color].ui }}>
+      Your turn
     </div>
   )
 }

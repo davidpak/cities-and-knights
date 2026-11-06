@@ -108,6 +108,8 @@ export type Layout = SeatStyle & {
   dev: (i: number, held?: number) => Spot
   supply: { road: Spot; settlement: Spot; city: Spot }
   awardsMine: Spot
+  /** your name tag starts at meLabel (and wraps its chips under the name) rather than centring on it */
+  meLabelStart?: boolean
   /** the bank laid out as a stack per kind, small, in rows (on a wide table; else the fan) */
   bankGrid?: Spot[]
   /** the basic game: the knights you've played, face up beside your awards (Largest Army in the making) */
@@ -294,7 +296,9 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
         hand: Array.from({ length: 8 }, (_, i): Spot => [-330 + i * HAND_STEP, handZ]),
         dev: (i) => [-330 + i * 70, progZ],
         supply: { road: [-322, pieceZ], settlement: [-250, pieceZ], city: [-170, pieceZ] },
-        meLabel: [-284, charts],
+        // (your name starts at the left edge, its chips on a line under it: on a phone there's no room beside it)
+        meLabel: [-352, charts],
+        meLabelStart: true,
         tray: [0, charts],
         marks: 'corner',
         wants: (i) => [(i < 4 ? -1 : 1) * (TRAY.w / 2 + 8 + 19 + (i % 2 ? 44 : 0)), charts + ((i % 4) < 2 ? -30 : 30)],
@@ -380,7 +384,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
     ...(L.marks === 'corner' ? [] : [L.marks === 'right'
       ? ui('tray check and cross', L.tray[0] + TRAY.w / 2 + 4, L.tray[0] + TRAY.w / 2 + 62, L.tray[1] - 62, L.tray[1] + 62)
       : ui('tray check and cross', L.tray[0] - TRAY.w / 2 - 62, L.tray[0] - TRAY.w / 2 - 4, L.tray[1] - 62, L.tray[1] + 62)]),
-    ui('your name', L.meLabel[0] - 62, L.meLabel[0] + 62, L.meLabel[1] - 18, L.meLabel[1] + 18),
+    L.meLabelStart ? ui('your name', L.meLabel[0], L.meLabel[0] + 150, L.meLabel[1] - 30, L.meLabel[1] + 30) : ui('your name', L.meLabel[0] - 62, L.meLabel[0] + 62, L.meLabel[1] - 18, L.meLabel[1] + 18),
     ...L.seats.map(({ p, at }) => {
       const s = seatParts(at, L)
       const [x, z] = s.label

@@ -1872,3 +1872,44 @@ input {
 .gs-table td:has(.gs-each) {
   white-space: normal;
 }
+
+/* your own tag: its chips sit together; where it starts at the edge, they go on a line under the name */
+.name .chips {
+  display: inline-flex;
+  gap: calc(var(--u) * 4);
+}
+.name.mine.start {
+  flex-wrap: wrap;
+  width: min-content;
+  row-gap: 3px;
+}
+.name.mine.start .chips {
+  flex-basis: 100%;
+}
+.name .chips .kp,
+.name .chips .hc {
+  font-style: normal;
+}
+/* the barbarians-vs-knights badge, smaller on a phone */
+@media (max-width: 600px) {
+  .raid-odds {
+    font-size: 12px;
+    padding: 2px 7px;
+    gap: 3px;
+  }
+}
+
+.name .nm {
+  white-space: nowrap;
+}
+.name .nm b {
+  font-weight: 700;
+  color: var(--ink-2);
+}
+/* (its colour as an edge, where the dot would sit on a line of its own) */
+.name.mine.start::before {
+  display: none;
+}
+.name.mine.start {
+  border-left: max(calc(var(--u) * 5), 4px) solid var(--pc);
+}

@@ -825,10 +825,14 @@ function Labels({ view, layout, hand, tray }: { view: View; layout: ReturnType<t
       })}
       {pl && !view.x && layout.armyMine && count('knme', layout.armyMine, pl.knights)}
       {pl && (
-        <span className={`name mine ${view.current === me ? 'turn' : ''}`} style={{ ...at(layout.meLabel), ['--pc' as string]: PLAYER[pl.color].ui }}>
-          {pl.name} <b>{pl.points}</b>
-          {pl.hand && <i className="hc">{handSize(pl.hand)}</i>}
-          {view.x && <KnightPower view={view} p={me} />}
+        <span className={`name mine ${layout.meLabelStart ? 'start' : ''} ${view.current === me ? 'turn' : ''}`} style={{ ...at(layout.meLabel), ['--pc' as string]: PLAYER[pl.color].ui }}>
+          <span className="nm">
+            {pl.name} <b>{pl.points}</b>
+          </span>
+          <span className="chips">
+            {pl.hand && <i className="hc">{handSize(pl.hand)}</i>}
+            {view.x && <KnightPower view={view} p={me} />}
+          </span>
         </span>
       )}
     </div>

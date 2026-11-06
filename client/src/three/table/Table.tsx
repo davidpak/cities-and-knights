@@ -226,9 +226,11 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   // (one card of each kind, fanned: cards taken come from it and cards paid go into it)
   kinds.forEach((r, i) => {
     const id = `bank:${r}`
-    const f = fanPose(layout.fan, kinds.length, i, layout.fanSpread)
-    const spot: Spot = [f.x, f.z]
-    card({ id, family: 'res', look: `res:${r}`, n: Math.min(BANK_STACK, view.bank[r]), home: (k) => ({ x: f.x, y: f.base + (k + 0.5) * CT, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0 && (!can.bankGoods || !!can.bankGoods[r]), dim: !!can.bankGoods && !can.bankGoods[r], onClick: () => on.bank(r) })
+    const grid = layout.bankGrid?.[i]
+    const f = fanPose(layout.fan, kinds.length, i)
+    const spot: Spot = grid ?? [f.x, f.z]
+    // on a wide table a neat small stack per kind; else one card of each, fanned
+    card({ id, family: 'res', look: `res:${r}`, n: grid ? Math.min(BANK_STACK, view.bank[r]) : Math.min(1, view.bank[r]), small: !!grid, home: grid ? cardHome(id, grid, { loose: 0.2 }) : () => ({ x: f.x, y: f.base + CT / 2, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0 && (!can.bankGoods || !!can.bankGoods[r]), dim: !!can.bankGoods && !can.bankGoods[r], onClick: () => on.bank(r) })
   })
   if (x && K)
     TRACKS.forEach((t) => {

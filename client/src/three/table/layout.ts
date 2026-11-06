@@ -62,6 +62,8 @@ export const FAN = { reach: 50, step8: 10.5, step5: 13 } // [D] the card's middl
 /** a bank card's place in the fan; `spread` opens the fan wider (where there's room) and each card is a stack of
  *  up to BANK_STACK, so the next card lies above the whole stack */
 export const BANK_STACK = 4
+/** a bank stack's cards, as a share of a full card (laid out in rows on a wide table) */
+export const BANK_SCALE = CARD.small
 export function fanPose(pivot: Spot, n: number, i: number, spread = 1) {
   const step = ((n > 5 ? FAN.step8 : FAN.step5) * spread * Math.PI) / 180
   const th = (i - (n - 1) / 2) * step
@@ -71,7 +73,7 @@ export function fanPose(pivot: Spot, n: number, i: number, spread = 1) {
   // the next card covers this one's right side; what shows is a wedge on its left, widest near the top
   const d = reach + CARD.d / 2 - 8
   const tap = i === n - 1 ? at(reach + 10) : at(d, -Math.atan(CARD.w / 2 / d) + step / 2)
-  return { x, z, yaw: -th, base: i * BANK_STACK * CARD.t, tap }
+  return { x, z, yaw: -th, base: i * CARD.t, tap }
 }
 /** the fan's footprint (for the layout check) */
 function fanBox(pivot: Spot, n: number, spread = 1): { x0: number; x1: number; z0: number; z1: number } {
@@ -106,8 +108,8 @@ export type Layout = SeatStyle & {
   dev: (i: number, held?: number) => Spot
   supply: { road: Spot; settlement: Spot; city: Spot }
   awardsMine: Spot
-  /** the bank's fan opened wider than usual (on a wide table) */
-  fanSpread?: number
+  /** the bank laid out as a stack per kind, small, in rows (on a wide table; else the fan) */
+  bankGrid?: Spot[]
   /** the basic game: the knights you've played, face up beside your awards (Largest Army in the making) */
   armyMine?: Spot
   meLabel: Spot
@@ -190,7 +192,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       marks: 'right',
       wants: (i) => [-520 + (i - 2) * 44, -130],
       fan: [520, -10],
-      fanSpread: 1.3,
+      bankGrid: Array.from({ length: 5 }, (_, i): Spot => [520 + (i - 2) * 46, -30]),
       bank: [],
       deck: [520, 95],
       dice: [526, 205],
@@ -221,7 +223,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
         marks: 'left',
         wants: (i) => [540 + ((i % 4) - 1.5) * 42, i < 4 ? -45 : 13],
         fan: [540, -205],
-        fanSpread: 1.3,
+        bankGrid: Array.from({ length: 8 }, (_, i): Spot => [580 + ((i % 4) - 1.5) * 50, i < 4 ? -292 : -224]),
         deck: [540, -130],
         dice: [560, 262],
         flash: [540, 120],
@@ -318,7 +320,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
   }
 
   const kinds = knights ? 8 : 5
-  L.bank = Array.from({ length: kinds }, (_, i) => fanPose(L.fan, kinds, i, L.fanSpread).tap)
+  L.bank = L.bankGrid ?? Array.from({ length: kinds }, (_, i) => fanPose(L.fan, kinds, i).tap)
   const c = (what: string, [x, z]: Spot, w = CARD.w, d = CARD.d): Box => ({ what, x, z, w, d })
   const boxes: Box[] = [
     ...L.hand.map((s, i) => c(`hand ${i}`, s)),
@@ -331,10 +333,14 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
     c('cities', L.supply.city, SUPPLY.city.w, SUPPLY.city.d),
     c('tray', L.tray, TRAY.w, TRAY.d),
     ...L.hand.map((_, i) => c(`want ${i}`, L.wants(i), CARD.w * CARD.small, CARD.d * CARD.small)),
-    (() => {
-      const f = fanBox(L.fan, kinds, L.fanSpread)
-      return { what: 'bank fan', x: (f.x0 + f.x1) / 2, z: (f.z0 + f.z1) / 2, w: f.x1 - f.x0, d: f.z1 - f.z0 }
-    })(),
+    ...(L.bankGrid
+      ? L.bankGrid.map((spot, i) => c(`bank ${i}`, spot, CARD.w * BANK_SCALE, CARD.d * BANK_SCALE))
+      : [
+          (() => {
+            const f = fanBox(L.fan, kinds)
+            return { what: 'bank fan', x: (f.x0 + f.x1) / 2, z: (f.z0 + f.z1) / 2, w: f.x1 - f.x0, d: f.z1 - f.z0 }
+          })(),
+        ]),
     ...(L.k ? [] : [c('deck', L.deck)]),
     c('dice', L.dice, DICE_TRAY.w, DICE_TRAY.d),
     c('my awards', L.awardsMine),

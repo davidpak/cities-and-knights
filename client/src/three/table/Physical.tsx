@@ -222,10 +222,10 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
       const d = down.current
       if (!d) return
       const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y)
-      // a thing with a click of its own (a piece to build, a card to play) is picked up only after a moment's hold,
-      // so a click never turns into a drag; anything else picks up as soon as it moves. A finger always holds first
+      // a piece of your supply (a click picks it to build) is picked up only after a moment's hold, so a click never
+      // turns into a drag; anything else picks up as soon as it moves. A finger always holds first
       // (a quick swipe is not a pick-up)
-      const hold = d.touch || !!specOf(d.thing)?.enabled
+      const hold = d.touch || (!!specOf(d.thing)?.enabled && !!d.thing.pile?.startsWith('supply:'))
       const long = performance.now() - d.t >= HOLD
       if (d.touch && !d.held && !long && moved > 28) d.far = true
       if (!d.held && !d.far && moved > 6 && (!hold || long) && grabbable(d.thing)) {

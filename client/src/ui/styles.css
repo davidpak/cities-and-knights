@@ -1395,20 +1395,6 @@ input {
   border-bottom-color: #d2452f;
   color: #b8432f;
 }
-.discard-count {
-  padding: 5px 14px;
-  border-radius: 8px;
-  background: #d2452f;
-  color: #fff;
-  font-size: 17px;
-  font-weight: 800;
-  pointer-events: none;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-.discard-count.done {
-  background: #2f9e57;
-  animation: none;
-}
 @keyframes pulse {
   50% { transform: scale(1.06); }
 }
@@ -1508,4 +1494,39 @@ input {
   font-size: 14px;
   display: grid;
   gap: 4px;
+}
+
+/* something you must do now, front and centre (discarding) */
+.fan-back.must {
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  grid-auto-flow: row;
+}
+.must-head {
+  padding: 6px 18px;
+  border-radius: 10px;
+  background: #d2452f;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+}
+.fan-back.must .fan {
+  --w: clamp(56px, 15vw, 96px);
+  --step: min(calc(var(--w) * 0.7), calc((min(92vw, 760px) - var(--w)) / max(1, var(--n) - 1)));
+}
+/* (a big hand: nearly flat, so it stays on the screen) */
+.fan-back.must .fan-card {
+  transform: translateY(calc(var(--a) * 1px)) rotate(calc(var(--i) * 1.2deg));
+  transform-origin: 50% 100%;
+}
+.fan-back.must .fan-card.sel {
+  transform: translateY(calc(var(--a) * 1px - 18px)) rotate(calc(var(--i) * 1.2deg));
+}
+.fan-back.must .fan-card.sel {
+  outline: 4px solid #d2452f;
+  filter: brightness(0.85);
+}
+.zoom-btn.go:disabled {
+  opacity: 0.4;
 }

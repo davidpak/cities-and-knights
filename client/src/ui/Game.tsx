@@ -498,8 +498,24 @@ export function Game({ view }: { view: View }) {
       )}
       {myFan && myFan.length > 0 && <MyFan order={myFan} />}
       <TurnBanner view={view} />
-      <Flash text={owe ? `Discard ${owe}` : progressOwed ? `Discard ${progressOwed} progress` : null} />
-      {owe > 0 && <DiscardCount layout={layout} picked={handSize(drop)} owe={owe} />}
+      <Flash text={owe ? `Discard ${owe}` : progressOwed ? `Discard ${progressOwed} progress` : ph.kind === 'pillage' && ph.owed[me] ? 'Pick city to lose' : mine && ph.kind === 'robber' ? 'Move robber' : null} />
+      {owe > 0 && hand && <DiscardFan hand={hand} drop={drop} owe={owe} setDrop={setDrop} />}
+      {progressOwed > 0 && myProgress.length > 0 && (
+        <div className="fan-back must">
+          <div className="must-head">Discard {progressOwed} progress</div>
+          <div className="fan" style={{ ['--n' as string]: myProgress.length }}>
+            {myProgress.map((c, i) => (
+              <button
+                key={i}
+                className="fan-card"
+                style={{ ['--i' as string]: i - (myProgress.length - 1) / 2, ['--a' as string]: Math.abs(i - (myProgress.length - 1) / 2), backgroundImage: `url(${faceURL(`prog:${c.card}`)})` }}
+                onClick={() => act({ type: 'discardProgress', card: c.card })}
+                aria-label={c.card}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {zoom && (() => {
         const held = zoom.kind === 'dev' ? devs.some((c) => c.card === zoom.card) : myProgress.some((c) => c.card === zoom.card)
@@ -936,18 +952,39 @@ function Flash({ text }: { text: string | null }) {
   return <div className="turn-banner warn">{shown}</div>
 }
 
-/** discarding: how many picked of how many owed, over the tray */
-function DiscardCount({ layout, picked, owe }: { layout: ReturnType<typeof layoutFor>; picked: number; owe: number }) {
-  const project = useProjector()
-  const [x, top] = project(layout.tray[0], 0, layout.tray[1] - TRAY.d / 2)
+/**
+ * Discarding: your whole hand, big, front and centre. Tap cards to pick them (they rise); tap again to put one back.
+ * The button discards once enough are picked.
+ */
+function DiscardFan({ hand, drop, owe, setDrop }: { hand: Hand; drop: Hand; owe: number; setDrop: (h: Hand) => void }) {
+  const cards = GOODS.flatMap((r) => Array.from({ length: hand[r] }, (_, k) => ({ r, k })))
+  const n = handSize(drop)
   return (
-    <div className="offers" style={{ left: x, top }}>
-      <div className={`discard-count ${picked === owe ? 'done' : ''}`}>
-        Discard <b>{picked}</b>/<b>{owe}</b>
+    <div className="fan-back must">
+      <div className="must-head">
+        Discard <b>{n}</b>/<b>{owe}</b>
       </div>
+      <div className="fan" style={{ ['--n' as string]: cards.length }}>
+        {cards.map(({ r, k }, i) => {
+          const picked = k < drop[r]
+          return (
+            <button
+              key={`${r}${k}`}
+              className={`fan-card ${picked ? 'sel' : ''}`}
+              style={{ ['--i' as string]: i - (cards.length - 1) / 2, ['--a' as string]: Math.abs(i - (cards.length - 1) / 2), backgroundImage: `url(${faceURL(`res:${r}`)})` }}
+              onClick={() => (picked ? setDrop(add(drop, r, -1)) : n < owe && setDrop(add(drop, r)))}
+              aria-label={r}
+            />
+          )
+        })}
+      </div>
+      <button className="zoom-btn go" disabled={n !== owe} onClick={() => act({ type: 'discard', cards: drop })}>
+        Discard
+      </button>
     </div>
   )
 }
+
 
 // ---------------------------------------------------------------- a city track up close
 

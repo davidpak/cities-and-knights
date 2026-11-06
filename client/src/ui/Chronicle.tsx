@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { TOPO } from '../../../shared/board.ts'
 import type { GameEvent, View } from '../../../shared/engine.ts'
 import { CARD_NAME, PROGRESS, RESOURCES, TRACK_NAME, type Good, type Hand } from '../../../shared/rules.ts'
-import { PLAYER, RESOURCE_NAME } from '../lib/palette.ts'
+import { PLAYER } from '../lib/palette.ts'
 import { Bundle, Icon, PieceIcon, Pips } from './Cards.tsx'
 
 export function Who({ view, p, you = true }: { view: View; p: number; you?: boolean }) {
@@ -32,11 +32,11 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
         <>
           {W(e.p)} rolled <Pips v={e.dice[0]} size={15} />
           <Pips v={e.dice[1]} size={15} /> <b className="big-num">{e.dice[0] + e.dice[1]}</b>
-          {e.event && <span className="muted"> · {e.event === 'ship' ? 'the ship sails on' : `${TRACK_NAME[e.event].toLowerCase()} gate`}</span>}
+          {e.event && <span className="muted"> · {e.event === 'ship' ? 'ship' : TRACK_NAME[e.event]}</span>}
         </>
       )
     case 'gain':
-      if (!e.gains.length) return <span className="muted">Nobody collects anything.</span>
+      if (!e.gains.length) return <span className="muted">No yield</span>
       return (
         <span className="gains">
           {e.gains.map((g) => (
@@ -45,7 +45,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
               <Bundle of={g.got} />
             </span>
           ))}
-          {e.short?.length ? <span className="muted"> (the bank ran out of {e.short.join(', ')})</span> : null}
+          {e.short?.length ? <span className="muted"> (bank out: {e.short.join(', ')})</span> : null}
         </span>
       )
     case 'build': {
@@ -62,7 +62,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'buy':
       return (
         <>
-          <PieceIcon what="card" size={16} color="#6f5bc4" /> {W(e.p)} bought a development card
+          <PieceIcon what="card" size={16} color="#6f5bc4" /> {W(e.p)} bought a card
         </>
       )
     case 'play':
@@ -74,7 +74,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'monopoly':
       return (
         <>
-          {W(e.p)} took every <Icon r={e.r} size={15} /> {RESOURCE_NAME[e.r].toLowerCase()}: <b>{e.count}</b> in all
+          {W(e.p)} took all <Icon r={e.r} size={15} /> <b>{e.count}</b>
         </>
       )
     case 'plenty':
@@ -86,7 +86,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'bank':
       return (
         <>
-          {W(e.p)} traded <Bundle of={one(e.give, e.count)} /> <span className="arrow">→</span> <Bundle of={one(e.get)} /> with the bank
+          {W(e.p)} traded <Bundle of={one(e.give, e.count)} /> <span className="arrow">→</span> <Bundle of={one(e.get)} /> (bank)
         </>
       )
     case 'offer':
@@ -99,7 +99,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'answer':
       return (
         <>
-          {W(e.p)} {e.yes ? <b className="yes">said yes</b> : <span className="no">said no</span>}
+          {W(e.p)} {e.yes ? <b className="yes">✓</b> : <span className="no">✕</span>}
         </>
       )
     case 'trade':
@@ -120,10 +120,10 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
                   {W(p)}
                 </span>
               ))}{' '}
-              must discard half
+              discard half
             </>
           ) : (
-            'The robber moves'
+            'Robber'
           )}
         </>
       )
@@ -138,7 +138,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
       const t = view.tiles[e.hex]
       return (
         <>
-          {W(e.p)} moved the robber to {TERRAIN_WORD[t.terrain]}
+          {W(e.p)} robber → {TERRAIN_WORD[t.terrain]}
           {t.number !== null ? ` ${t.number}` : ''}
         </>
       )
@@ -151,7 +151,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
       )
     case 'award':
       return e.p === null ? (
-        <>Nobody holds {e.what === 'road' ? 'Longest Road' : 'Largest Army'} now</>
+        <>{e.what === 'road' ? 'Longest Road' : 'Largest Army'}: nobody</>
       ) : (
         <>
           {W(e.p)} took <b className="award-word">{e.what === 'road' ? 'Longest Road' : 'Largest Army'}</b> (+2)
@@ -159,26 +159,26 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
         </>
       )
     case 'barbarians':
-      return e.at >= 7 ? <>The barbarians land!</> : <>The barbarians' ship sails on ({7 - e.at} to go)</>
+      return e.at >= 7 ? <>Barbarians attack!</> : <>Ship {e.at}/7</>
     case 'attack': {
       const strength = e.strength
       const defense = e.defense.reduce((a, b) => a + b, 0)
       if (e.won)
         return (
           <>
-            The barbarians ({strength}) are driven off by the knights ({defense})
-            {e.defender !== null ? <>: {W(e.defender)} defended best (+1)</> : e.tied.length ? <>: {e.tied.map((p, i) => <span key={p}>{i > 0 && ', '}{W(p)}</span>)} each take a progress card</> : null}
+            Barbarians {strength} vs knights {defense}: held
+            {e.defender !== null ? <> · {W(e.defender)} +1</> : e.tied.length ? <> · {e.tied.map((p, i) => <span key={p}>{i > 0 && ', '}{W(p)}</span>)} draw a card</> : null}
           </>
         )
       return (
         <>
-          The barbarians ({strength}) beat the knights ({defense})
+          Barbarians {strength} vs knights {defense}: lost
           {e.pillaged.length > 0 && (
             <>
               : {e.pillaged.map((x, i) => (
                 <span key={i}>
                   {i > 0 && ', '}
-                  {W(x.p)} lost {x.wall ? 'a city wall' : 'a city'}
+                  {W(x.p)} −{x.wall ? 'wall' : 'city'}
                 </span>
               ))}
             </>
@@ -189,30 +189,30 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'draw':
       return (
         <>
-          {W(e.p)} drew a {TRACK_NAME[e.track].toLowerCase()} card{e.card && (e.p === view.you || e.card === 'townCharter' || e.card === 'press') ? <>: <b>{PROGRESS[e.card].name}</b></> : null}
+          {W(e.p)} drew {TRACK_NAME[e.track].toLowerCase()}{e.card && (e.p === view.you || e.card === 'townCharter' || e.card === 'press') ? <>: <b>{PROGRESS[e.card].name}</b></> : null}
         </>
       )
     case 'improve':
       return (
         <>
-          {W(e.p)} raised {TRACK_NAME[e.track].toLowerCase()} to <b>{e.level}</b>
+          {W(e.p)} {TRACK_NAME[e.track]} <b>{e.level}</b>
         </>
       )
     case 'metropolis':
       return (
         <>
-          {W(e.p)} raised a <b className="award-word">{TRACK_NAME[e.track]} metropolis</b> (+2){e.from !== null && <> from {W(e.from)}</>}
+          {W(e.p)} <b className="award-word">{TRACK_NAME[e.track]} metropolis</b> (+2){e.from !== null && <> from {W(e.from)}</>}
         </>
       )
     case 'knight': {
       const str = e.level ? ` (${['', 'basic', 'strong', 'mighty'][e.level]})` : ''
       const what = {
-        build: 'raised a knight',
-        promote: 'made a knight stronger',
-        activate: 'readied a knight',
+        build: 'built a knight',
+        promote: 'upgraded a knight',
+        activate: 'activated a knight',
         move: 'moved a knight',
-        displace: 'pushed away a knight of',
-        chase: 'chased the robber off with a knight',
+        displace: 'displaced',
+        chase: 'chased the robber',
         lost: 'lost a knight',
       }[e.what]
       return (
@@ -231,7 +231,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
         </>
       )
     case 'merchant':
-      return <>{W(e.p)} sent out the trader</>
+      return <>{W(e.p)} moved the trader</>
     case 'take':
       return (
         <>
@@ -250,7 +250,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'aqueduct':
       return (
         <>
-          {W(e.p)} took <Bundle of={one(e.r)} /> (waterworks)
+          {W(e.p)} +<Bundle of={one(e.r)} /> (aqueduct)
         </>
       )
     case 'turn':
@@ -258,7 +258,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'win':
       return (
         <>
-          {W(e.p)} won with <b>{e.points}</b> points!
+          {W(e.p)} wins · <b>{e.points}</b>
         </>
       )
   }

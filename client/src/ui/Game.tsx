@@ -8,13 +8,14 @@ import {
   affordable, canAct, canPlay, chaseSpots, citySpots, improveCost, knightMoves, knightSpots, pickTargets, promoteSpots,
   roadSpots, robberSpots, settlementSpots, tradeRatios, wallSpots, type PickNeed, type View,
 } from '../../../shared/engine.ts'
-import { BARBARIAN_STEPS, COST, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
+import { BARBARIAN_STEPS, CARD_TEXT, COST, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
 import { PLAYER, TRACK_COLOR } from '../lib/palette.ts'
 import { act, room, toast as say, useStore } from '../net.ts'
 import { GLOW_AT, type PickKind, type Picking } from '../three/Board.tsx'
 import { useProjector } from '../three/labels.ts'
 import { TableView, packHand, type TrayContents } from '../three/table/Table.tsx'
 import { CARD, TRAY, layoutFor, seatParts, type Spot } from '../three/table/layout.ts'
+import { paintFace } from '../three/table/faces.ts'
 import { publishState } from '../three/TestHook.tsx'
 import { Bundle } from './Cards.tsx'
 import { Chronicle, describe, Who } from './Chronicle.tsx'
@@ -27,18 +28,18 @@ const minus = (a: Hand, b: Partial<Hand>): Hand => Object.fromEntries(GOODS.map(
 
 /** what each kind of pick asks for, in a few words */
 const PICK_WORDS: Record<PickNeed, string> = {
-  hex: 'Pick a tile',
-  road: 'Pick a road with an open end',
-  enemyKnight: "Pick someone else's knight",
-  knightSpot: 'Pick a corner for your knight',
-  player: "Click someone's cards",
-  resource: 'Click a resource in the bank',
-  commodity: 'Click a commodity in the bank',
-  good: 'Click a kind of card in the bank',
-  number: 'Click a tile with the number you want',
-  myCity: 'Pick one of your cities',
-  mySettlement: 'Pick one of your settlements',
-  token: 'Pick a number token to swap',
+  hex: 'Pick tile',
+  road: 'Pick open road',
+  enemyKnight: 'Pick enemy knight',
+  knightSpot: 'Pick spot',
+  player: 'Pick player',
+  resource: 'Pick resource',
+  commodity: 'Pick commodity',
+  good: 'Pick card type',
+  number: 'Pick number',
+  myCity: 'Pick city',
+  mySettlement: 'Pick settlement',
+  token: 'Pick token',
 }
 
 function useAspect() {
@@ -75,6 +76,8 @@ export function Game({ view }: { view: View }) {
   const [plenty, setPlenty] = useState<Resource[] | null>(null)
   const [monopoly, setMonopoly] = useState(false)
   const [history, setHistory] = useState(false)
+  // a card of yours, held up close (tap one in your hand)
+  const [zoom, setZoom] = useState<{ kind: 'dev'; card: Card } | { kind: 'prog'; card: Progress } | null>(null)
   /** a finger has shown a piece on the board: tap it again to place it */
   const [armed, setArmed] = useState(false)
   /** the expansion: one of your ready knights, picked up to move (or to chase the robber) */
@@ -163,9 +166,9 @@ export function Game({ view }: { view: View }) {
     if (kind === 'quiet') {
       const k = view.x!.knights[id]
       if (!k.active) {
-        if (!hand || !hasAll(hand, KNIGHT_COST.activate)) return say('Readying a knight takes 1 grain')
+        if (!hand || !hasAll(hand, KNIGHT_COST.activate)) return say(<Bundle of={KNIGHT_COST.activate} />)
         await act({ type: 'activateKnight', vertex: id })
-      } else if (!canAct(view, id)) say('Readied this turn: it can act from your next turn')
+      } else if (!canAct(view, id)) say('Active next turn')
       else setSelected(id)
       return
     }
@@ -265,7 +268,7 @@ export function Game({ view }: { view: View }) {
       const all: readonly Good[] = view.x ? GOODS : RESOURCES
       const kinds = all.filter((g) => g !== r && give[g] >= ratios[g])
       const g = kinds.find((k) => give[k] === ratios[k]) ?? kinds[0]
-      if (!g) return say(`The bank wants ${Math.min(...all.filter((k) => k !== r).map((k) => ratios[k]))} of a kind`)
+      if (!g) return say(`Bank ${Math.min(...all.filter((k) => k !== r).map((k) => ratios[k]))}:1`)
       if (await act({ type: 'bankTrade', give: g, get: r })) {
         const left = add(give, g, -ratios[g])
         setDeal(handSize(left) || handSize(deal?.get ?? emptyHand()) ? { ...(deal as Deal), give: left } : null)
@@ -273,16 +276,18 @@ export function Game({ view }: { view: View }) {
     },
     deck: () => {
       if (!main) return
-      if (!affordable(view, me, 'card')) return say('1 wool, 1 grain, 1 ore')
+      if (!affordable(view, me, 'card')) return say(<Bundle of={COST.card} />)
       act({ type: 'buyCard' })
     },
-    dev: (c: Card) => {
+    dev: (c: Card) => setZoom({ kind: 'dev', card: c }),
+    progress: (c: Progress) => setZoom({ kind: 'prog', card: c }),
+    playDev: (c: Card) => {
       if (c === 'knight') act({ type: 'playKnight' })
       else if (c === 'roadBuilding') act({ type: 'playRoadBuilding' })
       else if (c === 'yearOfPlenty') (setPlenty([]), setDeal(null))
       else if (c === 'monopoly') (setMonopoly(true), setDeal(null))
     },
-    progress: (c: Progress) => {
+    playProgress: (c: Progress) => {
       if (progressOwed) return act({ type: 'discardProgress', card: c })
       setBuilding(null)
       setSelected(null)
@@ -291,19 +296,19 @@ export function Game({ view }: { view: View }) {
     knight: () => {
       setSelected(null)
       if (building === 'knight') return setBuilding(null)
-      if (!can.knight) return say(view.players[me].pieces.knight[1] === 0 && promoteSpots(view, me).length === 0 ? 'No knights left' : '1 wool, 1 ore')
+      if (!can.knight) return say(view.players[me].pieces.knight[1] === 0 && promoteSpots(view, me).length === 0 ? 'No knights left' : <Bundle of={KNIGHT_COST.knight} />)
       setBuilding('knight')
     },
     wall: () => {
       if (building === 'wall') return setBuilding(null)
-      if (!can.wall) return say(view.players[me].pieces.wall === 0 ? 'No walls left' : wallSpots(view, me).length ? '2 brick' : 'A wall goes round one of your cities')
+      if (!can.wall) return say(view.players[me].pieces.wall === 0 ? 'No walls left' : wallSpots(view, me).length ? <Bundle of={KNIGHT_COST.wall} /> : 'Needs a city')
       setBuilding('wall')
     },
     improve: (t: Track) => {
       if (!main) return
       if (!canImprove[t]) {
         const cost = improveCost(view, me, t)
-        return say(cost ? `${TRACK_NAME[t]}: ${Object.entries(cost).map(([g, n]) => `${n} ${g}`).join(', ')}` : view.x!.levels[me][t] >= 5 ? `${TRACK_NAME[t]} is complete` : 'You need a city first')
+        return say(cost ? <Bundle of={cost} /> : view.x!.levels[me][t] >= 5 ? 'Maxed' : 'Needs a city')
       }
       act({ type: 'improve', track: t })
     },
@@ -313,8 +318,8 @@ export function Game({ view }: { view: View }) {
       if (!can[w]) {
         const pieces = view.players[me].pieces[w] as number
         if (!pieces) return say(`No ${w === 'city' ? 'cities' : w + 's'} left`)
-        if (!affordable(view, me, w as 'road')) return say(Object.entries(COST[w as 'road']).map(([r, n]) => `${n} ${r}`).join(', '))
-        return say('Nowhere to build that yet')
+        if (!affordable(view, me, w as 'road')) return say(<Bundle of={COST[w as 'road']} />)
+        return say('No spot')
       }
       setBuilding(w)
     },
@@ -323,7 +328,7 @@ export function Game({ view }: { view: View }) {
       if (victims.includes(p)) return act({ type: 'steal', victim: p })
       if (myOffer && myOffer.to === undefined && myOffer.accepted.includes(p)) return act({ type: 'confirmTrade', with: p })
       if (!trading || !deal) return
-      if (!handSize(deal.give) || !handSize(deal.get)) return say(handSize(deal.give) ? 'Pick what you want' : 'Put your cards on the tray')
+      if (!handSize(deal.give) || !handSize(deal.get)) return say(handSize(deal.give) ? 'Pick cards to get' : 'Pick cards to give')
       act({ type: 'offerTrade', give: deal.give, get: deal.get, to: p })
     },
   }
@@ -332,10 +337,20 @@ export function Game({ view }: { view: View }) {
   // while an offer is up, its panel on the tray holds every button for it
   const offerUp = !!(myOffer || inOffer)
 
+  // your turn, while you're in another tab: the tab says so
+  useEffect(() => {
+    const base = 'Towns and Peasants'
+    const f = () => (document.title = mine && document.hidden ? `● Your turn · ${base}` : base)
+    f()
+    document.addEventListener('visibilitychange', f)
+    return () => document.removeEventListener('visibilitychange', f)
+  }, [mine])
+
   // keys: R roll, E end turn, Esc put everything back
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        setZoom(null)
         setBuilding(null)
         setDeal(null)
         setPlenty(null)
@@ -406,19 +421,45 @@ export function Game({ view }: { view: View }) {
 
       <Labels view={view} layout={layout} hand={shownHand} />
 
-      {tray && layout.marks !== 'corner' && !offerUp && <TrayMarks layout={layout} acts={acts} />}
-      {offerUp && <OfferPanel view={view} layout={layout} acts={acts} />}
+      {tray && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} />}
+      {offerUp && <OfferStrip view={view} layout={layout} />}
 
       <RollFlash view={view} layout={layout} />
 
+      {zoom && (() => {
+        const held = zoom.kind === 'dev' ? devs.some((c) => c.card === zoom.card) : myProgress.some((c) => c.card === zoom.card)
+        if (!held) return null
+        const close = () => setZoom(null)
+        let word = 'Play'
+        let live = false
+        let why = ''
+        if (zoom.kind === 'prog') {
+          live = progressPlayable(zoom.card)
+          if (progressOwed) word = 'Discard'
+          why = !mine ? 'Not your turn' : myOffer ? 'Trade pending' : zoom.card === 'augury' ? 'Before rolling' : ph.kind === 'roll' ? 'Roll first' : 'Not now'
+        } else {
+          live = playable(zoom.card)
+          why = zoom.card === 'victoryPoint' ? '' : !mine ? 'Not your turn' : ph.kind === 'roll' && zoom.card !== 'knight' ? 'Roll first' : 'Not now'
+        }
+        return (
+          <CardZoom
+            look={`${zoom.kind}:${zoom.card}`}
+            caption={zoom.kind === 'dev' ? CARD_TEXT[zoom.card] : null}
+            onClose={close}
+            action={live ? { word, go: () => (close(), zoom.kind === 'dev' ? on.playDev(zoom.card) : on.playProgress(zoom.card)) } : null}
+            why={live ? '' : why}
+          />
+        )
+      })()}
+
       <div className="corner">
         {/* on a phone the tray's buttons are here, big, with words */}
-        {tray && layout.marks === 'corner' && !offerUp && acts.no && (
+        {tray && layout.marks === 'corner' && acts.no && (
           <button className="stamp-btn big no" onClick={acts.no}>
             {acts.noWord}
           </button>
         )}
-        {tray && layout.marks === 'corner' && !offerUp && acts.ok && (
+        {tray && layout.marks === 'corner' && acts.ok && (
           <button className="stamp-btn go big ok" disabled={!acts.okLive} onClick={acts.ok}>
             {acts.okWord}
           </button>
@@ -429,7 +470,7 @@ export function Game({ view }: { view: View }) {
           </button>
         )}
         {/* (on a phone, while the tray's buttons are down here, they take the turn button's place) */}
-        {main && !(tray && layout.marks === 'corner' && !offerUp && (acts.ok || acts.no)) && (
+        {main && !(tray && layout.marks === 'corner' && (acts.ok || acts.no)) && (
           <button className="stamp-btn go big" disabled={!!myOffer} onClick={() => act({ type: 'endTurn' })}>
             End turn
           </button>
@@ -462,34 +503,35 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   const mine = view.current === view.you
   const who = <Who view={view} p={view.current} you={false} />
   let todo: React.ReactNode = mine ? 'Your turn' : <>{who}'s turn</>
-  if (mine && ph.kind === 'setup') todo = ph.step === 'settlement' ? 'Place a settlement' : 'Place a road'
-  if (ph.kind === 'discard') todo = owe ? `Discard ${owe}` : 'Waiting for discards'
-  if (mine && ph.kind === 'robber') todo = 'Move the robber'
-  if (mine && ph.kind === 'steal') todo = 'Steal a card'
+  if (mine && ph.kind === 'setup') todo = ph.step === 'settlement' ? 'Place settlement' : 'Place road'
+  if (ph.kind === 'discard') todo = owe ? `Discard ${owe}` : 'Discarding…'
+  if (mine && ph.kind === 'robber') todo = 'Move robber'
+  if (mine && ph.kind === 'steal') todo = 'Pick player to rob'
   if (mine && ph.kind === 'roadBuilding') todo = `Place ${ph.left} road${ph.left > 1 ? 's' : ''}`
-  if (mine && plenty) todo = `Take ${2 - plenty.length} from the bank`
-  if (mine && monopoly) todo = 'Name a card from the bank'
+  if (mine && plenty) todo = `Pick ${2 - plenty.length} from bank`
+  if (mine && monopoly) todo = 'Pick resource'
   // the expansion
-  if (mine && building === 'knight') todo = 'Place a knight, or click one of yours to make it stronger'
-  if (mine && building === 'wall') todo = 'Pick a city to wall'
-  if (mine && selected !== null) todo = 'Move your knight, push a weaker one away, or chase the robber'
+  if (mine && building === 'knight') todo = 'Place or upgrade knight'
+  if (mine && building === 'wall') todo = 'Pick city'
+  if (mine && selected !== null) todo = 'Move knight'
+  if (view.offer && ph.kind === 'main' && (mine || view.offer.to === undefined || view.offer.to === view.you)) todo = 'Trade pending'
   let cancel = false
   if (mine && ph.kind === 'pick') {
     todo = (
       <>
-        <b>{PROGRESS[ph.card].name}</b>: {PICK_WORDS[ph.need].toLowerCase()}
+        <b>{PROGRESS[ph.card].name}</b> · {PICK_WORDS[ph.need]}
       </>
     )
     cancel = ph.step === 0
   }
-  if (ph.kind === 'progressDiscard') todo = progressOwed ? `Put back ${progressOwed} progress card${progressOwed > 1 ? 's' : ''} (four at most)` : 'Waiting for progress cards to be put back'
-  if (ph.kind === 'over') todo = <>{<Who view={view} p={ph.winner} />} won!</>
-  if (armed) todo = 'Tap it again to confirm'
-  // an offer to you: what you'd get and what you'd give, said plainly (the answer is on the tray's panel)
+  if (ph.kind === 'progressDiscard') todo = progressOwed ? `Discard ${progressOwed} progress` : 'Discarding…'
+  if (ph.kind === 'over') todo = <>{<Who view={view} p={ph.winner} />} wins</>
+  if (armed) todo = 'Tap again'
+  // an offer to you: what you'd get, for what
   if (toMe)
     todo = (
       <>
-        <Who view={view} p={toMe.from} you={false} /> offers <Bundle of={toMe.give} /> <span className="for">for your</span> <Bundle of={toMe.get} />
+        <Who view={view} p={toMe.from} you={false} /> <Bundle of={toMe.give} /> <span className="for">for</span> <Bundle of={toMe.get} />
       </>
     )
   const last = [...view.events].reverse().find((e) => e.k !== 'turn' && e.k !== 'answer')
@@ -527,7 +569,6 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
         {n}
       </span>
     ) : null
-  const o = view.offer
   const pl = me >= 0 ? view.players[me] : null
   return (
     <div className="labels">
@@ -547,8 +588,6 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
       {layout.seats.map(({ p, at: spot }) => {
         const op = view.players[p]
         const parts = seatParts(spot, layout)
-        // during your open offer: who has said yes (click their cards to trade) and who said no
-        const answer = o && o.from === me && o.to === undefined ? (o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait') : null
         return (
           <span key={`s${p}`}>
             {count(`oh${p}`, parts.hand, op.handCount, parts.small ? CARD.small : 1)}
@@ -564,8 +603,6 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
                   ))}
                 </span>
               )}
-              {answer === 'yes' && <i className="mark ok">✓</i>}
-              {answer === 'no' && <i className="mark no">✕</i>}
             </span>
           </span>
         )
@@ -593,7 +630,7 @@ function trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop }: { view: Vie
       no: () => act({ type: 'declineOffer' }),
       noWord: 'Decline',
     }
-  if (myOffer) return { ok: null, okLive: false, okWord: '', no: () => act({ type: 'cancelOffer' }), noWord: 'Take back' }
+  if (myOffer) return { ok: null, okLive: false, okWord: '', no: () => act({ type: 'cancelOffer' }), noWord: 'Cancel' }
   if (owe) return { ok: () => act({ type: 'discard', cards: drop }), okLive: handSize(drop) === owe, okWord: `Discard ${owe}`, no: null, noWord: '' }
   if (deal)
     // the check puts it to everyone; to offer one player, click their cards
@@ -608,76 +645,35 @@ function trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop }: { view: Vie
 }
 
 /**
- * An open offer, on the tray: one row for each player it's put to, saying plainly whether they've accepted, declined
- * or are still deciding. The one who offered trades with a click on an accepted row; the ones it's put to answer on
- * their own row. Everyone involved sees everyone else's answers as they come in.
+ * An open offer: a row of chips over the tray, one per player it's put to, each with ✓, ✕ or … . The one who
+ * offered taps a ✓ chip to trade.
  */
-function OfferPanel({ view, layout, acts }: { view: View; layout: ReturnType<typeof layoutFor>; acts: TrayActs }) {
+function OfferStrip({ view, layout }: { view: View; layout: ReturnType<typeof layoutFor> }) {
   const project = useProjector()
   const o = view.offer
   if (!o) return null
   const me = view.you
   const mineOffer = o.from === me
-  const asked = view.players.map((_, i) => i).filter((i) => i !== o.from && (o.to === undefined || i === o.to))
-  const state = (p: number) => (o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait')
-  const nobody = asked.every((p) => state(p) === 'no')
-  // just above the tray, as wide as it (at least wide enough for a name and two buttons), kept on the screen
-  const [x0, top] = project(layout.tray[0] - TRAY.w / 2, 0, layout.tray[1] - TRAY.d / 2)
-  const [x1] = project(layout.tray[0] + TRAY.w / 2, 0, layout.tray[1] - TRAY.d / 2)
-  const width = Math.min(window.innerWidth - 16, Math.max(x1 - x0 + 24, 280))
-  const left = Math.max(8, Math.min(window.innerWidth - 8 - width, (x0 + x1) / 2 - width / 2))
-  const from = view.players[o.from]
-  // (your own answer, while you haven't given it, is the two buttons along the bottom)
-  const rows = asked.filter((p) => p !== me || state(p) !== 'wait')
+  const asked = view.players.map((_, i) => i).filter((i) => i !== o.from && i !== me && (o.to === undefined || i === o.to))
+  if (!asked.length) return null
+  const [x, top] = project(layout.tray[0], 0, layout.tray[1] - TRAY.d / 2)
   return (
-    <div className="offer-panel" style={{ left, top, width, ['--n' as string]: Math.max(1, rows.length) }}>
-      <div className="op-head">
-        {mineOffer ? (
-          o.to === undefined ? (
-            'Your offer to everyone'
-          ) : (
-            <>
-              Your offer to <Who view={view} p={o.to} you={false} />
-            </>
-          )
-        ) : (
-          <>
-            <Who view={view} p={o.from} you={false} /> offers {o.to === undefined ? 'everyone' : 'you'}
-          </>
-        )}
-      </div>
-      {rows.map((p) => {
-        const st = state(p)
+    <div className="offer-strip" style={{ left: x, top }}>
+      {asked.map((p) => {
+        const st = o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait'
         const pl = view.players[p]
-        return (
-          <div key={p} className={`op-row ${st}`} style={{ ['--pc' as string]: PLAYER[pl.color].ui }}>
-            <span className="op-name">{p === me ? 'You' : pl.name}</span>
-            {mineOffer && st === 'yes' ? (
-              <button className="op-btn trade" onClick={() => act({ type: 'confirmTrade', with: p })}>
-                Trade
-              </button>
-            ) : (
-              <span className={`op-state ${st}`}>{st === 'yes' ? '✓ Accepted' : st === 'no' ? '✕ Declined' : <>Deciding<i className="dots" /></>}</span>
-            )}
-          </div>
+        const style = { ['--pc' as string]: PLAYER[pl.color].ui }
+        const mark = st === 'yes' ? '✓' : st === 'no' ? '✕' : <i className="dots" />
+        return mineOffer && st === 'yes' ? (
+          <button key={p} className="pchip yes go" style={style} onClick={() => act({ type: 'confirmTrade', with: p })} title={`Trade with ${pl.name}`}>
+            {pl.name} <b>⇄</b>
+          </button>
+        ) : (
+          <span key={p} className={`pchip ${st}`} style={style}>
+            {pl.name} <b>{mark}</b>
+          </span>
         )
       })}
-      {asked.includes(me) && state(me) === 'wait' && (
-        <div className="op-ans">
-          <button className="op-btn no" onClick={acts.no ?? undefined}>
-            Decline
-          </button>
-          <button className="op-btn ok" disabled={!acts.okLive} onClick={acts.ok ?? undefined}>
-            {acts.okLive ? 'Accept' : "You don't have it"}
-          </button>
-        </div>
-      )}
-      {!mineOffer && o.accepted.includes(me) && <div className="op-foot">Waiting for {from.name} to pick</div>}
-      {mineOffer && (
-        <button className={`op-btn back ${nobody ? 'loud' : ''}`} onClick={acts.no ?? undefined}>
-          {nobody ? 'Nobody wants it: take it back' : 'Take back'}
-        </button>
-      )}
     </div>
   )
 }
@@ -704,6 +700,37 @@ function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; act
   )
 }
 
+// ---------------------------------------------------------------- a card held up close
+
+function CardZoom({ look, caption, action, why, onClose }: { look: string; caption: string | null; action: { word: string; go: () => void } | null; why: string; onClose: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    if (ref.current) paintFace(look, ref.current, 2 * Math.min(2, window.devicePixelRatio || 1))
+  }, [look])
+  // (only a press that starts on the backdrop closes it: the tap that opened it ends here too, on a phone)
+  const pressed = useRef(false)
+  return (
+    <div className="zoom-back" onPointerDown={(e) => (pressed.current = e.target === e.currentTarget)} onClick={(e) => pressed.current && e.target === e.currentTarget && onClose()}>
+      <div className="zoom">
+        <canvas ref={ref} className="zoom-card" />
+        {caption && <div className="zoom-cap">{caption}</div>}
+        <div className="zoom-row">
+          {action ? (
+            <button className="zoom-btn go" onClick={action.go}>
+              {action.word}
+            </button>
+          ) : (
+            why && <span className="zoom-why">{why}</span>
+          )}
+          <button className="zoom-btn" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- the roll, big, for a moment
 
 const PIP_AT: Record<number, [number, number][]> = {
@@ -723,7 +750,7 @@ function DieFace({ v, kind }: { v: number; kind: 'plain' | 'red' | 'yellow' }) {
     </span>
   )
 }
-const FACE_WORD: Record<string, string> = { ship: 'The barbarians sail on', trade: 'Trade cards', politics: 'Politics cards', science: 'Science cards' }
+
 
 /** once the dice have landed: what was rolled, big in the middle, for a moment (the dice in their tray are small) */
 function RollFlash({ view, layout }: { view: View; layout: ReturnType<typeof layoutFor> }) {
@@ -751,11 +778,11 @@ function RollFlash({ view, layout }: { view: View; layout: ReturnType<typeof lay
     total === 7
       ? 'Robber!'
       : face && face !== 'ship'
-        ? `${FACE_WORD[face]} for level ${Math.max(1, a - 1)} and up`
+        ? `${TRACK_NAME[face]} ${Math.max(1, a - 1)}+`
         : face === 'ship'
           ? view.x?.barbarian
-            ? `${FACE_WORD.ship}: ${Math.min(view.x.barbarian, BARBARIAN_STEPS)} of ${BARBARIAN_STEPS}`
-            : 'The barbarians land!'
+            ? `Ship ${Math.min(view.x.barbarian, BARBARIAN_STEPS)}/${BARBARIAN_STEPS}`
+            : 'Barbarians attack!'
           : null
   const [fx, fy] = project(layout.flash[0], 10, layout.flash[1])
   return (
@@ -784,7 +811,7 @@ function GameOver({ view }: { view: View }) {
   return (
     <div className="dialog-back">
       <div className="paper dialog">
-        <div className="dialog-head">{ph.winner === view.you ? 'You win!' : `${view.players[ph.winner].name} wins!`}</div>
+        <div className="dialog-head">{ph.winner === view.you ? 'You win' : `${view.players[ph.winner].name} wins`}</div>
         <div className="scores">
           {order.map(({ p, i }) => (
             <div key={p.id} className="score">
@@ -795,7 +822,7 @@ function GameOver({ view }: { view: View }) {
         </div>
         <div className="dialog-foot">
           <button className="stamp-btn go" onClick={() => room.leave()}>
-            Back to the start
+            Menu
           </button>
         </div>
       </div>

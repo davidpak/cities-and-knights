@@ -39,8 +39,8 @@ the next step costs. Click a chart to take its next step, and the page goes over
 top, through seven numbered hexes, to an island with a town. Their longship sails one hex on at each ship on the
 event die, and the hexes it has crossed go dark, so how close they are reads at a glance. A signpost on a rock beside
 the last hex shows their strength against the knights standing ready. Click a
-knight on the board to ready it, click a ready one to pick it up and then where it goes. Click a progress card to play
-it; if it needs a target, the line at the top says what to click.
+knight on the board to ready it, click a ready one to pick it up and then where it goes. Click a progress card to see
+it close up, with Play when it can be played; if it needs a target, the line at the top says what to click.
 
 Every move is a plain click or button press: the board only shows spots where a move is legal, and the server
 decides every result. The board is 3D, tipped a little toward you; two real dice are thrown into a tray beside it.
@@ -51,17 +51,19 @@ runs low), with its development deck (or the three progress piles), next to the 
 in their tray. Everyone else's cards lie face down at their places. To do something, you do it to the thing:
 
 - **Build:** click a piece in your supply (the ones you can afford stand on a little mat), then click a white spot.
-- **Buy a development card:** click the deck. **Play one:** click it.
+- **Buy a development card:** click the deck. **Play one:** click it to see it close up, then Play.
 - **Trade:** click cards in your hand to put them on the trade tray, and the cards behind the tray for what you want.
   To trade with the bank, click the bank's card you want. To trade with a player, click their cards. The green
   check puts it to everyone; the red cross puts it back. An offer to you shows on your own tray: check or cross.
+  While an offer is open, small chips over the tray show each player's answer (✓, ✕ or …); the one who offered
+  taps a green chip to trade.
 - **Roll:** click the dice. **Rob:** click a tile, then the cards of the player to steal from.
 
 **A roll is easy to follow.** Once the dice land, the roll shows big beside them for a moment (both dice, the total,
 and in the expansion what the event die means), the tiles with that number light up (the one under the robber is
 ringed red: it gives nothing), and the cards they give come up out of those tiles and fly to whoever gets them.
 
-**An offer to you is said plainly** in the top line ("Ana offers 1 brick for your 1 wool") with Accept and Decline.
+**Words are kept short**: a few words or an icon, never sentences (an offer to you reads "Ana 1 brick for 1 wool").
 
 On screen there's only whose turn it is, what just happened, the turn button, the tray's check and cross, counts on
 the stacks, everyone's name and points, and a History panel you can open.

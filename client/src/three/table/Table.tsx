@@ -202,7 +202,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   const cards = pl?.cards ?? []
   CARDS.filter((c) => cards.some((x) => x.card === c)).forEach((c, i) => {
     const id = `dev:${c}`
-    card({ id, family: 'dev', look: `dev:${c}`, n: cards.filter((x) => x.card === c).length, home: cardHome(id, layout.dev(i, held), { loose: 0.3 }), lift: can.dev[c] ? 3 : 0, enabled: !!can.dev[c], onClick: () => on.dev(c) })
+    card({ id, family: 'dev', look: `dev:${c}`, n: cards.filter((x) => x.card === c).length, home: cardHome(id, layout.dev(i, held), { loose: 0.3 }), lift: can.dev[c] ? 3 : 0, enabled: true, onClick: () => on.dev(c) })
   })
   // the expansion: your progress cards where development cards would be, by kind (ready to play: a little proud)
   if (x && K && pl?.progress) {
@@ -210,7 +210,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     PROGRESS_CARDS.filter((c) => mineP.some((h) => h.card === c)).forEach((c, i) => {
       const id = `prog:${c}`
       const deck = K.decks[PROGRESS[c].track]
-      card({ id, family: 'prog', look: `prog:${c}`, n: mineP.filter((h) => h.card === c).length, home: cardHome(id, layout.dev(i, held), { loose: 0.3 }), from: deck, to: deck, lift: can.progress[c] ? 3 : 0, enabled: !!can.progress[c], onClick: () => on.progress(c) })
+      card({ id, family: 'prog', look: `prog:${c}`, n: mineP.filter((h) => h.card === c).length, home: cardHome(id, layout.dev(i, held), { loose: 0.3 }), from: deck, to: deck, lift: can.progress[c] ? 3 : 0, enabled: true, onClick: () => on.progress(c) })
     })
   }
   // the bank: a stack of each kind, and its deck (or in the expansion the three progress piles), face down

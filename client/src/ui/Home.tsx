@@ -33,7 +33,7 @@ export function Home() {
               </button>
             </span>
           </div>
-          <small>{knights ? 'Cities make commodities and grow; knights hold off the barbarians; first to 13.' : 'Build, trade and race to 10.'}</small>
+          <small>{knights ? 'Knights, barbarians, city upgrades · 13 points' : 'Classic · 10 points'}</small>
         </section>
 
         <section className="menu-row">
@@ -87,7 +87,7 @@ export function Home() {
             </button>
           </div>
           {!connected && !serverDown && <small>Connecting…</small>}
-          {!connected && serverDown && <small>The server can't be reached. Solo still works.</small>}
+          {!connected && serverDown && <small>Server offline · solo only</small>}
         </section>
       </div>
       {msg && <div className="toast">{msg}</div>}

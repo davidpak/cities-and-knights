@@ -4,13 +4,14 @@
  * Two ways to play behind one interface: online (the server owns the game) and solo (the same rules engine runs
  * here in the browser against bots, no server needed). The UI never knows which.
  */
-import { useSyncExternalStore } from 'react'
+import { useSyncExternalStore, type ReactNode } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { botAction } from '../../shared/bot.ts'
 import { apply, newGame, viewFor, type Action, type GameState, type View } from '../../shared/engine.ts'
 import type { Ack, ClientToServer, RoomInfo, ServerToClient } from '../../shared/protocol.ts'
+import type { Progress } from '../../shared/rules.ts'
 
-type Store = { room: RoomInfo | null; view: View | null; connected: boolean; serverDown: boolean; solo: boolean; toast: string | null }
+type Store = { room: RoomInfo | null; view: View | null; connected: boolean; serverDown: boolean; solo: boolean; toast: ReactNode }
 let store: Store = { room: null, view: null, connected: false, serverDown: false, solo: false, toast: null }
 const subs = new Set<() => void>()
 const set = (p: Partial<Store>) => {
@@ -61,7 +62,7 @@ export function connect() {
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
-export function toast(msg: string) {
+export function toast(msg: ReactNode) {
   set({ toast: msg })
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => set({ toast: null }), 3200)
@@ -92,7 +93,7 @@ export const room = {
 export async function act(a: Action): Promise<boolean> {
   if (store.solo) return soloAct(0, a)
   const r = await call('game:action', a)
-  if (!r.ok) toast(r.error)
+  if (!r.ok) toast(r.error.replace(/\.$/, ''))
   return r.ok
 }
 
@@ -139,13 +140,30 @@ if (typeof window !== 'undefined' && /[?&]test/.test(location.search))
     solo = g
     soloPublish()
   }
+// (and some progress cards, by name, out of their decks)
+if (typeof window !== 'undefined' && /[?&]test/.test(location.search))
+  (window as unknown as { __grantProgress: (cards: string[]) => void }).__grantProgress = (cards) => {
+    if (!solo?.x) return
+    const you = solo.players.findIndex((p) => p.id === 'you')
+    const g = structuredClone(solo)
+    for (const c of cards)
+      for (const d of Object.values(g.x!.decks)) {
+        const i = d.indexOf(c as (typeof d)[number])
+        if (i < 0) continue
+        d.splice(i, 1)
+        g.players[you].progress.push({ card: c as Progress, turn: -1 })
+        break
+      }
+    solo = g
+    soloPublish()
+  }
 
 function soloAct(p: number, a: Action, bot = false): boolean {
   if (!solo) return false
   const who = bot ? p : solo.players.findIndex((x) => x.id === 'you')
   const r = apply(solo, who, a)
   if (!r.ok) {
-    if (!bot) toast(r.error)
+    if (!bot) toast(r.error.replace(/\.$/, ''))
     return false
   }
   solo = r.state

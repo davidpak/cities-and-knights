@@ -187,6 +187,17 @@ function award(c: CanvasRenderingContext2D, what: 'road' | 'army') {
 /** a little house, the mark on the resource cards' backs */
 const HOUSE = 'M12 3l8 7v11H4V10z'
 
+/** one card's face, painted into a canvas of its own at `scale` (for looking at a card close up) */
+export function paintFace(look: string, cv: HTMLCanvasElement, scale: number) {
+  cv.width = Math.round(W * scale)
+  cv.height = Math.round(H * scale)
+  const c = cv.getContext('2d')!
+  c.scale(scale, scale)
+  if (look.startsWith('prog:')) progress(c, look.slice(5) as Progress)
+  else if (look.startsWith('dev:')) dev(c, look.slice(4) as Card)
+}
+export const FACE = { w: W, h: H }
+
 let atlas: CanvasTexture | null = null
 export function cardAtlas() {
   if (atlas) return atlas

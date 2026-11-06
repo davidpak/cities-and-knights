@@ -20,8 +20,8 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
         <Title small />
         <div className="room-code">
           <span>Room</span> <b>{info.code}</b>
-          <button className="link" onClick={() => navigator.clipboard?.writeText(link).then(() => toast('Invite link copied'))}>
-            Copy invite link
+          <button className="link" onClick={() => navigator.clipboard?.writeText(link).then(() => toast('Link copied'))}>
+            Copy link
           </button>
         </div>
         <div className="menu-acts">
@@ -35,7 +35,7 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
               </button>
             </span>
           ) : (
-            <small>{info.knights ? 'Knights and barbarians, to 13 points' : 'The basic game, to 10 points'}</small>
+            <small>{info.knights ? 'Knights & barbarians · 13 points' : 'Classic · 10 points'}</small>
           )}
         </div>
         <ul className="seats">
@@ -82,7 +82,7 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
         <div className="menu-acts">
           {!host && (
             <button className={seat?.ready ? '' : 'go'} onClick={() => room.ready()}>
-              {seat?.ready ? 'Not ready' : "I'm ready"}
+              {seat?.ready ? "Not ready" : "Ready"}
             </button>
           )}
           {host && info.seats.length < MAX_SEATS && <button onClick={() => room.addBot()}>Add a bot</button>}
@@ -102,8 +102,8 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
             Leave
           </button>
         </div>
-        {host && info.seats.length < 2 && <small>Share the code, or add a bot to play.</small>}
-        {host && info.seats.length >= 2 && !allReady && <small>Waiting for everyone to be ready…</small>}
+        {host && info.seats.length < 2 && <small>Share the code or add a bot</small>}
+        {host && info.seats.length >= 2 && !allReady && <small>Waiting for players…</small>}
       </div>
       {msg && <div className="toast">{msg}</div>}
     </div>

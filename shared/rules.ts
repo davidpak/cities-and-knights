@@ -75,11 +75,11 @@ export const CARD_NAME: Record<Card, string> = {
   victoryPoint: 'Victory Point',
 }
 export const CARD_TEXT: Record<Card, string> = {
-  knight: 'Move the robber and take a card from someone next to it.',
-  roadBuilding: 'Build two roads for free.',
-  yearOfPlenty: 'Take any two resources from the bank.',
-  monopoly: 'Name a resource. Everyone gives you all of theirs.',
-  victoryPoint: 'Worth one point. Kept hidden until you win.',
+  knight: 'Move the robber. Steal 1 card from a player beside it.',
+  roadBuilding: 'Build 2 roads, free.',
+  yearOfPlenty: 'Take any 2 resources from the bank.',
+  monopoly: 'Name a resource. Every player gives you all of it.',
+  victoryPoint: '+1 point.',
 }
 
 export const PLAYER_COLORS = ['red', 'blue', 'orange', 'white'] as const
@@ -143,33 +143,33 @@ export type EventFace = (typeof EVENT_FACES)[number]
 /** progress cards: our own set, each doing one plain thing */
 export const PROGRESS = {
   // trade
-  trader: { track: 'trade', count: 6, name: 'Trader', text: 'Put the trader on a tile next to you: trade its resource 2 for 1, and hold a point while it is yours.' },
-  charter: { track: 'trade', count: 2, name: 'Charter', text: 'This turn, trade one kind of card you choose with the bank 2 for 1.' },
-  corner: { track: 'trade', count: 4, name: 'Corner the Market', text: 'Name a resource. Everyone else gives you two of it, or what they have.' },
-  guild: { track: 'trade', count: 2, name: 'Guild Order', text: 'Name a commodity. Everyone else gives you one, if they have it.' },
-  bargain: { track: 'trade', count: 2, name: 'Hard Bargain', text: 'Take two cards at random from someone with more points than you.' },
-  caravan: { track: 'trade', count: 2, name: 'Caravan', text: 'Everyone else with a commodity gives you one at random.' },
+  trader: { track: 'trade', count: 6, name: 'Trader', text: 'Place the trader by your town. Its resource trades 2:1. +1 point while yours.' },
+  charter: { track: 'trade', count: 2, name: 'Charter', text: 'This turn, one card type trades 2:1 with the bank.' },
+  corner: { track: 'trade', count: 4, name: 'Corner the Market', text: 'Name a resource. Each player gives you 2 of it.' },
+  guild: { track: 'trade', count: 2, name: 'Guild Order', text: 'Name a commodity. Each player gives you 1.' },
+  bargain: { track: 'trade', count: 2, name: 'Hard Bargain', text: 'Take 2 random cards from a player with more points.' },
+  caravan: { track: 'trade', count: 2, name: 'Caravan', text: 'Each player gives you 1 random commodity.' },
   // politics
-  sheriff: { track: 'politics', count: 2, name: 'Sheriff', text: 'Move the robber, and take a card at random from everyone next to it.' },
-  townCharter: { track: 'politics', count: 1, name: 'Town Charter', text: 'One point. Laid down at once.' },
-  turncoat: { track: 'politics', count: 2, name: 'Turncoat', text: "An opponent's knight leaves the board; one of yours as strong takes a spot of yours, free." },
-  envoy: { track: 'politics', count: 2, name: 'Envoy', text: 'Take up an open-ended road (nothing at one end). Yours comes back to you.' },
-  ruse: { track: 'politics', count: 2, name: 'Ruse', text: "Push an opponent's knight on your roads off its spot." },
-  unrest: { track: 'politics', count: 2, name: 'Unrest', text: 'Everyone with as many points as you or more throws away half their cards.' },
-  spy: { track: 'politics', count: 3, name: 'Spy', text: 'Take a progress card at random from someone.' },
-  rally: { track: 'politics', count: 2, name: 'Rally', text: 'All your knights stand ready, free.' },
-  feast: { track: 'politics', count: 2, name: 'Feast', text: 'Everyone with more points than you gives you two cards at random.' },
+  sheriff: { track: 'politics', count: 2, name: 'Sheriff', text: 'Move the robber. Take 1 random card from each player beside it.' },
+  townCharter: { track: 'politics', count: 1, name: 'Town Charter', text: '+1 point.' },
+  turncoat: { track: 'politics', count: 2, name: 'Turncoat', text: "Remove an opponent's knight. Place one of yours, same strength, free." },
+  envoy: { track: 'politics', count: 2, name: 'Envoy', text: 'Remove an open-ended road. Its owner gets it back.' },
+  ruse: { track: 'politics', count: 2, name: 'Ruse', text: "Displace an opponent's knight on your roads." },
+  unrest: { track: 'politics', count: 2, name: 'Unrest', text: 'Players with at least your points discard half their cards.' },
+  spy: { track: 'politics', count: 3, name: 'Spy', text: 'Take a random progress card from a player.' },
+  rally: { track: 'politics', count: 2, name: 'Rally', text: 'Activate all your knights, free.' },
+  feast: { track: 'politics', count: 2, name: 'Feast', text: 'Each player with more points gives you 2 random cards.' },
   // science
-  augury: { track: 'science', count: 2, name: 'Augury', text: 'Before you roll: choose the number rolled.' },
-  scaffold: { track: 'science', count: 2, name: 'Scaffold', text: 'This turn, your next city improvement costs one commodity less.' },
+  augury: { track: 'science', count: 2, name: 'Augury', text: 'Before rolling: choose the roll.' },
+  scaffold: { track: 'science', count: 2, name: 'Scaffold', text: 'This turn, your next city improvement costs 1 commodity less.' },
   mason: { track: 'science', count: 1, name: 'Mason', text: 'Build a city wall, free.' },
-  surveyor: { track: 'science', count: 2, name: 'Surveyor', text: 'Swap two number tokens (not 2, 12, 6 or 8).' },
-  irrigation: { track: 'science', count: 2, name: 'Irrigation', text: 'Take two grain for each fields tile next to your buildings.' },
-  mining: { track: 'science', count: 2, name: 'Mining', text: 'Take two ore for each mountains tile next to your buildings.' },
-  physician: { track: 'science', count: 2, name: 'Physician', text: 'Raise a settlement to a city for 2 ore and 1 grain.' },
-  press: { track: 'science', count: 1, name: 'Printing Press', text: 'One point. Laid down at once.' },
-  roadCrew: { track: 'science', count: 2, name: 'Road Crew', text: 'Build two roads, free.' },
-  smith: { track: 'science', count: 2, name: 'Smith', text: 'Raise two of your knights one strength each, free.' },
+  surveyor: { track: 'science', count: 2, name: 'Surveyor', text: 'Swap two number tokens (not 2, 6, 8 or 12).' },
+  irrigation: { track: 'science', count: 2, name: 'Irrigation', text: '+2 grain for each fields tile by your towns.' },
+  mining: { track: 'science', count: 2, name: 'Mining', text: '+2 ore for each mountains tile by your towns.' },
+  physician: { track: 'science', count: 2, name: 'Physician', text: 'Upgrade a settlement to a city for 2 ore, 1 grain.' },
+  press: { track: 'science', count: 1, name: 'Printing Press', text: '+1 point.' },
+  roadCrew: { track: 'science', count: 2, name: 'Road Crew', text: 'Build 2 roads, free.' },
+  smith: { track: 'science', count: 2, name: 'Smith', text: 'Upgrade 2 knights, free.' },
 } as const satisfies Record<string, { track: Track; count: number; name: string; text: string }>
 export type Progress = keyof typeof PROGRESS
 export const PROGRESS_CARDS = Object.keys(PROGRESS) as Progress[]

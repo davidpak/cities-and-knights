@@ -3,7 +3,7 @@
  * and turned once (the playbook's rule); turned things are lathed. Nothing is a plane laid over another surface.
  */
 import {
-  BoxGeometry, BufferGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, Vector2, Vector3,
+  BoxGeometry, BufferGeometry, CircleGeometry, ExtrudeGeometry, LatheGeometry, Path, RingGeometry, Shape, Vector2, Vector3,
 } from 'three'
 import { roundedPolygon, roundedRect } from '../lib/shapes.ts'
 import { CITY, DICE, HARBOR, KNIGHT, ROAD, ROBBER, SEA, SETTLEMENT, TILE, TOKEN, TOWER, TRADER, WALL } from './spec.ts'
@@ -221,7 +221,7 @@ export const sailGeo = memo(() => upright([[0, 0], [10, 0], [0, 15]], 1, 0.35))
 /** a knight's turned profile (radius, height) for its strength: a foot, a body, a helmeted head */
 export const KNIGHT_PROFILE = (level: 1 | 2 | 3): Pt[] => {
   const h = KNIGHT.h[level]
-  const r = KNIGHT.r
+  const r = KNIGHT.r * KNIGHT.rs[level]
   return [
     [0, 0], [r, 0], [r, 1.6], [r * 0.72, 2.6], [r * 0.5, h * 0.42], [r * 0.62, h * 0.56], [r * 0.7, h * 0.7],
     [r * 0.68, h * 0.84], [r * 0.5, h * 0.95], [0, h],
@@ -231,7 +231,7 @@ const knightGeo = (level: 1 | 2 | 3) => {
   const h = KNIGHT.h[level]
   const parts: BufferGeometry[] = [new LatheGeometry(KNIGHT_PROFILE(level).map(([x, y]) => new Vector2(x, y)), 18)]
   // a crest over the helmet for the stronger ones, a plume on top for the strongest
-  if (level >= 2) parts.push(new BoxGeometry(1.6, 3.4, KNIGHT.r * 1.2).translate(0, h - 0.4, 0))
+  if (level >= 2) parts.push(new BoxGeometry(1.8, 4, KNIGHT.r * KNIGHT.rs[level] * 1.3).translate(0, h - 0.2, 0))
   if (level >= 3) parts.push(new LatheGeometry([new Vector2(0, 0), new Vector2(1.6, 0.4), new Vector2(0.8, 4), new Vector2(0, 5)], 8).translate(0, h + 1, 0))
   const clean = parts.map((g) => {
     const n = g.index ? g.toNonIndexed() : g
@@ -246,6 +246,16 @@ const knightGeo = (level: 1 | 2 | 3) => {
 export const knight1Geo = memo(() => knightGeo(1))
 export const knight2Geo = memo(() => knightGeo(2))
 export const knight3Geo = memo(() => knightGeo(3))
+/** a flat ring under a knight that stands ready */
+export const haloGeo = memo(() => {
+  const g = new RingGeometry(KNIGHT.r * 1.05, KNIGHT.r * 1.6, 28).rotateX(-Math.PI / 2)
+  const n = g.toNonIndexed()
+  const out = new BufferGeometry()
+  out.setAttribute('position', n.attributes.position)
+  out.setAttribute('normal', n.attributes.normal)
+  out.setAttribute('uv', n.attributes.uv)
+  return out
+})
 
 /** a low stone ring round a city */
 export const wallGeo = memo(() => rim(WALL.w, WALL.d, WALL.rim, WALL.h, 2))

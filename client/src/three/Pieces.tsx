@@ -8,7 +8,7 @@ import { Color, Matrix4, MeshBasicMaterial, Quaternion, RingGeometry, Vector3, t
 import { TOPO } from '../../../shared/board.ts'
 import type { PlayerColor } from '../../../shared/rules.ts'
 import { PAL, PLAYER } from '../lib/palette.ts'
-import { cityGeo, knight1Geo, knight2Geo, knight3Geo, roadGeo, robberGeo, settlementGeo, towerGeo, traderGeo, wallGeo } from './geometry.ts'
+import { cityGeo, haloGeo, knight1Geo, knight2Geo, knight3Geo, roadGeo, robberGeo, settlementGeo, towerGeo, traderGeo, wallGeo } from './geometry.ts'
 import { KNIGHT, TILE, TOKEN, edgeAt, hexAt, vertexAt } from './spec.ts'
 import { wood } from './wood.ts'
 
@@ -144,10 +144,10 @@ export function Pulse({ x, z, color, size = 16, onDone }: { x: number; z: number
 
 // ---------------------------------------------------------------- every piece on the board, one draw per kind
 
-const KIND_GEO = { road: roadGeo, settlement: settlementGeo, city: cityGeo, knight1: knight1Geo, knight2: knight2Geo, knight3: knight3Geo, wall: wallGeo, tower: towerGeo, trader: traderGeo } as const
+const KIND_GEO = { road: roadGeo, settlement: settlementGeo, city: cityGeo, knight1: knight1Geo, knight2: knight2Geo, knight3: knight3Geo, wall: wallGeo, tower: towerGeo, trader: traderGeo, halo: haloGeo } as const
 type Kind = keyof typeof KIND_GEO
 const KIND_LIST = Object.keys(KIND_GEO) as Kind[]
-const KIND_CAP: Record<Kind, number> = { road: 64, settlement: 24, city: 24, knight1: 12, knight2: 12, knight3: 12, wall: 12, tower: 3, trader: 1 }
+const KIND_CAP: Record<Kind, number> = { road: 64, settlement: 24, city: 24, knight1: 12, knight2: 12, knight3: 12, wall: 12, tower: 3, trader: 1, halo: 36 }
 type Placed = { key: string; kind: Kind; x: number; y?: number; z: number; yaw: number; color: PlayerColor; mine: boolean; lying?: boolean }
 /** the expansion's pieces on the board */
 export type BoardExtras = { knights: Record<number, { owner: number; level: 1 | 2 | 3; active: boolean }>; walls: Record<number, number>; metropolis: Record<string, number | null>; merchant: { hex: number; owner: number } | null }
@@ -162,6 +162,10 @@ const tmpTip = new Quaternion()
 const stone = new Color('#a9a39a')
 const pieceColors = new Map<string, Color>()
 const pieceColor = (c: PlayerColor) => pieceColors.get(c) ?? pieceColors.set(c, new Color(PLAYER[c].body)).get(c)!
+/** a resting knight: its colour, greyed */
+const restColors = new Map<string, Color>()
+const restColor = (c: PlayerColor) => restColors.get(c) ?? restColors.set(c, new Color(PLAYER[c].body).lerp(new Color('#8a8580'), 0.6)).get(c)!
+const gold = new Color('#f2c14e')
 
 /**
  * All the board's pieces, each kind one instanced draw however many are built (a late game has ninety-odd pieces:
@@ -189,6 +193,8 @@ export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0, ex
       for (const [v, k] of Object.entries(extras.knights)) {
         const [x, z] = vertexAt(Number(v))
         out.push({ key: `k${v}:${k.level}`, kind: `knight${k.level}`, x, z, yaw: 0.4, color: colors[k.owner], mine: k.owner === you, lying: !k.active })
+        // a ready knight stands on a gold ring
+        if (k.active) out.push({ key: `h${v}`, kind: 'halo', x, y: TILE.h + 0.3, z, yaw: 0, color: colors[k.owner], mine: k.owner === you })
       }
       for (const [v, o] of Object.entries(extras.walls)) {
         const [x, z] = vertexAt(Number(v))
@@ -247,7 +253,7 @@ export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0, ex
       }
       const i = n[p.kind]++
       m.setMatrixAt(i, tmpMat.compose(tmpPos, tmpRot, shown ? ONE : ZERO))
-      m.setColorAt(i, p.kind === 'wall' ? stone : pieceColor(p.color))
+      m.setColorAt(i, p.kind === 'wall' ? stone : p.kind === 'halo' ? gold : p.lying ? restColor(p.color) : pieceColor(p.color))
     }
     for (const kind of KIND_LIST) {
       const m = refs.current[kind]

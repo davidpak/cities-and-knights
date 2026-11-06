@@ -1258,3 +1258,157 @@ input {
   font-weight: 700;
   touch-action: manipulation;
 }
+
+/* a city track up close */
+.track-zoom {
+  width: min(360px, calc(100vw - 24px));
+  background: var(--paper);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  animation: zoom-in 0.18s ease-out;
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+  justify-items: center;
+}
+.tz-head {
+  justify-self: stretch;
+  background: var(--tc);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+  padding: 10px 16px;
+}
+.tz-levels {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px;
+  display: grid;
+  gap: 4px;
+  justify-self: stretch;
+}
+.tz-levels li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.tz-levels li.done {
+  color: var(--ink);
+  background: rgba(47, 158, 87, 0.12);
+}
+.tz-levels li.next {
+  color: var(--ink);
+  outline: 2px solid var(--tc);
+}
+.tz-n {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--tc);
+  color: #fff;
+  flex: none;
+}
+.tz-name {
+  flex: 1;
+  display: grid;
+}
+.tz-name small {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.tz-note {
+  padding: 0 14px;
+  font-size: 13px;
+  color: var(--ink-2);
+  text-align: center;
+}
+.tz-gate {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--tc);
+  vertical-align: middle;
+}
+
+/* the menu's tabs, the reference card and the rules */
+.drawer-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 8px 0;
+}
+.drawer-tabs button {
+  flex: 1;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 0;
+  background: transparent;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.drawer-tabs button.on {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.ref {
+  overflow-y: auto;
+  padding: 6px 14px 10px;
+  flex: 1;
+}
+.ref h4 {
+  margin: 12px 0 4px;
+  font-size: 14px;
+}
+.ref p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.ref-costs {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ref-costs td {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(42, 29, 19, 0.1);
+  font-weight: 600;
+}
+.ref-costs td:last-child {
+  text-align: right;
+}
+.ref-costs td.small {
+  font-weight: 500;
+  font-size: 13px;
+  max-width: 180px;
+}
+
+.turn-banner.warn {
+  border-bottom-color: #d2452f;
+  color: #b8432f;
+}
+.discard-count {
+  padding: 5px 14px;
+  border-radius: 8px;
+  background: #d2452f;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 800;
+  pointer-events: none;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.discard-count.done {
+  background: #2f9e57;
+  animation: none;
+}
+@keyframes pulse {
+  50% { transform: scale(1.06); }
+}

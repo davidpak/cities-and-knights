@@ -43,6 +43,14 @@ export function botAction(s: S, p: number, rnd: () => number): Action | null {
     return { type: 'discard', cards }
   }
 
+  // the barbarians won and we pick which city to lose: a walled one (only its wall goes), else the poorest
+  if (ph.kind === 'pillage') {
+    const mine = ph.owed[p]
+    if (!mine) return null
+    const walled = mine.find((v) => s.x?.walls[v] !== undefined)
+    return { type: 'pillage', vertex: walled ?? best(mine, (v) => -pips(s, v)) }
+  }
+
   if (ph.kind === 'progressDiscard') {
     if (!ph.owed[p]) return null
     const mine = s.players[p].progress ?? []
@@ -98,10 +106,10 @@ function pick<T>(xs: T[], rnd: () => number): T {
   return xs[Math.floor(rnd() * xs.length)]
 }
 
-function mainMove(s: S, p: number, hand: Hand, rnd: () => number): Action {
+function mainMove(s: S, p: number, hand: Hand, rnd: () => number): Action | null {
   const me = s.players[p]
-  const mineOpen = s.offers.find((x) => x.from === p)
-  if (mineOpen) return mineOpen.accepted.length ? { type: 'confirmTrade', id: mineOpen.id, with: mineOpen.accepted[0] } : { type: 'cancelOffer', id: mineOpen.id }
+  const waiting = ownOffer(s, p)
+  if (waiting !== undefined) return waiting
   if (!s.cardPlayed) {
     if (canPlay(s, p, 'monopoly')) {
       return { type: 'playMonopoly', resource: pick([...RESOURCES], rnd) }
@@ -128,9 +136,40 @@ function mainMove(s: S, p: number, hand: Hand, rnd: () => number): Action {
 }
 
 /** trade with the bank toward the next thing to build, or end the turn */
+/**
+ * Our own open offer: trade with the first who said yes; once everyone asked has said no, take it back; while
+ * someone is still deciding, wait (null). Undefined: we have none.
+ */
+function ownOffer(s: S, p: number): Action | null | undefined {
+  const o = s.offers.find((x) => x.from === p)
+  if (!o) return undefined
+  if (o.accepted.length) return { type: 'confirmTrade', id: o.id, with: o.accepted[0] }
+  const asked = s.players.map((_, i) => i).filter((i) => i !== p && (o.to === undefined || i === o.to))
+  if (asked.every((i) => o.declined.includes(i))) return { type: 'cancelOffer', id: o.id }
+  return null
+}
+
+/** have we put a trade to the table this turn? (once a turn is enough) */
+function offeredThisTurn(s: S, p: number) {
+  for (let i = s.events.length - 1; i >= 0; i--) {
+    const e = s.events[i]
+    if (e.k === 'turn') return false
+    if (e.k === 'offer' && e.p === p) return true
+  }
+  return false
+}
+
 function tradeToward(s: S, p: number, hand: Hand, goal: Partial<Hand>, rnd: () => number): Action {
   const ratios = tradeRatios(s, p)
   const kinds: readonly Good[] = s.mode === 'knights' ? GOODS : RESOURCES
+  // first, once a turn, ask the table: one card we can spare for one we need
+  const short = kinds.filter((r) => hand[r] < (goal[r] ?? 0))
+  const extra = kinds.filter((r) => hand[r] - (goal[r] ?? 0) >= 1)
+  if (short.length && extra.length && !offeredThisTurn(s, p)) {
+    const give = { ...emptyHand(), [pick(extra, rnd)]: 1 }
+    const get = { ...emptyHand(), [pick(short, rnd)]: 1 }
+    return { type: 'offerTrade', give, get }
+  }
   const need = kinds.filter((r) => hand[r] < (goal[r] ?? 0) && s.bank[r] > 0)
   const spare = kinds.filter((r) => hand[r] - (goal[r] ?? 0) >= ratios[r])
   if (need.length && spare.length) return { type: 'bankTrade', give: pick(spare, rnd), get: pick(need, rnd) }
@@ -142,11 +181,11 @@ function tradeToward(s: S, p: number, hand: Hand, goal: Partial<Hand>, rnd: () =
 /** progress cards worth playing as soon as they can be (Augury is only for before a roll, and is skipped) */
 const PLAY_NOW: Progress[] = ['trader', 'charter', 'corner', 'guild', 'bargain', 'caravan', 'sheriff', 'turncoat', 'envoy', 'ruse', 'unrest', 'spy', 'rally', 'feast', 'scaffold', 'mason', 'surveyor', 'irrigation', 'mining', 'physician', 'roadCrew', 'smith']
 
-function knightsMove(s: S, p: number, hand: Hand, rnd: () => number): Action {
+function knightsMove(s: S, p: number, hand: Hand, rnd: () => number): Action | null {
   const me = s.players[p]
   const x = s.x!
-  const mineOpen = s.offers.find((x) => x.from === p)
-  if (mineOpen) return mineOpen.accepted.length ? { type: 'confirmTrade', id: mineOpen.id, with: mineOpen.accepted[0] } : { type: 'cancelOffer', id: mineOpen.id }
+  const waiting = ownOffer(s, p)
+  if (waiting !== undefined) return waiting
 
   // the barbarians: keep enough knights ready to pull our weight
   const near = x.barbarian >= BARBARIAN_STEPS - 3

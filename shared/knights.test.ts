@@ -266,3 +266,30 @@ test('the base game is untouched: no commodities, no knights', () => {
   for (const c of COMMODITIES) assert.equal(s.bank[c], 0)
   assert.equal(handSize(s.bank), BANK_EACH * 5)
 })
+
+test('the barbarians win: a player with more than one city picks which to lose', () => {
+  const s: GameState = newGame(seats(2), 77, { knights: true })
+  const [a, b, c] = [0, 9, 18].map((h) => TOPO.hexes[h].vertices[0])
+  s.buildings = { [a]: { owner: 0, kind: 'city' }, [b]: { owner: 0, kind: 'city' }, [c]: { owner: 1, kind: 'city' } }
+  s.x!.knights = {}
+  s.x!.barbarian = 6
+  s.current = 0
+  s.phase = { kind: 'roll' }
+  // roll until the ship lands (a ship face on the event die)
+  let t = s
+  for (let k = 0; k < 50 && t.phase.kind !== 'pillage'; k++) {
+    const r = apply({ ...structuredClone(s), rng: s.rng + k }, 0, { type: 'roll' })
+    if (r.ok) t = r.state
+  }
+  assert.equal(t.phase.kind, 'pillage')
+  if (t.phase.kind !== 'pillage') return
+  assert.deepEqual([...t.phase.owed[0]].sort(), [a, b].sort(), 'two cities: player 0 picks')
+  assert.equal(t.phase.owed[1], undefined, 'one city: player 1 loses it at once')
+  assert.equal(t.buildings[c].kind, 'settlement')
+  assert.ok(!apply(t, 0, { type: 'pillage', vertex: c }).ok, 'not someone else\'s city')
+  const r = apply(t, 0, { type: 'pillage', vertex: b })
+  assert.ok(r.ok)
+  assert.equal(r.state.buildings[b].kind, 'settlement')
+  assert.equal(r.state.buildings[a].kind, 'city')
+  assert.notEqual(r.state.phase.kind, 'pillage')
+})

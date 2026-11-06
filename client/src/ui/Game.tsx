@@ -8,7 +8,7 @@ import {
   affordable, canAct, canPlay, chaseSpots, citySpots, improveCost, knightMoves, knightSpots, pickTargets, promoteSpots,
   roadSpots, robberSpots, settlementSpots, tradeRatios, wallSpots, type PickNeed, type View,
 } from '../../../shared/engine.ts'
-import { BARBARIAN_STEPS, CARD_TEXT, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
+import { BARBARIAN_STEPS, CARD_TEXT, TRACK_GOOD, TRACK_LEVELS, TRACK_PERK, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
 import { PLAYER, TRACK_COLOR } from '../lib/palette.ts'
 import { act, playerId, room, useStore } from '../net.ts'
 import { GLOW_AT, type PickKind, type Picking } from '../three/Board.tsx'
@@ -19,6 +19,7 @@ import { faceURL, paintFace } from '../three/table/faces.ts'
 import { publishState } from '../three/TestHook.tsx'
 import { Bundle } from './Cards.tsx'
 import { Announcer, Chronicle, describe, Who } from './Chronicle.tsx'
+import { Costs, Rules } from './Reference.tsx'
 
 type Build = 'road' | 'settlement' | 'city' | 'knight' | 'wall'
 type Deal = { give: Hand; get: Hand; to: 'bank' | number | null; any?: number }
@@ -76,8 +77,11 @@ export function Game({ view }: { view: View }) {
   const [plenty, setPlenty] = useState<Resource[] | null>(null)
   const [monopoly, setMonopoly] = useState(false)
   const [history, setHistory] = useState(false)
+  const [tab, setTab] = useState<'History' | 'Costs' | 'Rules'>('History')
   // a card of yours, held up close (tap one in your hand)
   const [zoom, setZoom] = useState<{ kind: 'dev'; card: Card } | { kind: 'prog'; card: Progress } | null>(null)
+  // one of your city tracks, up close: what each level gives, and Improve
+  const [trackZoom, setTrackZoom] = useState<Track | null>(null)
   /** a finger has shown a piece on the board: tap it again to place it */
   const [armed, setArmed] = useState(false)
   /** the expansion: one of your ready knights, picked up to move (or to chase the robber) */
@@ -123,6 +127,8 @@ export function Game({ view }: { view: View }) {
   const targets = pickPhase ? pickTargets(view, me) : []
   const myKnights = view.x ? Object.entries(view.x.knights).filter(([, k]) => k.owner === me).map(([v]) => Number(v)) : []
   const picking: Picking = useMemo(() => {
+    // the barbarians won: pick which of your cities they take (on anyone's turn)
+    if (ph.kind === 'pillage' && ph.owed[me]) return { kind: 'vertex', spots: ph.owed[me] }
     if (!mine) return null
     if (ph.kind === 'setup') return ph.step === 'settlement' ? { kind: 'settlement', spots: settlementSpots(view, me) } : { kind: 'road', spots: roadSpots(view, me) }
     if (ph.kind === 'roadBuilding') return { kind: 'road', spots: roadSpots(view, me) }
@@ -158,6 +164,7 @@ export function Game({ view }: { view: View }) {
   }, [mine, main, ph, building, view, me, selected, deal])
 
   const onPick = async (kind: PickKind, id: number) => {
+    if (ph.kind === 'pillage') return void act({ type: 'pillage', vertex: id })
     if (pickPhase) {
       const target = pickPhase.need === 'number' ? view.tiles[id].number! : id
       await act({ type: 'pick', target })
@@ -327,11 +334,7 @@ export function Game({ view }: { view: View }) {
       if (!can.wall) return
       setBuilding('wall')
     },
-    improve: (t: Track) => {
-      if (!main) return
-      if (!canImprove[t]) return
-      act({ type: 'improve', track: t })
-    },
+    improve: (t: Track) => setTrackZoom(t),
     supply: (w: Build) => {
       if (building === w) return setBuilding(null)
       if (w === 'knight' || w === 'wall') return
@@ -382,6 +385,7 @@ export function Game({ view }: { view: View }) {
         // put back whatever is in hand; with nothing in hand, the menu
         const busy = zoomRef.current || buildingRef.current || dealRef.current || plentyRef.current || monopolyRef.current || selectedRef.current !== null || (ph.kind === 'pick' && ph.step === 0 && mine)
         setZoom(null)
+        setTrackZoom(null)
         setBuilding(null)
         setDeal(null)
         setPlenty(null)
@@ -460,11 +464,21 @@ export function Game({ view }: { view: View }) {
 
       <RollFlash view={view} layout={layout} />
       <Announcer view={view} />
+      {trackZoom && view.x && (
+        <TrackZoom
+          track={trackZoom}
+          level={view.x.levels[me][trackZoom]}
+          onClose={() => setTrackZoom(null)}
+          onImprove={canImprove[trackZoom] ? () => (act({ type: 'improve', track: trackZoom }), setTrackZoom(null)) : null}
+        />
+      )}
       {robbing !== null && ph.kind === 'steal' && (
         <StealFan n={ph.fans?.[robbing]?.length ?? view.players[robbing].handCount} onPick={(i) => act({ type: 'steal', victim: robbing, index: i })} onClose={ph.victims.length > 1 ? () => setRobFrom(null) : undefined} />
       )}
       {myFan && myFan.length > 0 && <MyFan order={myFan} />}
       <TurnBanner view={view} />
+      <Flash text={owe ? `Discard ${owe}` : progressOwed ? `Discard ${progressOwed} progress` : null} />
+      {owe > 0 && <DiscardCount layout={layout} picked={handSize(drop)} owe={owe} />}
 
       {zoom && (() => {
         const held = zoom.kind === 'dev' ? devs.some((c) => c.card === zoom.card) : myProgress.some((c) => c.card === zoom.card)
@@ -512,7 +526,14 @@ export function Game({ view }: { view: View }) {
       </button>
       {history && (
         <aside className="drawer paper">
-          <Chronicle view={view} />
+          <div className="drawer-tabs">
+            {(['History', 'Costs', 'Rules'] as const).map((t) => (
+              <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
+                {t}
+              </button>
+            ))}
+          </div>
+          {tab === 'History' ? <Chronicle view={view} /> : tab === 'Costs' ? <Costs view={view} /> : <Rules view={view} />}
           <div className="drawer-foot">
             {host && (
               <button className="link" onClick={() => confirm('End game?') && room.end()}>
@@ -563,6 +584,7 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   }
   if (ph.kind === 'progressDiscard') todo = progressOwed ? `Discard ${progressOwed} progress` : 'Discarding…'
   if (ph.kind === 'over') todo = <>{<Who view={view} p={ph.winner} />} wins</>
+  if (ph.kind === 'pillage') todo = ph.owed[view.you] ? 'Pick city to lose' : 'Barbarians win'
   if (armed) todo = 'Tap again'
   // an offer to you: what you'd get, for what
   if (toMe)
@@ -729,7 +751,7 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
               if (st === 'yes')
                 return (
                   <button key={p} className="pchip yes go" style={pc(p)} onClick={() => act({ type: 'confirmTrade', id: o.id, with: p })}>
-                    {view.players[p].name} <b>⇄</b>
+                    {view.players[p].name} {o.any > 0 && o.picks[p] && <Bundle of={o.picks[p]} empty="" />} <b>⇄</b>
                   </button>
                 )
               return chip(p, st === 'no' ? '✕' : <i className="dots" />, st)
@@ -798,6 +820,76 @@ function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; act
           ✕
         </button>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- something you must do now, big, for a moment
+
+function Flash({ text }: { text: string | null }) {
+  const [shown, setShown] = useState<string | null>(null)
+  const was = useRef<string | null>(null)
+  useEffect(() => {
+    if (text && !was.current) setShown(text)
+    was.current = text
+  }, [text])
+  useEffect(() => {
+    if (!shown) return
+    const t = setTimeout(() => setShown(null), 1300)
+    return () => clearTimeout(t)
+  }, [shown])
+  if (!shown) return null
+  return <div className="turn-banner warn">{shown}</div>
+}
+
+/** discarding: how many picked of how many owed, over the tray */
+function DiscardCount({ layout, picked, owe }: { layout: ReturnType<typeof layoutFor>; picked: number; owe: number }) {
+  const project = useProjector()
+  const [x, top] = project(layout.tray[0], 0, layout.tray[1] - TRAY.d / 2)
+  return (
+    <div className="offers" style={{ left: x, top }}>
+      <div className={`discard-count ${picked === owe ? 'done' : ''}`}>
+        Discard <b>{picked}</b>/<b>{owe}</b>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- a city track up close
+
+function TrackZoom({ track, level, onClose, onImprove }: { track: Track; level: number; onClose: () => void; onImprove: (() => void) | null }) {
+  const good = TRACK_GOOD[track]
+  return (
+    <div className="zoom-back" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="track-zoom" style={{ ['--tc' as string]: TRACK_COLOR[track] }}>
+        <div className="tz-head">{TRACK_NAME[track]}</div>
+        <ol className="tz-levels">
+          {TRACK_LEVELS[track].map((name, i) => (
+            <li key={i} className={i < level ? 'done' : i === level ? 'next' : ''}>
+              <b className="tz-n">{i + 1}</b>
+              <span className="tz-name">
+                {name}
+                {i === 2 && <small>{TRACK_PERK[track]}</small>}
+                {i === 3 && <small>First here: metropolis, +2</small>}
+              </span>
+              <Bundle of={{ [good]: i + 1 }} />
+            </li>
+          ))}
+        </ol>
+        <div className="tz-note">
+          <span className="tz-gate" /> on the event die: a card if the red die ≤ level + 1
+        </div>
+        <div className="zoom-row">
+          {onImprove && (
+            <button className="zoom-btn go" onClick={onImprove}>
+              Improve
+            </button>
+          )}
+          <button className="zoom-btn" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

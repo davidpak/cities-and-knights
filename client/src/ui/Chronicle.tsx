@@ -239,6 +239,12 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
           {!e.what || e.what === 'progress' ? (e.what === 'progress' ? '' : ' card' + (e.count === 1 ? '' : 's')) : ''} from {W(e.from)}
         </>
       )
+    case 'pillage':
+      return (
+        <>
+          {W(e.p)} −{e.wall ? 'wall' : 'city'}
+        </>
+      )
     case 'swap':
       return <>{W(e.p)} swapped two number tokens</>
     case 'unroad':
@@ -295,7 +301,7 @@ export function Chronicle({ view }: { view: View }) {
 }
 
 /** which moments flash up: what others do that changes the table (rolls have their own flash) */
-const HEADLINE = new Set<GameEvent['k']>(['trade', 'steal', 'seven', 'monopoly', 'award', 'bank', 'build', 'play', 'plenty', 'progress', 'metropolis', 'attack', 'robber', 'take', 'unroad', 'swap', 'wall', 'knight', 'improve'])
+const HEADLINE = new Set<GameEvent['k']>(['trade', 'steal', 'seven', 'monopoly', 'award', 'bank', 'build', 'play', 'plenty', 'progress', 'metropolis', 'attack', 'robber', 'take', 'unroad', 'swap', 'wall', 'knight', 'improve', 'pillage'])
 const actor = (e: GameEvent): number | null => ('p' in e && typeof e.p === 'number' ? e.p : e.k === 'trade' ? e.from : e.k === 'steal' ? e.thief : null)
 
 /** what others just did, one short flash at a time over the board (your own moves you saw yourself) */

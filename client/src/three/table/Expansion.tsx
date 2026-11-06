@@ -643,7 +643,7 @@ function FlipCharts({ view, layout, can, onImprove, mineShown }: { view: View; l
     return {
     onPointerMove: (e: ThreeEvent<PointerEvent>) => {
       const c = chartOf(e)
-      if (!c || !can[c.track]) return
+      if (!c) return
       e.stopPropagation()
       document.body.style.cursor = 'pointer'
     },

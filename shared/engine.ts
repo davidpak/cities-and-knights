@@ -53,6 +53,8 @@ export type Expansion = {
   levels: Record<Track, number>[]
   /** the barbarians' ship: steps taken toward the island (it lands at BARBARIAN_STEPS) */
   barbarian: number
+  /** (while a roll is worked out: who still picks a city to lose, and from which) */
+  pillage?: Record<number, number[]>
   /** how many times they've landed (the robber stays in the desert until the first time) */
   attacks: number
   /** points won defending the island */
@@ -85,6 +87,8 @@ export type Phase =
   | { kind: 'pick'; card: Progress; need: PickNeed; step: number; data: number[]; then: 'roll' | 'main' }
   /** someone holds more than four progress cards: they put back the extra, then play goes on */
   | { kind: 'progressDiscard'; owed: Record<number, number>; then: Phase }
+  /** the barbarians won: each player who loses a city and has more than one to lose picks which (their cities here) */
+  | { kind: 'pillage'; owed: Record<number, number[]>; then: Phase }
   | { kind: 'over'; winner: number }
 
 /**
@@ -117,6 +121,8 @@ export type GameEvent = { n: number } & (
   | { k: 'discard'; p: number; count: number }
   | { k: 'robber'; p: number; hex: number }
   | { k: 'steal'; thief: number; victim: number; r?: Good }
+  /** a city picked to lose to the barbarians (or its wall) */
+  | { k: 'pillage'; p: number; at: number; wall: boolean }
   | { k: 'barbarians'; at: number }
   | { k: 'attack'; strength: number; defense: number[]; won: boolean; defender: number | null; tied: number[]; pillaged: { p: number; at: number; wall: boolean }[] }
   | { k: 'draw'; p: number; track: Track; card?: Progress }
@@ -177,6 +183,7 @@ export type Action =
   | { type: 'moveRobber'; hex: number }
   | { type: 'steal'; victim: number; index?: number }
   | { type: 'arrange'; order: Good[] }
+  | { type: 'pillage'; vertex: number }
   | { type: 'buyCard' }
   | { type: 'playKnight' }
   | { type: 'playRoadBuilding' }
@@ -500,13 +507,13 @@ export function tilesBy(s: Readable, p: number): number[] {
   return [...out].sort((a, b) => a - b)
 }
 
-/** roads with an open end (nothing there: no building, none of the owner's other roads) */
+/** roads with an open end (nothing there: no building, no knight, none of the owner's other roads) */
 export function openRoads(s: Readable): number[] {
   return Object.entries(s.roads)
     .map(([e, o]) => ({ e: Number(e), o }))
     .filter(({ e, o }) => {
       const ed = TOPO.edges[e]
-      return [ed.a, ed.b].some((v) => s.buildings[v]?.owner !== o && !TOPO.vertices[v].edges.some((x) => x !== e && s.roads[x] === o))
+      return [ed.a, ed.b].some((v) => s.buildings[v]?.owner !== o && s.x?.knights[v]?.owner !== o && !TOPO.vertices[v].edges.some((x) => x !== e && s.roads[x] === o))
     })
     .map(({ e }) => e)
 }
@@ -781,21 +788,9 @@ function barbariansLand(s: GameState) {
       const min = Math.min(...eligible.map((i) => defense[i]))
       for (const i of eligible.filter((i) => defense[i] === min)) {
         const mine = cities(i)
-        const walled = mine.find((v) => x.walls[v] !== undefined)
-        if (walled !== undefined) {
-          delete x.walls[walled]
-          s.players[i].pieces.wall++
-          pillaged.push({ p: i, at: walled, wall: true })
-        } else {
-          const v = mine.sort((a, b) => pipsOf(s, a) - pipsOf(s, b))[0]
-          const pl = s.players[i]
-          pl.pieces.city++
-          if (pl.pieces.settlement > 0) {
-            s.buildings[v] = { owner: i, kind: 'settlement' }
-            pl.pieces.settlement--
-          } else delete s.buildings[v]
-          pillaged.push({ p: i, at: v, wall: false })
-        }
+        // with a choice of cities, they pick (the 'pillage' phase); with one, it's that one
+        if (mine.length > 1) x.pillage = { ...(x.pillage ?? {}), [i]: mine }
+        else pillaged.push(pillage(s, i, mine[0]))
       }
       log(s, 'The barbarians win: cities are pillaged.')
     }
@@ -805,6 +800,31 @@ function barbariansLand(s: GameState) {
   x.attacks++
   ev(s, { k: 'attack', strength, defense, won, defender, tied, pillaged })
   if (pillaged.length) updateLongestRoad(s)
+}
+
+/** p's city at v is pillaged: a wall round it falls instead; else it goes back to a settlement */
+function pillage(s: GameState, p: number, v: number) {
+  const x = s.x!
+  if (x.walls[v] !== undefined) {
+    delete x.walls[v]
+    s.players[p].pieces.wall++
+    return { p, at: v, wall: true }
+  }
+  const pl = s.players[p]
+  pl.pieces.city++
+  if (pl.pieces.settlement > 0) {
+    s.buildings[v] = { owner: p, kind: 'settlement' }
+    pl.pieces.settlement--
+  } else delete s.buildings[v]
+  return { p, at: v, wall: false }
+}
+
+/** after a roll: if someone has a city to pick for the barbarians, that comes first */
+function holdForPillage(s: GameState) {
+  const x = s.x
+  if (!x?.pillage || !Object.keys(x.pillage).length) return
+  s.phase = { kind: 'pillage', owed: x.pillage, then: s.phase }
+  delete x.pillage
 }
 
 /** reaching level 4 of a track first raises a metropolis on one of your cities; reaching 5 first takes it from
@@ -988,6 +1008,16 @@ function step(s: GameState, p: number, a: Action): string | void {
     if (Object.keys(ph.owed).length === 0) s.phase = ph.then === 'main' ? { kind: 'main' } : { kind: 'robber', then: 'main' }
     return
   }
+  if (a.type === 'pillage') {
+    if (ph.kind !== 'pillage' || !ph.owed[p]) return 'Nothing to pick.'
+    if (!ph.owed[p].includes(a.vertex)) return 'Pick one of your cities.'
+    const lost = pillage(s, p, a.vertex)
+    delete ph.owed[p]
+    ev(s, { k: 'pillage', ...lost })
+    updateLongestRoad(s)
+    if (!Object.keys(ph.owed).length) s.phase = ph.then
+    return
+  }
   if (a.type === 'arrange') {
     if (ph.kind !== 'steal' || !ph.victims.includes(p)) return 'Nothing to arrange.'
     if (!Array.isArray(a.order) || !sameCards(a.order, me.hand)) return 'Those are not your cards.'
@@ -1136,6 +1166,7 @@ function step(s: GameState, p: number, a: Action): string | void {
     case 'roll': {
       if (ph.kind !== 'roll') return 'You have already rolled.'
       rollDice(s, p)
+      holdForPillage(s)
       return
     }
     case 'moveRobber': {
@@ -1577,6 +1608,7 @@ function expansionStep(s: GameState, p: number, a: ExpansionAction): string | vo
         case 'augury':
           s.phase = { kind: 'roll' }
           rollDice(s, p, t as number)
+          holdForPillage(s)
           return
         case 'mason':
           x.walls[t as number] = p

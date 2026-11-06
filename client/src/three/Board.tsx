@@ -97,6 +97,23 @@ function Island({ tiles, harbors }: { tiles: Tile[]; harbors: Harbor[] }) {
 /** (for 'vertex', an id below zero is a tile's centre: -1 - tile) */
 const spotAt = (kind: PickKind, id: number): [number, number] =>
   kind === 'road' || kind === 'edge' ? edgeAt(id) : kind === 'robber' || kind === 'hex' ? hexAt(id) : id < 0 ? hexAt(-1 - id) : vertexAt(id)
+/**
+ * How far a point is from a spot. A road counts along its length (all but its last fifth at each end, where it
+ * meets the next road), not just at its middle: a click anywhere on it picks it.
+ */
+function distTo(kind: PickKind, id: number, px: number, pz: number) {
+  if (kind === 'road' || kind === 'edge') {
+    const e = TOPO.edges[id]
+    const [ax, az] = vertexAt(e.a)
+    const [bx, bz] = vertexAt(e.b)
+    const dx = bx - ax
+    const dz = bz - az
+    const t = Math.min(0.8, Math.max(0.2, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz)))
+    return Math.hypot(px - (ax + t * dx), pz - (az + t * dz))
+  }
+  const [x, z] = spotAt(kind, id)
+  return Math.hypot(px - x, pz - z)
+}
 /** how close (mm) the pointer must be to a spot to pick it */
 const REACH: Record<PickKind, number> = { settlement: 26, city: 26, road: 24, robber: 52, vertex: 24, edge: 22, hex: 52, quiet: 20 }
 
@@ -149,8 +166,7 @@ function Picker({ picking, color, onPick, onArm }: { picking: NonNullable<Pickin
     // (an orthographic camera's zoom is pixels per millimetre)
     let bestD = Math.max(REACH[kind], (touch.current ? 26 : 12) / Math.max(0.05, camera.zoom))
     for (const id of spots) {
-      const [x, z] = spotAt(kind, id)
-      const d = Math.hypot(e.point.x - x, e.point.z - z)
+      const d = distTo(kind, id, e.point.x, e.point.z)
       if (d < bestD) {
         best = id
         bestD = d

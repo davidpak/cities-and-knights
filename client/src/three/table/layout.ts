@@ -102,6 +102,8 @@ export type Layout = SeatStyle & {
   dev: (i: number, held?: number) => Spot
   supply: { road: Spot; settlement: Spot; city: Spot }
   awardsMine: Spot
+  /** the basic game: the knights you've played, face up beside your awards (Largest Army in the making) */
+  armyMine?: Spot
   meLabel: Spot
   tray: Spot
   /** the tray's check and cross: beside it, on this side, or (on a phone) big, down in the corner by the turn button */
@@ -176,6 +178,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       dev: (i) => [84 + i * 74, 392],
       supply: { road: [-590, 190], settlement: [-515, 190], city: [-428, 190] },
       awardsMine: [-560, 318],
+      armyMine: [-470, 318],
       meLabel: [-144, 322],
       tray: [-520, 0],
       marks: 'right',
@@ -206,6 +209,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
         seatThree: true,
         supply: { road: [-672, 170], settlement: [-603, 170], city: [-524, 170] },
         awardsMine: [525, row],
+        armyMine: undefined,
         tray: [540, 120],
         marks: 'left',
         wants: (i) => [540 + ((i % 4) - 1.5) * 42, i < 4 ? -45 : 13],
@@ -237,6 +241,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       dev: (i) => [40 + i * 70, 724],
       supply: { road: [-330, 724], settlement: [-255, 724], city: [-170, 724] },
       awardsMine: [-300, 620],
+      armyMine: [-226, 620],
       meLabel: [0, 548],
       tray: [0, 450],
       marks: 'corner',
@@ -288,6 +293,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
         dice: [300, handZ],
         flash: [0, charts],
         awardsMine: [30, progZ],
+        armyMine: undefined,
         bounds: { minX: -362, maxX: 362, minZ: top - 8 - LINES_TALL, maxZ: 790 },
         k: {
           knights: [[-326, pieceZ2], [-278, pieceZ2], [-230, pieceZ2]],
@@ -324,6 +330,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
     ...(L.k ? [] : [c('deck', L.deck)]),
     c('dice', L.dice, DICE_TRAY.w, DICE_TRAY.d),
     c('my awards', L.awardsMine),
+    ...(L.armyMine ? [c('my knights', L.armyMine)] : []),
     ...(L.k
       ? [
           ...L.k.knights.map((s, i) => c(`knights ${i + 1}`, s, SUPPLY.knight.w, SUPPLY.knight.d)),

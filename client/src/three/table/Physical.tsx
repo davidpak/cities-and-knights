@@ -84,6 +84,8 @@ const colorOf = (look: string) => {
 }
 const PLAIN = new Color('#ffffff')
 const DIM = new Color('#6f6a64')
+/** how long a press must last before it picks a thing up (shorter is a click) */
+const HOLD = 350
 /** one sphere round the whole table: pointing tests instances against it, and it never needs working out again */
 const TABLE_SPHERE = new Sphere(new Vector3(), 4000)
 
@@ -199,7 +201,7 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
 
   // ---- pointing: hover, click, carry
   /** (a finger only ever taps: nothing is picked up by touch, and a tap may wobble a little) */
-  const down = useRef<{ thing: Thing; x: number; y: number; held: boolean; touch: boolean; far: boolean } | null>(null)
+  const down = useRef<{ thing: Thing; x: number; y: number; held: boolean; touch: boolean; far: boolean; t: number } | null>(null)
   const ray = useMemo(() => new Raycaster(), [])
   const plane = useMemo(() => new Plane(new Vector3(0, 1, 0), 0), [])
   const hit = useMemo(() => new Vector3(), [])
@@ -224,7 +226,9 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
         if (moved > 28) d.far = true
         return
       }
-      if (!d.held && moved > 6 && grabbable(d.thing)) {
+      // a click is a click (pick it to use it); picking a thing up takes a moment's hold first
+      if (!d.held && moved > 28 && performance.now() - d.t < HOLD) d.far = true
+      if (!d.held && !d.far && moved > 6 && performance.now() - d.t >= HOLD && grabbable(d.thing)) {
         const t = table.grab(d.thing)
         d.held = !!t
         if (t) {
@@ -299,7 +303,7 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
       // (on a phone only things to click take a tap: a stack you can't use lets the tap through to the table)
       if (touch && !spec?.enabled) return
       e.stopPropagation()
-      down.current = { thing: t, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, held: false, touch, far: false }
+      down.current = { thing: t, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, held: false, touch, far: false, t: performance.now() }
     },
   })
 

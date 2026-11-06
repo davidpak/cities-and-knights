@@ -628,6 +628,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
         return (
           <span key={`s${p}`}>
             {count(`oh${p}`, parts.hand, op.handCount, parts.small ? CARD.small : 1)}
+            {!view.x && count(`kn${p}`, parts.knights, op.knights, parts.small ? CARD.small : 1)}
             <span className={`name ${parts.labelStart ? 'start' : ''} ${view.current === p ? 'turn' : ''}`} style={{ ...at(parts.label), ['--pc' as string]: PLAYER[op.color].ui }}>
               {op.name} <b>{op.points}</b>
               {/* the expansion: their three city levels, in the tracks' colours */}
@@ -644,6 +645,7 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
           </span>
         )
       })}
+      {pl && !view.x && layout.armyMine && count('knme', layout.armyMine, pl.knights)}
       {pl && (
         <span className={`name mine ${view.current === me ? 'turn' : ''}`} style={{ ...at(layout.meLabel), ['--pc' as string]: PLAYER[pl.color].ui }}>
           {pl.name} <b>{pl.points}</b>

@@ -240,6 +240,8 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     else card({ id: `odev:${p}`, family: 'dev', look: 'dev:?', n: o.cardCount, small, home: cardHome(`odev:${p}`, parts.dev, { faceDown: true, loose: 2.5 }), hidden: true, from: parts.dev, to: parts.dev })
     card({ id: `kn:${p}`, family: 'dev', look: 'dev:knight', n: o.knights, small, home: cardHome(`kn:${p}`, parts.knights, { loose: 4 }), from: parts.knights, to: parts.knights })
   }
+  // the knights you've played stay face up in front of you
+  if (!x && me >= 0 && layout.armyMine) card({ id: `kn:${me}`, family: 'dev', look: 'dev:knight', n: view.players[me].knights, home: cardHome(`kn:${me}`, layout.armyMine, { loose: 3 }), from: layout.armyMine, to: layout.armyMine })
   // the two award cards, with whoever holds them
   const award = (what: 'road' | 'army', p: number | null) => {
     if (p === null || p < 0) return

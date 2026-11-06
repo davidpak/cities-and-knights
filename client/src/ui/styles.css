@@ -521,23 +521,6 @@ input {
   padding-left: 4px;
   color: var(--paper);
 }
-/* the wildcard: "?" at the tray's corner */
-.any-btn {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  z-index: 4;
-  width: 34px;
-  height: 34px;
-  border: none;
-  border-radius: 50%;
-  background: #b4824f;
-  color: #fff;
-  font: inherit;
-  font-size: 19px;
-  font-weight: 800;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  touch-action: manipulation;
-}
 .pchip {
   display: inline-flex;
   align-items: center;
@@ -1674,4 +1657,16 @@ input {
 }
 @keyframes op-timer {
   to { width: 0; }
+}
+
+/* the wildcard: '?' with the tray's buttons (a card of their choosing) */
+.mark-btn.any,
+.corner .stamp-btn.any {
+  background: #b4824f;
+  color: #fff;
+}
+.corner .stamp-btn.any {
+  padding-left: 0;
+  padding-right: 0;
+  min-width: 52px;
 }

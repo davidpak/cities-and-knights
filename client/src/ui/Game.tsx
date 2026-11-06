@@ -13,7 +13,7 @@ import { PLAYER, TRACK_COLOR } from '../lib/palette.ts'
 import { act, playerId, room, tryAct, useStore } from '../net.ts'
 import { GLOW_AT, type PickKind, type Picking } from '../three/Board.tsx'
 import { useProjector } from '../three/labels.ts'
-import { TableView, packHand, type TrayContents } from '../three/table/Table.tsx'
+import { TRAY_FLOOR, TableView, packHand, trayStacks, type TrayContents } from '../three/table/Table.tsx'
 import { CARD, TRAY, layoutFor, raidToTable, seatParts, type Spot } from '../three/table/layout.ts'
 import { edgeAt, vertexAt } from '../three/spec.ts'
 import { SHIELD } from '../lib/icons.ts'
@@ -378,6 +378,8 @@ export function Game({ view }: { view: View }) {
   }
 
   const acts = trayActs({ view, deal, setDeal, owe, drop })
+  // the wildcard: ask for one more card of their choosing
+  const addAny = () => deal && setDeal({ ...deal, any: (deal.any ?? 0) + 1 })
 
   // your turn, while you're in another tab: the tab says so
   useEffect(() => {
@@ -480,13 +482,12 @@ export function Game({ view }: { view: View }) {
 
       <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} toMe={toMe[toMe.length - 1] ?? null} armed={armed && !!picking} />
 
-      <Labels view={view} layout={layout} hand={shownHand} />
+      <Labels view={view} layout={layout} hand={shownHand} tray={tray} />
       {view.x && <BarbarianOdds view={view} layout={layout} />}
       {beingRobbed && hand && <SnatchCue layout={layout} hand={shownHand ?? hand} r={GOODS.filter((g) => hand[g] > 0)[view.snatch!.id % Math.max(1, GOODS.filter((g) => hand[g] > 0).length)]} />}
 
-      {tray && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} />}
+      {tray && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} onAny={trading && deal ? addAny : undefined} />}
       <Offers view={view} layout={layout} target={typeof deal?.to === 'number' ? deal.to : null} pickFor={pickFor} onPick={setPickFor} />
-      {trading && deal && <AnyButton layout={layout} onAdd={() => setDeal({ ...deal, any: (deal.any ?? 0) + 1 })} />}
 
       <RollFlash view={view} layout={layout} />
       <Announcer view={view} />
@@ -615,6 +616,11 @@ export function Game({ view }: { view: View }) {
 
       <div className="corner">
         {/* on a phone the tray's buttons are here, big, with words */}
+        {tray && layout.marks === 'corner' && trading && deal && (
+          <button className="stamp-btn big any" onClick={addAny} aria-label="Any card">
+            ?
+          </button>
+        )}
         {tray && layout.marks === 'corner' && acts.no && (
           <button className="stamp-btn big no" onClick={acts.no}>
             {acts.noWord}
@@ -729,26 +735,29 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
 
 // ---------------------------------------------------------------- labels on the table
 
-function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof layoutFor>; hand: Hand | null }) {
+function Labels({ view, layout, hand, tray }: { view: View; layout: ReturnType<typeof layoutFor>; hand: Hand | null; tray: TrayContents | null }) {
   const project = useProjector()
   const me = view.you
-  const corner = ([x, z]: Spot, n: number, k = 1) => {
-    const [sx, sy] = project(x + (CARD.w * k) / 2 - 4, n * CARD.t + 2, z - (CARD.d * k) / 2 + 4)
+  // (a stack's top right corner; `base`: what it lies on, e.g. the tray's floor)
+  const corner = ([x, z]: Spot, n: number, k = 1, base = 0) => {
+    const [sx, sy] = project(x + (CARD.w * k) / 2 - 4, base + n * CARD.t + 2, z - (CARD.d * k) / 2 + 4)
     return { left: sx, top: sy }
   }
   const at = ([x, z]: Spot, y = 4) => {
     const [sx, sy] = project(x, y, z)
     return { left: sx, top: sy }
   }
-  const count = (key: string, spot: Spot, n: number, k = 1) =>
+  const count = (key: string, spot: Spot, n: number, k = 1, base = 0) =>
     n > 1 ? (
-      <span key={key} className="count" style={corner(spot, n, k)}>
+      <span key={key} className="count" style={corner(spot, n, k, base)}>
         {n}
       </span>
     ) : null
   const pl = me >= 0 ? view.players[me] : null
   return (
     <div className="labels">
+      {/* the tray's stacks: give, get, the wildcard, a discard */}
+      {tray && trayStacks(layout, tray, view.x ? GOODS : RESOURCES).map((st) => count(`t${st.side}${st.r ?? ''}`, st.at, st.n, CARD.small, TRAY_FLOOR))}
       {hand && (() => {
         const spots = packHand(layout.hand, view.x ? GOODS : RESOURCES, hand, layout.handEnd)
         // and under a stack you trade with the bank for less than 4 (a harbour, the trader, a charter, trade level 3), its rate
@@ -847,17 +856,6 @@ function OfferTimer({ o }: { o: View['offers'][number] }) {
   return <i className="op-timer" key={o.expires} style={{ animationDuration: `${left}ms`, width: `${(left / OFFER_MS) * 100}%` }} />
 }
 
-/** a wildcard: "?" at the tray's corner asks for one more card of their choosing */
-function AnyButton({ layout, onAdd }: { layout: ReturnType<typeof layoutFor>; onAdd: () => void }) {
-  const project = useProjector()
-  // (inside the far right corner, on the half that holds what you ask for)
-  const [x, y] = project(layout.tray[0] + TRAY.w / 2 - 18, 0, layout.tray[1] - TRAY.d / 2 + 18)
-  return (
-    <button className="any-btn" style={{ left: x, top: y }} onClick={onAdd} aria-label="Any card">
-      ?
-    </button>
-  )
-}
 
 /**
  * Open offers, one short row each, over the tray: what goes each way, then who. Yours: a chip per player asked, ✓,
@@ -955,7 +953,7 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
 }
 
 /** the tray's two marks: a green check and a red cross, beside it */
-function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; acts: TrayActs }) {
+function TrayMarks({ layout, acts, onAny }: { layout: ReturnType<typeof layoutFor>; acts: TrayActs; onAny?: () => void }) {
   const project = useProjector()
   const side = layout.marks === 'left' ? -1 : 1
   const [x, y] = project(layout.tray[0] + side * (TRAY.w / 2 + 10), 0, layout.tray[1])
@@ -970,6 +968,11 @@ function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; act
       {no && (
         <button className="mark-btn no" onClick={no} aria-label={acts.noWord}>
           ✕
+        </button>
+      )}
+      {onAny && (
+        <button className="mark-btn any" onClick={onAny} aria-label="Any card">
+          ?
         </button>
       )}
     </div>

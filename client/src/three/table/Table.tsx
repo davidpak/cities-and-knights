@@ -92,7 +92,26 @@ export type TableProps = BoardProps & {
 
 type Spec = PileSpec
 const CT = CARD.t
-const TRAY_FLOOR = 4
+export const TRAY_FLOOR = 4
+
+/**
+ * Where each stack on the tray lies: what you give on the near half (all of it, discarding), what you get on the far
+ * half, the wildcard face down at the far half's right end. The table draws the cards there and the labels put
+ * their counts there, so both come from here.
+ */
+export type TrayStack = { side: 'give' | 'get' | 'any'; r: Good | null; at: Spot; n: number }
+export function trayStacks(layout: Layout, tray: TrayContents, kinds: readonly Good[]): TrayStack[] {
+  const [tx, tz] = layout.tray
+  const out: TrayStack[] = []
+  const row = (h: Partial<Hand>, z: number, side: 'give' | 'get') => {
+    const shown = kinds.filter((r) => (h[r] ?? 0) > 0)
+    shown.forEach((r, i) => out.push({ side, r, at: [tx + (i - (shown.length - 1) / 2) * (CARD.w * CARD.small + 6), z], n: h[r] ?? 0 }))
+  }
+  row(tray.give, tz + (tray.mode === 'trade' ? TRAY.d / 4 : 0), 'give')
+  if (tray.mode === 'trade') row(tray.get, tz - TRAY.d / 4, 'get')
+  if (tray.mode === 'trade' && tray.any) out.push({ side: 'any', r: null, at: [tx + TRAY.w / 2 - 26, tz - TRAY.d / 4], n: tray.any })
+  return out
+}
 
 /** slot i of a card pile: stacked straight up, each card a little askew */
 const cardHome = (id: string, at: Spot, opts: { base?: number; faceDown?: boolean; turn?: number; loose?: number } = {}) => (i: number): Home => {
@@ -275,23 +294,17 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     })
   // the tray: what you give on the near half, what you get on the far half; behind it, one of each kind to ask for
   if (tray) {
-    const [tx, tz] = layout.tray
-    const row = (h: Partial<Hand>, z: number, side: 'give' | 'get') => {
-      const shown = kinds.filter((r) => (h[r] ?? 0) > 0)
-      shown.forEach((r, i) => {
-        const id = `tray:${side}:${r}`
-        const at: Spot = [tx + (i - (shown.length - 1) / 2) * (CARD.w * CARD.small + 6), z]
-        // what you give comes from your hand, what you ask for from the bank
-        const src = side === 'give' ? spots[r] : layout.bank[kinds.indexOf(r)]
-        card({ id, family: 'res', look: `res:${r}`, n: h[r] ?? 0, small: true, home: cardHome(id, at, { base: TRAY_FLOOR, loose: 1.8 }), from: src, to: src, enabled: can.tray && !tray.locked, onClick: () => (side === 'give' ? on.trayGive(r) : on.trayGet(r)) })
-      })
-    }
-    row(tray.give, tz + (tray.mode === 'trade' ? TRAY.d / 4 : 0), 'give')
-    if (tray.mode === 'trade') row(tray.get, tz - TRAY.d / 4, 'get')
-    // the wildcard: face down, at the far half's right end (a tap takes one back)
-    if (tray.mode === 'trade' && tray.any) {
-      const at: Spot = [tx + TRAY.w / 2 - 26, tz - TRAY.d / 4]
-      card({ id: 'tray:any', family: 'res', look: 'res:?', n: tray.any, small: true, home: cardHome('tray:any', at, { base: TRAY_FLOOR, faceDown: true, loose: 1.8 }), from: at, to: at, enabled: can.tray && !tray.locked, onClick: () => on.trayAny?.() })
+    for (const st of trayStacks(layout, tray, kinds)) {
+      const { side, r, at, n } = st
+      // the wildcard: face down (a tap takes one back)
+      if (side === 'any' || !r) {
+        card({ id: 'tray:any', family: 'res', look: 'res:?', n, small: true, home: cardHome('tray:any', at, { base: TRAY_FLOOR, faceDown: true, loose: 1.8 }), from: at, to: at, enabled: can.tray && !tray.locked, onClick: () => on.trayAny?.() })
+        continue
+      }
+      const id = `tray:${side}:${r}`
+      // what you give comes from your hand, what you ask for from the bank
+      const src = side === 'give' ? spots[r] : layout.bank[kinds.indexOf(r)]
+      card({ id, family: 'res', look: `res:${r}`, n, small: true, home: cardHome(id, at, { base: TRAY_FLOOR, loose: 1.8 }), from: src, to: src, enabled: can.tray && !tray.locked, onClick: () => (side === 'give' ? on.trayGive(r) : on.trayGet(r)) })
     }
     if (tray.mode === 'trade' && !tray.locked)
       kinds.forEach((r, i) => {

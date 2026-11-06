@@ -205,7 +205,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   if (hand)
     kinds.forEach((r) => {
       const id = `hand:${r}`
-      card({ id, family: 'res', look: `res:${r}`, n: hand[r], home: cardHome(id, spots[r], { loose: 0.3 }), enabled: can.hand && hand[r] > 0, lift: can.snatched === r ? 9 : 0, onClick: () => on.hand(r), ...fromTile(me, r) })
+      card({ id, family: 'res', look: `res:${r}`, n: hand[r], home: cardHome(id, spots[r], { loose: 0.3 }), enabled: can.hand && hand[r] > 0, lift: can.snatched === r ? 18 : 0, onClick: () => on.hand(r), ...fromTile(me, r) })
     })
   // your development cards, by kind; the ones you can play now stand a little proud
   const cards = pl?.cards ?? []

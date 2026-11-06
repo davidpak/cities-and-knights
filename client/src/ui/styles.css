@@ -1610,3 +1610,17 @@ input {
 .ch-number.red {
   color: #c0392b;
 }
+
+/* a card of yours being sneaked away: a hand reaching for it, wobbling */
+.snatch-cue {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  z-index: 5;
+  pointer-events: none;
+  font-size: 30px;
+  animation: snatch 0.5s ease-in-out infinite alternate;
+}
+@keyframes snatch {
+  from { transform: translate(-60%, -100%) rotate(-12deg); }
+  to { transform: translate(-40%, -110%) rotate(12deg); }
+}

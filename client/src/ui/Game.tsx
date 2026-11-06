@@ -482,6 +482,7 @@ export function Game({ view }: { view: View }) {
 
       <Labels view={view} layout={layout} hand={shownHand} />
       {view.x && <BarbarianOdds view={view} layout={layout} />}
+      {beingRobbed && hand && <SnatchCue layout={layout} hand={shownHand ?? hand} r={GOODS.filter((g) => hand[g] > 0)[view.snatch!.id % Math.max(1, GOODS.filter((g) => hand[g] > 0).length)]} />}
 
       {tray && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} />}
       <Offers view={view} layout={layout} target={typeof deal?.to === 'number' ? deal.to : null} pickFor={pickFor} onPick={setPickFor} />
@@ -962,6 +963,23 @@ function TrayMarks({ layout, acts }: { layout: ReturnType<typeof layoutFor>; act
           ✕
         </button>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- a card of yours being sneaked away
+
+/** a hand reaching for the card that's rising out of your stack: tap your cards to catch it */
+function SnatchCue({ layout, hand, r }: { layout: ReturnType<typeof layoutFor>; hand: Hand; r: Good | undefined }) {
+  const project = useProjector()
+  if (!r) return null
+  const kinds = GOODS.filter((g) => hand[g] > 0 || g === r)
+  const at = packHand(layout.hand, kinds, hand, layout.handEnd)[r]
+  if (!at) return null
+  const [x, y] = project(at[0], 30, at[1] - CARD.d / 2)
+  return (
+    <div className="snatch-cue" style={{ left: x, top: y }} aria-hidden>
+      ✋
     </div>
   )
 }

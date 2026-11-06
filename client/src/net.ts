@@ -120,7 +120,7 @@ export async function act(a: Action): Promise<boolean> {
       setTimeout(() => {
         if (!solo || solo.snatch?.id !== sn.id) return
         soloAct(sn.thief, { type: 'snatchEnd' }, true)
-      }, 2000)
+      }, 4000)
     return ok
   }
   const r = await call('game:action', a)

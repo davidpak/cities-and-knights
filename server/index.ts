@@ -46,7 +46,7 @@ const newCode = () => {
   }
 }
 /** how long a victim has to catch a card being sneaked away */
-const SNATCH_MS = 2000
+const SNATCH_MS = 4000
 const BOT_NAMES = ['Bramble', 'Pip', 'Juniper', 'Moss', 'Clover', 'Wren']
 
 function info(r: Room): RoomInfo {

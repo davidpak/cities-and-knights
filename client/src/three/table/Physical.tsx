@@ -222,13 +222,13 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
       const d = down.current
       if (!d) return
       const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y)
-      if (d.touch) {
-        if (moved > 28) d.far = true
-        return
-      }
-      // a click is a click (pick it to use it); picking a thing up takes a moment's hold first
-      if (!d.held && moved > 28 && performance.now() - d.t < HOLD) d.far = true
-      if (!d.held && !d.far && moved > 6 && performance.now() - d.t >= HOLD && grabbable(d.thing)) {
+      // a thing with a click of its own (a piece to build, a card to play) is picked up only after a moment's hold,
+      // so a click never turns into a drag; anything else picks up as soon as it moves. A finger always holds first
+      // (a quick swipe is not a pick-up)
+      const hold = d.touch || !!specOf(d.thing)?.enabled
+      const long = performance.now() - d.t >= HOLD
+      if (d.touch && !d.held && !long && moved > 28) d.far = true
+      if (!d.held && !d.far && moved > 6 && (!hold || long) && grabbable(d.thing)) {
         const t = table.grab(d.thing)
         d.held = !!t
         if (t) {
@@ -300,8 +300,8 @@ export function Physical({ specs, statics, onDrop, onHolding }: { specs: PileSpe
       const spec = specOf(t)
       if (!t || (!spec?.enabled && !grabbable(t))) return
       const touch = e.nativeEvent.pointerType === 'touch'
-      // (on a phone only things to click take a tap: a stack you can't use lets the tap through to the table)
-      if (touch && !spec?.enabled) return
+      // (on a phone a stack you can neither use nor pick up lets the tap through to the table)
+      if (touch && !spec?.enabled && !grabbable(t)) return
       e.stopPropagation()
       down.current = { thing: t, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, held: false, touch, far: false, t: performance.now() }
     },

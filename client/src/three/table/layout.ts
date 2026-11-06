@@ -282,11 +282,12 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
       const rowZ = (i: number) => bankZ - 55 - 14 - 45 - (others.length - 1 - i) * 108
       const top = bankZ - 55 - 14 - 90 - 2 * 108
       const charts = 385
-      const handZ = 517
-      const progZ = 619
+      // (a little air between rows: the charts and pieces stand up, and on a phone their tops reach into the row behind)
+      const handZ = 524
+      const progZ = 628
       // your pieces in two rows at the left of the bottom band: its right side is kept for the big buttons
-      const pieceZ = 702
-      const pieceZ2 = 760
+      const pieceZ = 716
+      const pieceZ2 = 774
       L = {
         ...L,
         seats: others.map((p, i) => ({ p, at: [cols[1], rowZ(i)] as Spot })),
@@ -308,7 +309,7 @@ export function layoutFor(players: number, you: number, aspect: number, knights 
         flash: [0, charts],
         awardsMine: [30, progZ],
         armyMine: undefined,
-        bounds: { minX: -362, maxX: 362, minZ: top - 8 - LINES_TALL, maxZ: 790 },
+        bounds: { minX: -362, maxX: 362, minZ: top - 8 - LINES_TALL, maxZ: 804 },
         k: {
           knights: [[-326, pieceZ2], [-278, pieceZ2], [-230, pieceZ2]],
           wall: [-164, pieceZ2],

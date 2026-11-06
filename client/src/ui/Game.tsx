@@ -501,7 +501,7 @@ export function Game({ view }: { view: View }) {
       {view.x && <BarbarianOdds view={view} layout={layout} />}
       {beingRobbed && hand && <SnatchCue layout={layout} hand={shownHand ?? hand} r={GOODS.filter((g) => hand[g] > 0)[view.snatch!.id % Math.max(1, GOODS.filter((g) => hand[g] > 0).length)]} />}
 
-      {tray && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} onAny={trading && deal ? addAny : undefined} />}
+      {tray && !owe && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} onAny={trading && deal ? addAny : undefined} />}
       <Offers view={view} layout={layout} target={typeof deal?.to === 'number' ? deal.to : null} pickFor={pickFor} onPick={setPickFor} />
 
       <RollFlash view={view} layout={layout} />
@@ -578,7 +578,7 @@ export function Game({ view }: { view: View }) {
       )}
       {myFan && myFan.length > 0 && <MyFan order={myFan} />}
       <TurnBanner view={view} />
-      <Flash text={owe ? `Discard ${owe}` : progressOwed ? `Discard ${progressOwed} progress` : ph.kind === 'pillage' && ph.owed[me] ? 'Pick city to lose' : mine && ph.kind === 'robber' ? 'Move robber' : null} />
+      <Flash text={ph.kind === 'pillage' && ph.owed[me] ? 'Pick city to lose' : mine && ph.kind === 'robber' ? 'Move robber' : null} />
       {owe > 0 && hand && <DiscardFan hand={hand} drop={drop} owe={owe} setDrop={setDrop} onDone={() => act({ type: 'discard', cards: drop })} />}
       {ph.kind === 'payback' && ph.thief === me && hand && (
         <DiscardFan title="Caught! Give 1" hand={hand} drop={drop} owe={1} setDrop={setDrop} onDone={() => act({ type: 'payback', card: GOODS.find((r) => drop[r] > 0)! }).then(() => setDrop(emptyHand()))} word="Give" />
@@ -639,12 +639,12 @@ export function Game({ view }: { view: View }) {
             ?
           </button>
         )}
-        {tray && layout.marks === 'corner' && acts.no && (
+        {tray && !owe && layout.marks === 'corner' && acts.no && (
           <button className="stamp-btn big no" onClick={acts.no}>
             {acts.noWord}
           </button>
         )}
-        {tray && layout.marks === 'corner' && acts.ok && (
+        {tray && !owe && layout.marks === 'corner' && acts.ok && (
           <button className="stamp-btn go big ok" disabled={!acts.okLive} onClick={acts.ok}>
             {acts.okWord}
           </button>
@@ -721,7 +721,8 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
         <b>{PROGRESS[ph.card].name}</b> · {PICK_WORDS[ph.need]}
       </>
     )
-    cancel = ph.step === 0
+    // (a choice shown in the middle has its own ✕)
+    cancel = ph.step === 0 && !['resource', 'commodity', 'good', 'player', 'number', 'theirCard'].includes(ph.need)
   }
   if (ph.kind === 'progressDiscard') todo = progressOwed ? `Discard ${progressOwed} progress` : 'Discarding…'
   if (ph.kind === 'over') todo = <>{<Who view={view} p={ph.winner} />} wins</>

@@ -715,7 +715,7 @@ input {
   position: absolute;
   top: max(calc(var(--u) * 10), 6px);
   right: max(calc(var(--u) * 12), 6px);
-  z-index: 4;
+  z-index: 6;
   font-size: max(calc(var(--u) * 13), 13px);
   min-height: 36px;
   padding: 0 max(calc(var(--u) * 10), 10px);
@@ -724,7 +724,8 @@ input {
 .drawer {
   touch-action: pan-y;
   position: absolute;
-  top: calc(var(--u) * 46);
+  /* (below the menu button, which closes it) */
+  top: calc(max(calc(var(--u) * 10), 6px) + max(calc(var(--u) * 40), 44px));
   right: calc(var(--u) * 12);
   bottom: calc(var(--u) * 12);
   width: min(330px, calc(100vw - 24px));
@@ -1912,4 +1913,55 @@ input {
 }
 .name.mine.start {
   border-left: max(calc(var(--u) * 5), 4px) solid var(--pc);
+}
+
+/* ---- phones: the top line keeps clear of the menu button; the corner's buttons a size smaller; the menu screen
+   tighter on a short screen */
+@media (max-width: 600px) {
+  .lines {
+    max-width: calc(100vw - 132px);
+  }
+  .todo,
+  .happened {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .todo.offer {
+    max-width: 100%;
+  }
+  .corner .stamp-btn.big {
+    font-size: 17px;
+    padding: 9px 16px;
+    min-height: 46px;
+  }
+}
+@media (max-height: 700px) {
+  .menu {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+  .menu-col {
+    gap: 20px;
+  }
+}
+/* (a phone's notch and home bar: the page runs under them, the buttons don't) */
+.corner {
+  bottom: max(calc(var(--u) * 14), 10px, calc(env(safe-area-inset-bottom) + 6px));
+  right: max(calc(var(--u) * 14), 10px, calc(env(safe-area-inset-right) + 6px));
+}
+.history-btn {
+  top: max(calc(var(--u) * 10), 6px, calc(env(safe-area-inset-top) + 4px));
+  right: max(calc(var(--u) * 12), 6px, calc(env(safe-area-inset-right) + 6px));
+}
+.lines {
+  top: max(calc(var(--u) * 10), calc(env(safe-area-inset-top) + 4px));
+}
+.my-fan,
+.results-btn {
+  bottom: max(12px, calc(env(safe-area-inset-bottom) + 6px));
+}
+/* (the fan's outer cards dip: room under it before the button) */
+.fan-back.must .fan {
+  padding-bottom: 26px;
 }

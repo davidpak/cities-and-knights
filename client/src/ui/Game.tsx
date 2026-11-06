@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  OFFER_MS, affordable, canAct, canPlay, chaseSpots, citySpots, improveCost, knightMoves, knightSpots, pickTargets, promoteSpots,
+  OFFER_MS, affordable, canAct, longestRun, canPlay, chaseSpots, citySpots, improveCost, knightMoves, knightSpots, pickTargets, promoteSpots,
   roadSpots, robberSpots, settlementSpots, tradeRatios, wallSpots, type PickNeed, type View,
 } from '../../../shared/engine.ts'
 import { BARBARIAN_STEPS, CARD_TEXT, TRACK_GOOD, TRACK_LEVELS, TRACK_PERK, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
@@ -19,7 +19,7 @@ import { edgeAt, vertexAt } from '../three/spec.ts'
 import { SHIELD } from '../lib/icons.ts'
 import { faceURL, paintFace } from '../three/table/faces.ts'
 import { publishState } from '../three/TestHook.tsx'
-import { Bundle, Icon } from './Cards.tsx'
+import { Bundle, Icon, PieceIcon } from './Cards.tsx'
 import { Announcer, Chronicle, describe, Who } from './Chronicle.tsx'
 import { Costs, Rules } from './Reference.tsx'
 import { GameStats } from './Stats.tsx'
@@ -83,6 +83,8 @@ export function Game({ view }: { view: View }) {
   const [plenty, setPlenty] = useState<Resource[] | null>(null)
   const [monopoly, setMonopoly] = useState(false)
   const [history, setHistory] = useState(false)
+  // a player's tag tapped: everything about them, in a small card
+  const [playerCard, setPlayerCard] = useState<number | null>(null)
   // (a phone: the bank, open in the middle; what's picked to give and to get)
   const [bankOpen, setBankOpen] = useState<{ give: Good | null; get: Good | null } | null>(null)
   const [tab, setTab] = useState<'History' | 'Costs' | 'Rules'>('History')
@@ -506,7 +508,8 @@ export function Game({ view }: { view: View }) {
 
       <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} toMe={toMe[toMe.length - 1] ?? null} armed={armed && !!picking} />
 
-      <Labels view={view} layout={layout} hand={shownHand} tray={tray} />
+      <Labels view={view} layout={layout} hand={shownHand} tray={tray} onPlayer={setPlayerCard} />
+      {playerCard !== null && view.players[playerCard] && <PlayerCard view={view} p={playerCard} onClose={() => setPlayerCard(null)} />}
       {view.x && <BarbarianOdds view={view} layout={layout} />}
       {beingRobbed && hand && <SnatchCue layout={layout} hand={shownHand ?? hand} r={GOODS.filter((g) => hand[g] > 0)[view.snatch!.id % Math.max(1, GOODS.filter((g) => hand[g] > 0).length)]} />}
 
@@ -778,7 +781,7 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
 
 // ---------------------------------------------------------------- labels on the table
 
-function Labels({ view, layout, hand, tray }: { view: View; layout: ReturnType<typeof layoutFor>; hand: Hand | null; tray: TrayContents | null }) {
+function Labels({ view, layout, hand, tray, onPlayer }: { view: View; layout: ReturnType<typeof layoutFor>; hand: Hand | null; tray: TrayContents | null; onPlayer: (p: number) => void }) {
   const project = useProjector()
   const me = view.you
   // (a stack's top right corner; `base`: what it lies on, e.g. the tray's floor)
@@ -830,32 +833,27 @@ function Labels({ view, layout, hand, tray }: { view: View; layout: ReturnType<t
           <span key={`s${p}`}>
             {count(`oh${p}`, parts.hand, op.handCount, parts.small ? CARD.small : 1)}
             {!view.x && count(`kn${p}`, parts.knights, op.knights, parts.small ? CARD.small : 1)}
-            <span className={`name ${parts.labelStart ? 'start' : ''} ${view.current === p ? 'turn' : ''}`} style={{ ...at(parts.label), ['--pc' as string]: PLAYER[op.color].ui }}>
+            {/* their name, points, longest road and knights (a tap: everything else about them) */}
+            <span className={`name tappable ${parts.labelStart ? 'start' : ''} ${view.current === p ? 'turn' : ''}`} style={{ ...at(parts.label), ['--pc' as string]: PLAYER[op.color].ui }} onClick={() => onPlayer(p)}>
               {op.name} <b>{op.points}</b>
-              {/* the expansion: their three city levels, in the tracks' colours */}
-              {view.x && (
-                <span className="lvs">
-                  {TRACKS.map((t) => (
-                    <i key={t} className="lv" style={{ background: TRACK_COLOR[t] }} title={TRACK_NAME[t]}>
-                      {view.x!.levels[p][t]}
-                    </i>
-                  ))}
-                  <KnightPower view={view} p={p} />
-                </span>
-              )}
+              <span className="lvs">
+                <RoadChip view={view} p={p} />
+                <KnightPower view={view} p={p} />
+              </span>
             </span>
           </span>
         )
       })}
       {pl && !view.x && layout.armyMine && count('knme', layout.armyMine, pl.knights)}
       {pl && (
-        <span className={`name mine ${layout.meLabelStart ? 'start' : ''} ${view.current === me ? 'turn' : ''}`} style={{ ...at(layout.meLabel), ['--pc' as string]: PLAYER[pl.color].ui }}>
+        <span className={`name mine tappable ${layout.meLabelStart ? 'start' : ''} ${view.current === me ? 'turn' : ''}`} style={{ ...at(layout.meLabel), ['--pc' as string]: PLAYER[pl.color].ui }} onClick={() => onPlayer(me)}>
           <span className="nm">
             {pl.name} <b>{pl.points}</b>
           </span>
           <span className="chips">
             {pl.hand && <i className="hc">{handSize(pl.hand)}</i>}
-            {view.x && <KnightPower view={view} p={me} />}
+            <RoadChip view={view} p={me} />
+            <KnightPower view={view} p={me} />
           </span>
         </span>
       )}
@@ -1056,21 +1054,86 @@ const defenseOf = (view: View) => view.players.map((_, i) => Object.values(view.
 
 /** on a name tag: their ready knights' strength, and a crown for the one strongest (alone at the top) */
 function KnightPower({ view, p }: { view: View; p: number }) {
-  const d = defenseOf(view)
+  // the expansion: ready knights' strength (the one strongest alone glows); the basic game: knights played (Largest
+  // Army glows)
+  const d = view.x ? defenseOf(view) : view.players.map((pl) => pl.knights)
   const top = Math.max(...d)
-  const crown = top > 0 && d[p] === top && d.filter((x) => x === top).length === 1
+  const lead = view.x ? top > 0 && d[p] === top && d.filter((x) => x === top).length === 1 : view.largestArmy === p
   return (
-    <i className={`kp ${crown ? 'crown' : ''}`} title="Ready knights">
-      {crown && (
-        <svg viewBox="0 0 24 24" className="kp-crown">
-          <path d="M3 8l4.5 4L12 5l4.5 7L21 8l-1.6 10H4.6z" />
-        </svg>
-      )}
+    <i className={`kp ${lead ? 'lead' : ''}`} title={view.x ? 'Ready knights' : 'Knights played'}>
       <svg viewBox="0 0 24 24" className="kp-shield">
         <path d={SHIELD} />
       </svg>
       {d[p]}
     </i>
+  )
+}
+
+/** on a name tag: their longest road (Longest Road's holder glows gold) */
+function RoadChip({ view, p }: { view: View; p: number }) {
+  const n = longestRun(view, p)
+  return (
+    <i className={`kp road ${view.longestRoad === p ? 'lead' : ''}`} title="Longest road">
+      <svg viewBox="0 0 24 24">
+        <path d="M2 15.5l17-8 3 3.2-17 8z" />
+      </svg>
+      {n}
+    </i>
+  )
+}
+
+/** a player's tag tapped: their name and points, then everything else about them, small */
+function PlayerCard({ view, p, onClose }: { view: View; p: number; onClose: () => void }) {
+  const pl = view.players[p]
+  const x = view.x
+  return (
+    <div className="zoom-back" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="player-card" style={{ ['--pc' as string]: PLAYER[pl.color].ui }}>
+        <div className="pc-head">
+          {pl.name} <b>{pl.points}</b>
+        </div>
+        <div className="pc-row">
+          <RoadChip view={view} p={p} />
+          <KnightPower view={view} p={p} />
+          <i className="hc" title="Cards in hand">
+            {pl.handCount}
+          </i>
+          {x ? (
+            <span className="pc-n">
+              <b>{pl.progressCount}</b> progress
+            </span>
+          ) : (
+            <span className="pc-n">
+              <b>{pl.cardCount}</b> dev cards
+            </span>
+          )}
+        </div>
+        {x && (
+          <div className="pc-row">
+            {TRACKS.map((t) => (
+              <span key={t} className="pc-lv" style={{ ['--tc' as string]: TRACK_COLOR[t] }}>
+                <b>{x.levels[p][t]}</b> {TRACK_NAME[t]}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="pc-row pc-left">
+          <span>
+            <PieceIcon what="road" size={16} color={PLAYER[pl.color].ui} /> {pl.pieces.road}
+          </span>
+          <span>
+            <PieceIcon what="settlement" size={16} color={PLAYER[pl.color].ui} /> {pl.pieces.settlement}
+          </span>
+          <span>
+            <PieceIcon what="city" size={16} color={PLAYER[pl.color].ui} /> {pl.pieces.city}
+          </span>
+          <span className="pc-n">left</span>
+        </div>
+        <button className="zoom-btn" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+      </div>
+    </div>
   )
 }
 

@@ -714,7 +714,7 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   const last = [...view.events].reverse().find((e) => e.k !== 'turn' && e.k !== 'answer')
   return (
     <div className="lines">
-      <div className={`todo ${mine ? 'mine' : ''} ${toMe ? 'offer' : ''}`}>
+      <div className={`todo turn-of ${mine ? 'mine' : ''} ${toMe ? 'offer' : ''}`} style={{ ['--pc' as string]: PLAYER[view.players[view.current].color].ui }}>
         {todo}
         {cancel && (
           <button className="todo-x" onClick={() => act({ type: 'cancelPick' })} aria-label="Put it back">

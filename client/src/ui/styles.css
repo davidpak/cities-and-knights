@@ -351,8 +351,26 @@ input {
   font-weight: 700;
   color: var(--ink-2);
 }
+/* whose turn it is, always: their tag ringed in their colour, glowing, with a mark before the name */
 .name.turn {
-  box-shadow: 0 calc(var(--u) * 3) 0 var(--pc);
+  outline: max(calc(var(--u) * 3), 2px) solid var(--pc);
+  box-shadow: 0 0 calc(var(--u) * 14) var(--pc);
+  animation: turn-glow 1.6s ease-in-out infinite alternate;
+}
+.name.turn::after {
+  content: '▶';
+  order: -2;
+  color: var(--pc);
+  font-size: 0.8em;
+  margin-right: calc(var(--u) * -2);
+}
+@keyframes turn-glow {
+  from { box-shadow: 0 0 calc(var(--u) * 6) var(--pc); }
+  to { box-shadow: 0 0 calc(var(--u) * 16) var(--pc); }
+}
+/* and the top line in their colour */
+.todo.turn-of {
+  border-bottom: max(calc(var(--u) * 4), 3px) solid var(--pc);
 }
 /* how many cards in your hand: a little card with the number */
 .name .hc {

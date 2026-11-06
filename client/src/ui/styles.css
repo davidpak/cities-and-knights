@@ -2020,3 +2020,45 @@ html,
 body {
   overscroll-behavior: none;
 }
+
+/* the bank, open in the middle: give (with your rate) and get, then Trade */
+.bank-panel .bp-label {
+  color: var(--paper);
+  font-weight: 800;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: -6px;
+}
+.bank-panel .ch-card {
+  position: relative;
+  width: clamp(48px, min(15vw, 17vh), 84px);
+}
+.bank-panel .ch-card.sel {
+  outline: 4px solid #2f9e57;
+  transform: translateY(-6px);
+}
+.bank-panel .ch-card:disabled {
+  opacity: 0.3;
+}
+.bp-rate {
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  transform: translateX(-50%);
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #2f7d4f;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+.bp-none {
+  color: var(--paper);
+  opacity: 0.6;
+}
+.bank-panel .zoom-btn.go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}

@@ -19,7 +19,7 @@ import { edgeAt, vertexAt } from '../three/spec.ts'
 import { SHIELD } from '../lib/icons.ts'
 import { faceURL, paintFace } from '../three/table/faces.ts'
 import { publishState } from '../three/TestHook.tsx'
-import { Bundle } from './Cards.tsx'
+import { Bundle, Icon } from './Cards.tsx'
 import { Announcer, Chronicle, describe, Who } from './Chronicle.tsx'
 import { Costs, Rules } from './Reference.tsx'
 import { GameStats } from './Stats.tsx'
@@ -83,6 +83,8 @@ export function Game({ view }: { view: View }) {
   const [plenty, setPlenty] = useState<Resource[] | null>(null)
   const [monopoly, setMonopoly] = useState(false)
   const [history, setHistory] = useState(false)
+  // (a phone: the bank, open in the middle; what's picked to give and to get)
+  const [bankOpen, setBankOpen] = useState<{ give: Good | null; get: Good | null } | null>(null)
   const [tab, setTab] = useState<'History' | 'Costs' | 'Rules'>('History')
   // a card played, tapped in the history: the card, and what it did
   const [played, setPlayed] = useState<View['events'][number] | null>(null)
@@ -102,6 +104,7 @@ export function Game({ view }: { view: View }) {
   useEffect(() => {
     if (!main) {
       setBuilding(null)
+      setBankOpen(null)
       setDeal(null)
       setPlenty(null)
       setMonopoly(false)
@@ -330,6 +333,12 @@ export function Game({ view }: { view: View }) {
       }
       if (!trading || !hand) return
       const ratios = tradeRatios(view, me)
+      // on a phone: the bank opens big in the middle, what you'd give and what you'd get side by side, the card
+      // tapped already picked (and the best card to pay with), so a slip of the finger trades nothing
+      if (layout.portrait) {
+        const pay = bankKinds.filter((k) => k !== r && hand[k] >= ratios[k]).sort((a, b) => ratios[a] - ratios[b] || hand[b] - hand[a])[0] ?? null
+        return setBankOpen({ give: pay, get: r })
+      }
       const give = deal?.give ?? emptyHand()
       // what pays for it: what's on the tray (exactly the bank's rate of one kind, or else enough of one kind), or
       // with nothing fit on the tray, straight from the hand (the best rate; of those, the kind held most)
@@ -543,6 +552,20 @@ export function Game({ view }: { view: View }) {
       )}
       {ph.kind === 'aqueduct' && ph.owed[me] && (
         <Chooser title="Waterworks" cards={RESOURCES.filter((r) => view.bank[r] > 0).map((r) => ({ key: r, look: `res:${r}`, go: () => act({ type: 'aqueduct', r }) }))} />
+      )}
+      {bankOpen && trading && hand && (
+        <BankPanel
+          view={view}
+          hand={hand}
+          kinds={bankKinds}
+          pick={bankOpen}
+          onPick={setBankOpen}
+          onTrade={async () => {
+            if (!bankOpen.give || !bankOpen.get) return
+            if (await act({ type: 'bankTrade', give: bankOpen.give, get: bankOpen.get })) setBankOpen({ give: null, get: null })
+          }}
+          onClose={() => setBankOpen(null)}
+        />
       )}
       {mine && plenty && (
         <Chooser
@@ -1169,6 +1192,52 @@ function TrackZoom({ track, level, onClose, onImprove }: { track: Track; level: 
             ✕
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- the bank, open in the middle (a phone)
+
+function BankPanel({ view, hand, kinds, pick, onPick, onTrade, onClose }: { view: View; hand: Hand; kinds: readonly Good[]; pick: { give: Good | null; get: Good | null }; onPick: (p: { give: Good | null; get: Good | null }) => void; onTrade: () => void; onClose: () => void }) {
+  const ratios = tradeRatios(view, view.you)
+  const payable = kinds.filter((r) => hand[r] >= ratios[r])
+  const gettable = kinds.filter((r) => view.bank[r] > 0)
+  const ready = !!pick.give && !!pick.get && pick.give !== pick.get
+  return (
+    <div className="fan-back must bank-panel" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="must-head">Bank</div>
+      <div className="bp-label">Give</div>
+      <div className="ch-cards">
+        {payable.length ? (
+          payable.map((r) => (
+            <button key={r} className={`ch-card ${pick.give === r ? 'sel' : ''}`} style={{ backgroundImage: `url(${faceURL(`res:${r}`)})` }} onClick={() => onPick({ give: r, get: pick.get === r ? null : pick.get })} aria-label={`Give ${ratios[r]} ${r}`}>
+              <span className="bp-rate">{ratios[r]}:1</span>
+            </button>
+          ))
+        ) : (
+          <span className="bp-none">–</span>
+        )}
+      </div>
+      <div className="bp-label">Get</div>
+      <div className="ch-cards">
+        {gettable.map((r) => (
+          <button key={r} className={`ch-card ${pick.get === r ? 'sel' : ''}`} disabled={r === pick.give} style={{ backgroundImage: `url(${faceURL(`res:${r}`)})` }} onClick={() => onPick({ give: pick.give, get: r })} aria-label={`Get ${r}`} />
+        ))}
+      </div>
+      <div className="zoom-row">
+        <button className="zoom-btn go" disabled={!ready} onClick={onTrade}>
+          {ready ? (
+            <>
+              {ratios[pick.give!]} <Icon r={pick.give!} size={18} color="#fff" /> → 1 <Icon r={pick.get!} size={18} color="#fff" />
+            </>
+          ) : (
+            'Trade'
+          )}
+        </button>
+        <button className="zoom-btn" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
       </div>
     </div>
   )

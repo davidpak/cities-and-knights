@@ -1008,6 +1008,8 @@ function TrayMarks({ layout, acts, onAny }: { layout: ReturnType<typeof layoutFo
 /** a hand reaching for the card that's rising out of your stack: tap your cards to catch it */
 function SnatchCue({ layout, hand, r }: { layout: ReturnType<typeof layoutFor>; hand: Hand; r: Good | undefined }) {
   const project = useProjector()
+  // (two quick buzzes, where the phone can: someone's hand is in yours)
+  useEffect(() => void navigator.vibrate?.([40, 60, 40]), [])
   if (!r) return null
   const kinds = GOODS.filter((g) => hand[g] > 0 || g === r)
   const at = packHand(layout.hand, kinds, hand, layout.handEnd)[r]
@@ -1270,7 +1272,11 @@ function TurnBanner({ view }: { view: View }) {
   const [shown, setShown] = useState(0)
   const was = useRef(mine)
   useEffect(() => {
-    if (mine && !was.current) setShown((n) => n + 1)
+    if (mine && !was.current) {
+      setShown((n) => n + 1)
+      // (a short buzz, where the phone can)
+      navigator.vibrate?.(60)
+    }
     was.current = mine
   }, [mine])
   useEffect(() => {

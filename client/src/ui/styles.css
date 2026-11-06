@@ -1965,3 +1965,58 @@ input {
 .fan-back.must .fan {
   padding-bottom: 26px;
 }
+/* ---- a short screen (a phone on its side): every overlay sized by the height too, so its buttons stay on screen */
+.zoom-card {
+  width: min(250px, 62vw, calc((100vh - 150px) * 200 / 280));
+}
+.zoom-cap,
+.zoom-after {
+  max-width: min(320px, 86vw);
+}
+.track-zoom,
+.dialog.results,
+.zoom {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+.ch-card {
+  width: clamp(48px, min(17vw, 22vh), 100px);
+}
+.fan {
+  --w: clamp(44px, min(13vw, 24vh), 84px);
+}
+.fan-back.must .fan {
+  --w: clamp(44px, min(15vw, 26vh), 96px);
+}
+@media (max-height: 500px) {
+  .fan-back.must {
+    gap: 6px;
+  }
+  .must-head {
+    font-size: 17px;
+    padding: 4px 14px;
+  }
+  .fan {
+    padding-top: 14px;
+  }
+  .fan-back.must .fan {
+    padding-bottom: 14px;
+  }
+  .tz-levels li {
+    padding: 3px 8px;
+  }
+  .tz-head {
+    font-size: 18px;
+    padding: 6px 14px;
+  }
+}
+@media (max-height: 500px) {
+  .fan-back.must .fan {
+    --w: clamp(40px, min(15vw, 19vh), 96px);
+  }
+}
+/* (no bounce or pull-to-refresh under a finger while playing) */
+html,
+body {
+  overscroll-behavior: none;
+}

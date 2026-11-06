@@ -24,7 +24,16 @@ const one = (r: Good, n = 1): Partial<Hand> => ({ [r]: n })
 const TERRAIN_WORD: Record<string, string> = { forest: 'forest', hills: 'hills', pasture: 'pasture', fields: 'fields', mountains: 'mountains', desert: 'desert' }
 
 /** one event as a line of words and pictures; null for ones not worth a line */
-export function describe(view: View, e: GameEvent): ReactNode | null {
+/** (a played card's name can be tapped, where the line is shown with somewhere to show the card) */
+export function describe(view: View, e: GameEvent, onCard?: (e: GameEvent) => void): ReactNode | null {
+  const card = (name: string) =>
+    onCard ? (
+      <button className="card-link" onClick={() => onCard(e)}>
+        {name}
+      </button>
+    ) : (
+      <b>{name}</b>
+    )
   const W = (p: number) => <Who view={view} p={p} />
   switch (e.k) {
     case 'roll':
@@ -68,7 +77,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'play':
       return (
         <>
-          {W(e.p)} played <b>{CARD_NAME[e.card]}</b>
+          {W(e.p)} played {card(CARD_NAME[e.card])}
         </>
       )
     case 'monopoly':
@@ -227,7 +236,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
     case 'progress':
       return (
         <>
-          {W(e.p)} played <b>{PROGRESS[e.card].name}</b>
+          {W(e.p)} played {card(PROGRESS[e.card].name)}
         </>
       )
     case 'merchant':
@@ -276,7 +285,7 @@ export function describe(view: View, e: GameEvent): ReactNode | null {
 }
 
 /** the whole story, newest at the bottom, a rule between turns */
-export function Chronicle({ view }: { view: View }) {
+export function Chronicle({ view, onCard }: { view: View; onCard?: (e: GameEvent) => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const last = view.events[view.events.length - 1]?.n
   useEffect(() => {
@@ -292,7 +301,7 @@ export function Chronicle({ view }: { view: View }) {
         ) : (
           (() => {
             // answers to an offer show live on the mat and the plaques; the story keeps the offer and the trade
-            const line = e.k === 'answer' ? null : describe(view, e)
+            const line = e.k === 'answer' ? null : describe(view, e, onCard)
             return line ? (
               <div key={e.n} className={`entry e-${e.k}`}>
                 {line}

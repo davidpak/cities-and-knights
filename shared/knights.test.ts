@@ -293,3 +293,20 @@ test('the barbarians win: a player with more than one city picks which to lose',
   assert.equal(r.state.buildings[a].kind, 'city')
   assert.notEqual(r.state.phase.kind, 'pillage')
 })
+
+test('the Spy: pick a player, see their progress cards, take the one you choose', () => {
+  const s: GameState = newGame(seats(3), 91, { knights: true })
+  s.current = 0
+  s.players[1].progress = [{ card: 'smith', turn: 0 }, { card: 'mining', turn: 0 }]
+  s.phase = { kind: 'pick', card: 'spy', need: 'player', step: 0, data: [], then: 'main' }
+  let r = apply(s, 0, { type: 'pick', target: 1 })
+  assert.ok(r.ok)
+  const t = r.state
+  assert.ok(t.phase.kind === 'pick' && t.phase.need === 'theirCard')
+  assert.deepEqual(viewFor(t, 0).players[1].progress?.map((c) => c.card), ['smith', 'mining'], 'the spy sees them')
+  assert.equal(viewFor(t, 2).players[1].progress, null, 'nobody else does')
+  r = apply(t, 0, { type: 'pick', target: 1 })
+  assert.ok(r.ok)
+  assert.deepEqual(r.state.players[1].progress.map((c) => c.card), ['smith'])
+  assert.ok(r.state.players[0].progress.some((c) => c.card === 'mining'))
+})

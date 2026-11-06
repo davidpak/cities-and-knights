@@ -72,7 +72,7 @@ export type Expansion = {
 }
 
 /** what a progress card is waiting for */
-export type PickNeed = 'hex' | 'road' | 'enemyKnight' | 'knightSpot' | 'player' | 'resource' | 'commodity' | 'good' | 'number' | 'myCity' | 'mySettlement' | 'token'
+export type PickNeed = 'hex' | 'road' | 'enemyKnight' | 'knightSpot' | 'player' | 'resource' | 'commodity' | 'good' | 'number' | 'myCity' | 'mySettlement' | 'token' | 'theirCard'
 
 export type Phase =
   | { kind: 'setup'; round: 1 | 2; step: 'settlement' | 'road'; settlement?: number }
@@ -555,6 +555,11 @@ export function pickTargets(s: Readable & { tiles: Tile[]; players: { points?: n
       return Object.entries(s.buildings).filter(([v, b]) => b.owner === p && b.kind === 'city' && x.walls[Number(v)] === undefined).map(([v]) => Number(v))
     case 'mySettlement':
       return citySpots(s, p)
+    case 'theirCard': {
+      // (the Spy, looking at someone's progress cards: which of them, by place)
+      const them = s.players[ph.data[0]] as { progressCount?: number; progress?: unknown[] | null }
+      return Array.from({ length: them.progressCount ?? them.progress?.length ?? 0 }, (_, i) => i)
+    }
   }
 }
 
@@ -1560,10 +1565,15 @@ function expansionStep(s: GameState, p: number, a: ExpansionAction): string | vo
           return void done()
         }
         case 'spy': {
-          const from = s.players[t as number]
-          const c = from.progress.splice(Math.floor(rand(s) * from.progress.length), 1)[0]
+          // first who, then (looking at their cards) which one
+          if (ph.step === 0) {
+            s.phase = { ...ph, step: 1, need: 'theirCard', data: [t as number] }
+            return
+          }
+          const from = s.players[ph.data[0]]
+          const c = from.progress.splice(t as number, 1)[0]
           me.progress.push({ card: c.card, turn: s.turn })
-          ev(s, { k: 'take', p, from: t as number, count: 1, what: 'progress', card: c.card })
+          ev(s, { k: 'take', p, from: ph.data[0], count: 1, what: 'progress', card: c.card })
           return void done()
         }
         case 'envoy': {
@@ -1690,7 +1700,7 @@ export function viewFor(s: GameState, you: number): View {
       handCount: handSize(pl.hand),
       cards: i === you || over ? structuredClone(pl.cards) : null,
       cardCount: pl.cards.length,
-      progress: i === you || over ? structuredClone(pl.progress) : null,
+      progress: i === you || over || (s.phase.kind === 'pick' && s.phase.card === 'spy' && s.phase.need === 'theirCard' && s.phase.data[0] === i && s.current === you) ? structuredClone(pl.progress) : null,
       progressCount: pl.progress.length,
       points: victoryPoints(s, i, i === you || over),
     })),

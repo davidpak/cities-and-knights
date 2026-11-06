@@ -42,6 +42,7 @@ const PICK_WORDS: Record<PickNeed, string> = {
   myCity: 'Pick city',
   mySettlement: 'Pick settlement',
   token: 'Pick token',
+  theirCard: 'Pick a card',
 }
 
 function useAspect() {
@@ -79,6 +80,8 @@ export function Game({ view }: { view: View }) {
   const [monopoly, setMonopoly] = useState(false)
   const [history, setHistory] = useState(false)
   const [tab, setTab] = useState<'History' | 'Costs' | 'Rules'>('History')
+  // a card played, tapped in the history: the card, and what it did
+  const [played, setPlayed] = useState<View['events'][number] | null>(null)
   // a card of yours, held up close (tap one in your hand)
   const [zoom, setZoom] = useState<{ kind: 'dev'; card: Card } | { kind: 'prog'; card: Progress } | null>(null)
   // one of your city tracks, up close: what each level gives, and Improve
@@ -466,6 +469,22 @@ export function Game({ view }: { view: View }) {
 
       <RollFlash view={view} layout={layout} />
       <Announcer view={view} />
+      {played && (played.k === 'play' || played.k === 'progress') && (
+        <CardZoom
+          look={played.k === 'play' ? `dev:${played.card}` : `prog:${played.card}`}
+          caption={played.k === 'play' ? CARD_TEXT[played.card] : null}
+          after={whatFollowed(view, played)}
+          action={null}
+          onClose={() => setPlayed(null)}
+        />
+      )}
+      {mine && ph.kind === 'pick' && ph.card === 'spy' && ph.need === 'theirCard' && (
+        <StealFan
+          n={view.players[ph.data[0]].progressCount}
+          faces={view.players[ph.data[0]].progress?.map((c) => `prog:${c.card}`)}
+          onPick={(i) => act({ type: 'pick', target: i })}
+        />
+      )}
       {trackZoom && view.x && (
         <TrackZoom
           track={trackZoom}
@@ -535,7 +554,7 @@ export function Game({ view }: { view: View }) {
               </button>
             ))}
           </div>
-          {tab === 'History' ? <Chronicle view={view} /> : tab === 'Costs' ? <Costs view={view} /> : <Rules view={view} />}
+          {tab === 'History' ? <Chronicle view={view} onCard={setPlayed} /> : tab === 'Costs' ? <Costs view={view} /> : <Rules view={view} />}
           <div className="drawer-foot">
             {host && (
               <button className="link" onClick={() => confirm('End game?') && room.end()}>
@@ -972,13 +991,13 @@ function TrackZoom({ track, level, onClose, onImprove }: { track: Track; level: 
 // ---------------------------------------------------------------- robbing
 
 /** the victim's cards, face down in a fan: tap one to take it */
-function StealFan({ n, onPick, onClose }: { n: number; onPick: (i: number) => void; onClose?: () => void }) {
+function StealFan({ n, faces, onPick, onClose }: { n: number; faces?: string[]; onPick: (i: number) => void; onClose?: () => void }) {
   const back = faceURL('res:?')
   return (
     <div className="fan-back" onClick={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className="fan" style={{ ['--n' as string]: n }}>
         {Array.from({ length: n }, (_, i) => (
-          <button key={i} className="fan-card" style={{ ['--i' as string]: i - (n - 1) / 2, ['--a' as string]: Math.abs(i - (n - 1) / 2), backgroundImage: `url(${back})` }} onClick={() => onPick(i)} aria-label={`Card ${i + 1}`} />
+          <button key={i} className="fan-card" style={{ ['--i' as string]: i - (n - 1) / 2, ['--a' as string]: Math.abs(i - (n - 1) / 2), backgroundImage: `url(${faces?.[i] ? faceURL(faces[i]) : back})` }} onClick={() => onPick(i)} aria-label={`Card ${i + 1}`} />
         ))}
       </div>
     </div>
@@ -1044,7 +1063,19 @@ function TurnBanner({ view }: { view: View }) {
 
 // ---------------------------------------------------------------- a card held up close
 
-function CardZoom({ look, caption, action, onClose }: { look: string; caption: string | null; action: { word: string; go: () => void } | null; onClose: () => void }) {
+/** what a played card led to: the events after it, until the next play, roll or turn */
+function whatFollowed(view: View, e: View['events'][number]): React.ReactNode {
+  const i = view.events.findIndex((x) => x.n === e.n)
+  const out: React.ReactNode[] = []
+  for (const x of view.events.slice(i + 1)) {
+    if (x.k === 'progress' || x.k === 'play' || x.k === 'roll' || x.k === 'turn') break
+    const line = describe(view, x)
+    if (line) out.push(<div key={x.n}>{line}</div>)
+  }
+  return out.length ? out : null
+}
+
+function CardZoom({ look, caption, after, action, onClose }: { look: string; caption: string | null; after?: React.ReactNode; action: { word: string; go: () => void } | null; onClose: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     if (ref.current) paintFace(look, ref.current, 2 * Math.min(2, window.devicePixelRatio || 1))
@@ -1056,6 +1087,7 @@ function CardZoom({ look, caption, action, onClose }: { look: string; caption: s
       <div className="zoom">
         <canvas ref={ref} className="zoom-card" />
         {caption && <div className="zoom-cap">{caption}</div>}
+        {after && <div className="zoom-after">{after}</div>}
         <div className="zoom-row">
           {action && (
             <button className="zoom-btn go" onClick={action.go}>

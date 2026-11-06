@@ -48,6 +48,8 @@ export function botAction(s: S, p: number, rnd: () => number): Action | null {
   // caught sneaking (we never try, but): give back what we have most of
   if (ph.kind === 'payback') return ph.thief === p ? { type: 'payback', card: best(GOODS.filter((r) => hand[r] > 0), (r) => hand[r]) } : null
 
+  // the waterworks: the resource we have least of
+  if (ph.kind === 'aqueduct') return ph.owed[p] ? { type: 'aqueduct', r: best(RESOURCES.filter((r) => s.bank[r] > 0), (r) => -hand[r]) } : null
   // the barbarians won and we pick which city to lose: a walled one (only its wall goes), else the poorest
   if (ph.kind === 'pillage') {
     const mine = ph.owed[p]

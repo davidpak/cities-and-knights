@@ -526,6 +526,9 @@ export function Game({ view }: { view: View }) {
       {mine && ph.kind === 'steal' && ph.victims.length > 1 && robFrom === null && (
         <Chooser title="Rob" players={ph.victims.map((p) => ({ p, go: () => setRobFrom(p) }))} view={view} />
       )}
+      {ph.kind === 'aqueduct' && ph.owed[me] && (
+        <Chooser title="Waterworks" cards={RESOURCES.filter((r) => view.bank[r] > 0).map((r) => ({ key: r, look: `res:${r}`, go: () => act({ type: 'aqueduct', r }) }))} />
+      )}
       {mine && plenty && (
         <Chooser
           title={`Take ${2 - plenty.length}`}
@@ -708,6 +711,7 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   if (ph.kind === 'progressDiscard') todo = progressOwed ? `Discard ${progressOwed} progress` : 'Discarding…'
   if (ph.kind === 'over') todo = <>{<Who view={view} p={ph.winner} />} wins</>
   if (ph.kind === 'pillage') todo = ph.owed[view.you] ? 'Pick city to lose' : 'Barbarians win'
+  if (ph.kind === 'aqueduct') todo = ph.owed[view.you] ? 'Pick a resource' : 'Waterworks…'
   if (ph.kind === 'payback') todo = ph.thief === view.you ? 'Caught! Give a card' : 'Caught!'
   if (armed) todo = 'Tap again'
   // an offer to you: what you'd get, for what

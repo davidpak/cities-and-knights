@@ -242,6 +242,8 @@ test('progress cards: drawn by the red die and your level, at most four in hand,
       break
     }
   }
+  // (science 5 has the waterworks: a roll that brought nothing waits for a resource to be picked)
+  if (s.phase.kind === 'aqueduct') s = must(s, p, { type: 'aqueduct', r: 'ore' })
   const drawn = s.players[p].progress.length + s.x!.points[p].length
   assert.equal(drawn, 1, 'level 5 always draws')
   const other = viewFor(s, 1 - p)
@@ -308,4 +310,27 @@ test('the Spy: pick a player, see their progress cards, take the one you choose'
   assert.ok(r.ok)
   assert.deepEqual(r.state.players[1].progress.map((c) => c.card), ['smith'])
   assert.ok(r.state.players[0].progress.some((c) => c.card === 'mining'))
+})
+
+
+test('the waterworks: a roll that brings you nothing lets you pick a resource', () => {
+  let s = afterSetup(51, 2)
+  const p = s.current
+  s.x!.levels[p].science = 3
+  // a roll (not a 7) that pays player p nothing
+  for (let seed = 0; ; seed++) {
+    const t = structuredClone(s)
+    t.rng = seed
+    const r = apply(t, p, { type: 'roll' })
+    if (r.ok && r.state.dice![0] + r.state.dice![1] !== 7 && r.state.phase.kind === 'aqueduct' && r.state.phase.owed[p]) {
+      s = r.state
+      break
+    }
+  }
+  const before = s.players[p].hand.wool
+  assert.equal(apply(s, p, { type: 'endTurn' }).ok, false, 'pick first')
+  assert.equal(apply(s, 1 - p, { type: 'aqueduct', r: 'wool' }).ok, false, 'only who it is owed to')
+  s = must(s, p, { type: 'aqueduct', r: 'wool' })
+  assert.equal(s.players[p].hand.wool, before + 1)
+  assert.equal(s.phase.kind, 'main')
 })

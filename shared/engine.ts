@@ -55,6 +55,8 @@ export type Expansion = {
   barbarian: number
   /** (while a roll is worked out: who still picks a city to lose, and from which) */
   pillage?: Record<number, number[]>
+  /** (and who has a resource of their choosing coming from the waterworks) */
+  aqueduct?: number[]
   /** how many times they've landed (the robber stays in the desert until the first time) */
   attacks: number
   /** points won defending the island */
@@ -89,6 +91,8 @@ export type Phase =
   | { kind: 'progressDiscard'; owed: Record<number, number>; then: Phase }
   /** a thief caught sneaking a card gives the victim one of their choice */
   | { kind: 'payback'; thief: number; victim: number; then: Phase }
+  /** a roll brought these players nothing and they have the waterworks: each picks a resource from the bank */
+  | { kind: 'aqueduct'; owed: Record<number, true>; then: Phase }
   /** the barbarians won: each player who loses a city and has more than one to lose picks which (their cities here) */
   | { kind: 'pillage'; owed: Record<number, number[]>; then: Phase }
   | { kind: 'over'; winner: number }
@@ -200,6 +204,8 @@ export type Action =
   | { type: 'steal'; victim: number; index?: number }
   | { type: 'arrange'; order: Good[] }
   | { type: 'pillage'; vertex: number }
+  /** the waterworks: the resource you take */
+  | { type: 'aqueduct'; r: Resource }
   /** sneak a card from someone (any player, during any main phase, once a turn) */
   | { type: 'snatch'; victim: number }
   /** the victim, in time: caught! */
@@ -725,17 +731,13 @@ function produce(s: GameState, roll: number) {
     .map((h, i) => ({ i, list: GOODS.filter((r) => h[r] > 0).map((r) => `${h[r]} ${r}`) }))
     .filter((x) => x.list.length)
   for (const g of got) log(s, `${s.players[g.i].name} collects ${g.list.join(', ')}.`, g.i)
-  // the waterworks (science level 3): a roll that brought you nothing brings you a resource of your choosing (the one
-  // you have least of)
+  // the waterworks (science level 3): a roll that brought you nothing brings you a resource of your choosing (they
+  // pick it in the 'aqueduct' phase, right after the roll)
   const x = s.x
-  if (x)
-    s.players.forEach((pl, i) => {
+  if (x && RESOURCES.some((g) => s.bank[g] > 0))
+    s.players.forEach((_, i) => {
       if (x.levels[i].science < 3 || handSize(owed[i]) > 0) return
-      const r = [...RESOURCES].filter((g) => s.bank[g] > 0).sort((a, b) => pl.hand[a] - pl.hand[b])[0]
-      if (!r) return
-      pl.hand[r]++
-      s.bank[r]--
-      ev(s, { k: 'aqueduct', p: i, r })
+      x.aqueduct = [...(x.aqueduct ?? []), i]
     })
 }
 
@@ -850,11 +852,13 @@ function pillage(s: GameState, p: number, v: number) {
   return { p, at: v, wall: false }
 }
 
-/** after a roll: if someone has a city to pick for the barbarians, that comes first */
+/** after a roll: choices it left people come first: a resource from the waterworks, and before that, a city to lose */
 function holdForPillage(s: GameState) {
   const x = s.x
-  if (!x?.pillage || !Object.keys(x.pillage).length) return
-  s.phase = { kind: 'pillage', owed: x.pillage, then: s.phase }
+  if (!x) return
+  if (x.aqueduct?.length) s.phase = { kind: 'aqueduct', owed: Object.fromEntries(x.aqueduct.map((i) => [i, true])), then: s.phase }
+  delete x.aqueduct
+  if (x.pillage && Object.keys(x.pillage).length) s.phase = { kind: 'pillage', owed: x.pillage, then: s.phase }
   delete x.pillage
 }
 
@@ -1078,6 +1082,16 @@ function step(s: GameState, p: number, a: Action): string | void {
     s.players[ph.victim].hand[a.card]++
     ev(s, { k: 'caught', thief: p, victim: ph.victim, r: a.card })
     s.phase = ph.then
+    return
+  }
+  if (a.type === 'aqueduct') {
+    if (ph.kind !== 'aqueduct' || !ph.owed[p]) return 'Nothing to take.'
+    if (!RESOURCES.includes(a.r) || s.bank[a.r] <= 0) return 'The bank has none of that.'
+    me.hand[a.r]++
+    s.bank[a.r]--
+    ev(s, { k: 'aqueduct', p, r: a.r })
+    delete ph.owed[p]
+    if (!Object.keys(ph.owed).length) s.phase = ph.then
     return
   }
   if (a.type === 'pillage') {

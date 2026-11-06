@@ -977,10 +977,14 @@ function SnatchCue({ layout, hand, r }: { layout: ReturnType<typeof layoutFor>; 
   const at = packHand(layout.hand, kinds, hand, layout.handEnd)[r]
   if (!at) return null
   const [x, y] = project(at[0], 30, at[1] - CARD.d / 2)
+  const [gx, gy] = project(at[0], 18, at[1])
   return (
-    <div className="snatch-cue" style={{ left: x, top: y }} aria-hidden>
-      ✋
-    </div>
+    <>
+      <div className="snatch-glow" style={{ left: gx, top: gy }} aria-hidden />
+      <div className="snatch-cue" style={{ left: x, top: y }} aria-hidden>
+        ✋
+      </div>
+    </>
   )
 }
 

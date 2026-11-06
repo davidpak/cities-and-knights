@@ -1624,3 +1624,20 @@ input {
   from { transform: translate(-60%, -100%) rotate(-12deg); }
   to { transform: translate(-40%, -110%) rotate(12deg); }
 }
+
+/* (and a soft glow round the card being taken) */
+.snatch-glow {
+  position: absolute;
+  width: calc(var(--u) * 110);
+  height: calc(var(--u) * 140);
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 30%;
+  background: radial-gradient(closest-side, rgba(255, 214, 102, 0.55), rgba(255, 214, 102, 0));
+  animation: snatch-glow 0.6s ease-in-out infinite alternate;
+}
+@keyframes snatch-glow {
+  from { opacity: 0.45; transform: translate(-50%, -50%) scale(0.92); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+}

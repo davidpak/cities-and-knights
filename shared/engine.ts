@@ -90,8 +90,12 @@ export type Phase =
 /**
  * A trade put to another player (`to`): they say yes, and it happens; they say no, and it's gone.
  * Without `to` it's put to the whole table: others say yes or no, then the one who offered picks who to trade with.
+ * `any` asks for that many more cards of the answerer's choosing (a wildcard): each yes says which (`picks`).
+ * Several offers may be open at once.
  */
-export type Offer = { from: number; to?: number; give: Hand; get: Hand; accepted: number[]; declined: number[] }
+export type Offer = { id: number; from: number; to?: number; give: Hand; get: Hand; any: number; accepted: number[]; declined: number[]; picks: Record<number, Hand> }
+/** at most this many offers open at once */
+export const MAX_OFFERS = 4
 
 /**
  * What happened, one thing at a time, so the table can show it plainly: who rolled what, who got which cards, who
@@ -106,7 +110,7 @@ export type GameEvent = { n: number } & (
   | { k: 'monopoly'; p: number; r: Resource; count: number }
   | { k: 'plenty'; p: number; take: [Resource, Resource] }
   | { k: 'bank'; p: number; give: Good; count: number; get: Good }
-  | { k: 'offer'; p: number; to?: number; give: Hand; get: Hand }
+  | { k: 'offer'; p: number; to?: number; give: Hand; get: Hand; any?: number }
   | { k: 'answer'; p: number; yes: boolean }
   | { k: 'trade'; from: number; to: number; give: Hand; get: Hand }
   | { k: 'seven'; p: number; discards: Record<number, number> }
@@ -154,7 +158,8 @@ export type GameState = {
   /** counts up on every roll, so clients know to play the throw */
   rolls: number
   cardPlayed: boolean
-  offer: Offer | null
+  offers: Offer[]
+  offerSeq: number
   longestRoad: number | null
   largestArmy: number | null
   log: LogEntry[]
@@ -178,11 +183,13 @@ export type Action =
   | { type: 'playYearOfPlenty'; take: [Resource, Resource] }
   | { type: 'playMonopoly'; resource: Resource }
   | { type: 'bankTrade'; give: Good; get: Good }
-  | { type: 'offerTrade'; give: Hand; get: Hand; to?: number }
-  | { type: 'cancelOffer' }
-  | { type: 'acceptOffer' }
-  | { type: 'declineOffer' }
-  | { type: 'confirmTrade'; with: number }
+  | { type: 'offerTrade'; give: Hand; get: Hand; to?: number; any?: number }
+  /** without an id: all of yours */
+  | { type: 'cancelOffer'; id?: number }
+  /** `pick`: the cards you choose for its wildcard */
+  | { type: 'acceptOffer'; id?: number; pick?: Partial<Hand> }
+  | { type: 'declineOffer'; id?: number }
+  | { type: 'confirmTrade'; with: number; id?: number }
   | { type: 'endTurn' }
   // the expansion
   | { type: 'buildKnight'; vertex: number }
@@ -244,7 +251,8 @@ export function newGame(seats: Seat[], seed: number, opts: Options = {}): GameSt
     dice: null,
     rolls: 0,
     cardPlayed: false,
-    offer: null,
+    offers: [],
+    offerSeq: 0,
     longestRoad: null,
     largestArmy: null,
     log: [],
@@ -634,7 +642,7 @@ function checkWin(s: GameState) {
   const p = s.current
   if (victoryPoints(s, p) >= winPoints(s)) {
     s.phase = { kind: 'over', winner: p }
-    s.offer = null
+    s.offers = []
     ev(s, { k: 'win', p, points: victoryPoints(s, p) })
     log(s, `${s.players[p].name} wins with ${victoryPoints(s, p)} points!`, p)
   }
@@ -931,7 +939,23 @@ function startTurn(s: GameState) {
   s.phase = { kind: 'roll' }
   s.dice = null
   s.cardPlayed = false
-  s.offer = null
+  s.offers = []
+}
+
+/** an offer settled with `to`: the offer's give one way; its get, and the wildcard's pick, the other */
+function trade(s: GameState, o: Offer, to: number, pick: Hand): string | void {
+  const from = s.players[o.from]
+  const them = s.players[to]
+  const get = fullHand(o.get)
+  addTo(get, pick, 1)
+  if (!hasAll(from.hand, o.give)) return o.from === s.current ? 'You no longer have what you offered.' : 'They no longer have what they offered.'
+  if (!hasAll(them.hand, get)) return 'They no longer have what you asked for.'
+  addTo(from.hand, o.give, -1)
+  addTo(them.hand, o.give, 1)
+  addTo(them.hand, get, -1)
+  addTo(from.hand, get, 1)
+  ev(s, { k: 'trade', from: o.from, to, give: { ...o.give }, get })
+  log(s, `${from.name} trades with ${them.name}.`, o.from)
 }
 
 export function apply(state: GameState, p: number, a: Action): Result {
@@ -981,32 +1005,33 @@ function step(s: GameState, p: number, a: Action): string | void {
     return
   }
   if (a.type === 'acceptOffer' || a.type === 'declineOffer') {
-    const o = s.offer
-    if (!o || ph.kind !== 'main') return 'There is no trade on the table.'
-    if (o.from === p) return 'That is your own offer.'
-    if (o.to !== undefined && o.to !== p) return 'That offer is not to you.'
-    if (o.accepted.includes(p) || o.declined.includes(p)) return 'You have already answered.'
-    if (a.type === 'acceptOffer' && !hasAll(me.hand, o.get)) return 'You do not have what they ask for.'
+    if (ph.kind !== 'main') return 'There is no trade on the table.'
+    const open = s.offers.filter((o) => o.from !== p && (o.to === undefined || o.to === p) && !o.accepted.includes(p) && !o.declined.includes(p))
+    const o = a.id !== undefined ? open.find((x) => x.id === a.id) : open[open.length - 1]
+    if (!o) return 'There is no trade on the table.'
+    let pick = emptyHand()
+    if (a.type === 'acceptOffer') {
+      if (o.any) {
+        if (!a.pick || GOODS.some((r) => !Number.isInteger(a.pick![r] ?? 0) || (a.pick![r] ?? 0) < 0)) return 'Pick the cards to give.'
+        pick = fullHand(a.pick)
+        if (handSize(pick) !== o.any) return `Pick ${o.any}.`
+        if (GOODS.some((r) => pick[r] > 0 && o.give[r] > 0)) return 'Not a kind they give.'
+        if (s.mode !== 'knights' && COMMODITIES.some((c) => pick[c])) return 'That is not a trade.'
+      }
+      const owed = fullHand(o.get)
+      addTo(owed, pick, 1)
+      if (!hasAll(me.hand, owed)) return 'You do not have what they ask for.'
+    }
     ev(s, { k: 'answer', p, yes: a.type === 'acceptOffer' })
     if (o.to === undefined) {
       ;(a.type === 'acceptOffer' ? o.accepted : o.declined).push(p)
+      if (a.type === 'acceptOffer' && o.any) o.picks[p] = pick
       return
     }
     // an offer made to you alone: no closes it, yes makes the trade there and then
-    if (a.type === 'declineOffer') {
-      s.offer = null
-      return
-    }
-    const them = s.players[o.from]
-    if (!hasAll(them.hand, o.give)) return 'They no longer have what they offered.'
-    addTo(them.hand, o.give, -1)
-    addTo(me.hand, o.give, 1)
-    addTo(me.hand, o.get, -1)
-    addTo(them.hand, o.get, 1)
-    ev(s, { k: 'trade', from: o.from, to: p, give: { ...o.give }, get: { ...o.get } })
-    log(s, `${them.name} trades with ${me.name}.`, o.from)
-    s.offer = null
-    return
+    s.offers = s.offers.filter((x) => x !== o)
+    if (a.type === 'declineOffer') return
+    return trade(s, o, p, pick)
   }
 
   if (!mine) return 'It is not your turn.'
@@ -1217,35 +1242,29 @@ function step(s: GameState, p: number, a: Action): string | void {
     case 'offerTrade': {
       if (ph.kind !== 'main') return 'You cannot trade now.'
       const valid = (h: Hand) => GOODS.every((r) => Number.isInteger(h[r] ?? 0) && (h[r] ?? 0) >= 0) && (s.mode === 'knights' || COMMODITIES.every((c) => !h[c]))
-      if (!valid(a.give) || !valid(a.get)) return 'That is not a trade.'
-      if (handSize(a.give) === 0 || handSize(a.get) === 0) return 'Offer something and ask for something.'
+      const any = a.any ?? 0
+      if (!valid(a.give) || !valid(a.get) || !Number.isInteger(any) || any < 0 || any > 7) return 'That is not a trade.'
+      if (handSize(a.give) === 0 || handSize(a.get) + any === 0) return 'Offer something and ask for something.'
       if (GOODS.some((r) => a.give[r] > 0 && a.get[r] > 0)) return 'You cannot give and get the same kind.'
       if (!hasAll(me.hand, a.give)) return 'You do not have what you are offering.'
       if (a.to !== undefined && (a.to === p || !s.players[a.to])) return 'Pick another player to trade with.'
+      if (s.offers.filter((o) => o.from === p).length >= MAX_OFFERS) return 'Too many offers open.'
       const give = fullHand(a.give)
       const get = fullHand(a.get)
-      s.offer = { from: p, ...(a.to !== undefined ? { to: a.to } : {}), give, get, accepted: [], declined: [] }
-      ev(s, { k: 'offer', p, ...(a.to !== undefined ? { to: a.to } : {}), give: { ...give }, get: { ...get } })
+      s.offers.push({ id: ++s.offerSeq, from: p, ...(a.to !== undefined ? { to: a.to } : {}), give, get, any, accepted: [], declined: [], picks: {} })
+      ev(s, { k: 'offer', p, ...(a.to !== undefined ? { to: a.to } : {}), give: { ...give }, get: { ...get }, ...(any ? { any } : {}) })
       return
     }
     case 'cancelOffer': {
-      s.offer = null
+      s.offers = s.offers.filter((o) => o.from !== p || (a.id !== undefined && o.id !== a.id))
       return
     }
     case 'confirmTrade': {
-      const o = s.offer
-      if (!o || o.from !== p || ph.kind !== 'main') return 'You have no trade on the table.'
-      if (!o.accepted.includes(a.with)) return 'They have not said yes.'
-      const them = s.players[a.with]
-      if (!hasAll(me.hand, o.give)) return 'You no longer have what you offered.'
-      if (!hasAll(them.hand, o.get)) return 'They no longer have what you asked for.'
-      addTo(me.hand, o.give, -1)
-      addTo(them.hand, o.give, 1)
-      addTo(them.hand, o.get, -1)
-      addTo(me.hand, o.get, 1)
-      ev(s, { k: 'trade', from: p, to: a.with, give: { ...o.give }, get: { ...o.get } })
-      log(s, `${me.name} trades with ${them.name}.`, p)
-      s.offer = null
+      const o = s.offers.find((x) => x.from === p && (a.id === undefined || x.id === a.id) && x.accepted.includes(a.with))
+      if (!o || ph.kind !== 'main') return 'You have no trade on the table.'
+      const err = trade(s, o, a.with, o.picks[a.with] ?? emptyHand())
+      if (err) return err
+      s.offers = s.offers.filter((x) => x !== o)
       return
     }
     case 'buildKnight':
@@ -1394,7 +1413,7 @@ function expansionStep(s: GameState, p: number, a: ExpansionAction): string | vo
       const i = me.progress.findIndex((c) => c.card === card)
       if (i < 0) return 'You do not have that card.'
       if (card === 'augury' ? ph.kind !== 'roll' : !main) return card === 'augury' ? 'Augury is played before you roll.' : 'You cannot play that now.'
-      if (s.offer) return 'Settle the trade on the table first.'
+      if (s.offers.length) return 'Settle the trades on the table first.'
       const need = FIRST_NEED[card]
       const then = ph.kind === 'roll' ? 'roll' : 'main'
       if (need) {

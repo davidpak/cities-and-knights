@@ -34,7 +34,8 @@ import { VANISH, seeded, type Home, type PileSpec, type Thing } from './things.t
 
 const BOX = new BoxGeometry(1, 1, 1)
 
-export type TrayContents = { mode: 'trade' | 'discard'; give: Partial<Hand>; get: Partial<Hand>; locked?: boolean }
+/** `any`: cards asked for of the other player's choosing (a wildcard), shown face down */
+export type TrayContents = { mode: 'trade' | 'discard'; give: Partial<Hand>; get: Partial<Hand>; locked?: boolean; any?: number }
 type Build = 'road' | 'settlement' | 'city'
 
 export type TableProps = BoardProps & {
@@ -67,6 +68,7 @@ export type TableProps = BoardProps & {
     hand: (r: Good) => void
     trayGive: (r: Good) => void
     trayGet: (r: Good) => void
+    trayAny?: () => void
     want: (r: Good) => void
     bank: (r: Good) => void
     deck: () => void
@@ -180,7 +182,6 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   const specs: Spec[] = []
   const card = (s: Omit<Spec, 'kind'>) => specs.push({ kind: 'card', ...s })
   const seatOf = (p: number) => layout.seats.find((x) => x.p === p)
-  const homeOf = (p: number): Spot => (p === me ? layout.hand[2] : seatParts(seatOf(p)?.at ?? [0, -400], layout).hand)
 
   const x = view.x
   const K = layout.k
@@ -270,15 +271,18 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
       shown.forEach((r, i) => {
         const id = `tray:${side}:${r}`
         const at: Spot = [tx + (i - (shown.length - 1) / 2) * (CARD.w * CARD.small + 6), z]
-        // an offer to you: what they ask for appears on the tray (your hand keeps it until you accept), what they give
-        // comes from their cards; your own trade: from your hand, and what you ask for from the bank
-        const theirs = !!view.offer && view.offer.from !== me
-        const src = side === 'give' ? (theirs ? at : spots[r]) : theirs ? homeOf(view.offer!.from) : layout.bank[kinds.indexOf(r)]
+        // what you give comes from your hand, what you ask for from the bank
+        const src = side === 'give' ? spots[r] : layout.bank[kinds.indexOf(r)]
         card({ id, family: 'res', look: `res:${r}`, n: h[r] ?? 0, small: true, home: cardHome(id, at, { base: TRAY_FLOOR, loose: 1.8 }), from: src, to: src, enabled: can.tray && !tray.locked, onClick: () => (side === 'give' ? on.trayGive(r) : on.trayGet(r)) })
       })
     }
     row(tray.give, tz + (tray.mode === 'trade' ? TRAY.d / 4 : 0), 'give')
     if (tray.mode === 'trade') row(tray.get, tz - TRAY.d / 4, 'get')
+    // the wildcard: face down, at the far half's right end (a tap takes one back)
+    if (tray.mode === 'trade' && tray.any) {
+      const at: Spot = [tx + TRAY.w / 2 - 26, tz - TRAY.d / 4]
+      card({ id: 'tray:any', family: 'res', look: 'res:?', n: tray.any, small: true, home: cardHome('tray:any', at, { base: TRAY_FLOOR, faceDown: true, loose: 1.8 }), from: at, to: at, enabled: can.tray && !tray.locked, onClick: () => on.trayAny?.() })
+    }
     if (tray.mode === 'trade' && !tray.locked)
       kinds.forEach((r, i) => {
         const id = `want:${r}`

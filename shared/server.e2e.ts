@@ -49,7 +49,8 @@ while (Date.now() - t0 < 240_000) {
     if (!r.ok) throw new Error(`${c.name} ${act.type}: ${r.error}`)
     acted = true
     moves++
-    await wait(5)
+    // (the answer comes before the new view: wait for it, so the next move isn't made on the old one)
+    for (let k = 0; k < 100 && c.view === cv; k++) await wait(5)
   }
   if (!reconnected && moves === 3) {
     b.s.disconnect(); b.view = null

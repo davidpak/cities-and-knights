@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { TOPO, edgeBetween } from './board.ts'
 import { apply, longestRun, newGame, viewFor, victoryPoints, type Action, type GameState } from './engine.ts'
 import { botAction } from './bot.ts'
-import { BANK_EACH, PIECES, RESOURCES, emptyHand, handSize } from './rules.ts'
+import { BANK_EACH, PIECES, RESOURCES, emptyHand, handSize, type Hand } from './rules.ts'
 
 const seats = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}` }))
 function rng(seed: number) {
@@ -293,13 +293,13 @@ test('player trades: offer, decline, accept', () => {
   s = must(s, 2, { type: 'declineOffer' })
   s = must(s, 1, { type: 'acceptOffer' })
   assert.equal(s.players[0].hand.ore, 0, 'nothing moves until the offerer picks a partner')
-  assert.deepEqual(s.offer?.accepted, [1])
+  assert.deepEqual(s.offers[0]?.accepted, [1])
   assert.equal(apply(s, 0, { type: 'confirmTrade', with: 2 }).ok, false, 'player 2 said no')
   assert.equal(apply(s, 1, { type: 'confirmTrade', with: 1 }).ok, false, 'only the offerer confirms')
   s = must(s, 0, { type: 'confirmTrade', with: 1 })
   assert.equal(s.players[0].hand.ore, 1)
   assert.equal(s.players[1].hand.wool, 2)
-  assert.equal(s.offer, null)
+  assert.equal(s.offers.length, 0)
   const last = s.events[s.events.length - 1]
   assert.deepEqual(last.k === 'trade' && [last.from, last.to, last.give.wool, last.get.ore], [0, 1, 2, 1], 'the trade is told: who, with whom, what for what')
   invariants(s)
@@ -327,13 +327,53 @@ test('a trade offered to one player: only they answer, and yes trades at once', 
   s = must(s, 0, { type: 'offerTrade', give, get, to: 1 })
   assert.equal(apply(s, 2, { type: 'acceptOffer' }).ok, false, 'player 2 was not asked')
   const no = must(s, 1, { type: 'declineOffer' })
-  assert.equal(no.offer, null, 'a no closes it')
+  assert.equal(no.offers.length, 0, 'a no closes it')
   s = must(s, 1, { type: 'acceptOffer' })
-  assert.equal(s.offer, null)
+  assert.equal(s.offers.length, 0)
   assert.equal(s.players[0].hand.ore, 1)
   assert.equal(s.players[1].hand.grain, 2)
   const last = s.events[s.events.length - 1]
   assert.ok(last.k === 'trade' && last.from === 0 && last.to === 1)
+  invariants(s)
+})
+
+test('several offers at once, and a wildcard: the one who says yes picks the card', () => {
+  let s = afterSetup()
+  s = must(s, 0, { type: 'roll' })
+  while (s.phase.kind !== 'main') {
+    const p = s.phase.kind === 'discard' ? Number(Object.keys(s.phase.owed)[0]) : 0
+    s = must(s, p, botAction(s, p, rng(8))!)
+  }
+  const set = (p: number, h: Partial<Record<(typeof RESOURCES)[number], number>>) => {
+    for (const r of RESOURCES) {
+      s.bank[r] += s.players[p].hand[r] - (h[r] ?? 0)
+      s.players[p].hand[r] = h[r] ?? 0
+    }
+  }
+  set(0, { wool: 3 })
+  set(1, { ore: 1, brick: 2 })
+  set(2, { grain: 1 })
+  const h = (x: Partial<Hand>) => ({ ...emptyHand(), ...x })
+  // two open at once: wool for ore, and wool for any one card
+  s = must(s, 0, { type: 'offerTrade', give: h({ wool: 1 }), get: h({ ore: 1 }) })
+  s = must(s, 0, { type: 'offerTrade', give: h({ wool: 2 }), get: emptyHand(), any: 1 })
+  assert.equal(s.offers.length, 2)
+  const [a, b] = s.offers
+  assert.equal(apply(s, 1, { type: 'acceptOffer', id: b.id }).ok, false, 'a wildcard needs a pick')
+  assert.equal(apply(s, 1, { type: 'acceptOffer', id: b.id, pick: { wool: 1 } }).ok, false, 'not a kind they give')
+  assert.equal(apply(s, 2, { type: 'acceptOffer', id: b.id, pick: { brick: 1 } }).ok, false, 'not a card you hold')
+  s = must(s, 1, { type: 'acceptOffer', id: b.id, pick: { brick: 1 } })
+  s = must(s, 2, { type: 'acceptOffer', id: b.id, pick: { grain: 1 } })
+  s = must(s, 1, { type: 'acceptOffer', id: a.id })
+  // the wildcard one with player 2: their grain for two wool
+  s = must(s, 0, { type: 'confirmTrade', id: b.id, with: 2 })
+  assert.equal(s.players[0].hand.grain, 1)
+  assert.equal(s.players[2].hand.wool, 2)
+  assert.equal(s.offers.length, 1, 'the other offer stays open')
+  s = must(s, 0, { type: 'confirmTrade', id: a.id, with: 1 })
+  assert.equal(s.players[0].hand.ore, 1)
+  assert.equal(s.players[0].hand.wool, 0)
+  assert.equal(s.offers.length, 0)
   invariants(s)
 })
 

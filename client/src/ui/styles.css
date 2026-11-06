@@ -405,14 +405,118 @@ input {
   }
 }
 /* an open offer: a row of small chips over the tray (✓ ✕ …); the offerer taps a ✓ chip to trade */
-.offer-strip {
+.offers {
   position: absolute;
   transform: translate(-50%, calc(-100% - 6px));
   width: max-content;
-  display: flex;
+  max-width: calc(100vw - 12px);
+  display: grid;
+  justify-items: center;
   gap: 4px;
   z-index: 4;
   pointer-events: none;
+}
+/* one open offer: what goes each way, then who */
+.op-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 4px 3px 8px;
+  border-radius: 8px;
+  background: rgba(42, 29, 19, 0.82);
+  pointer-events: auto;
+  animation: op-in 0.15s ease-out;
+}
+.op-row.target {
+  background: none;
+  padding: 0;
+}
+.op-what {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--paper);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.op-what .arrow {
+  color: var(--ink-2);
+}
+.wild {
+  display: inline-grid;
+  grid-auto-flow: column;
+  place-items: center;
+  min-width: 18px;
+  height: 22px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: #b4824f;
+  color: #fff;
+  font-weight: 800;
+}
+.op-ans {
+  display: inline-flex;
+  gap: 4px;
+}
+.op-ok,
+.op-no,
+.op-x {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+}
+.op-ok {
+  background: #2f9e57;
+}
+.op-ok:disabled {
+  opacity: 0.35;
+}
+.op-no {
+  background: #d2452f;
+}
+.op-x {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  background: rgba(246, 236, 213, 0.18);
+}
+.op-done {
+  color: #6fd396;
+  padding: 0 6px;
+}
+.op-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 4px;
+  color: var(--paper);
+}
+/* the wildcard: "?" at the tray's corner */
+.any-btn {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: #b4824f;
+  color: #fff;
+  font: inherit;
+  font-size: 19px;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  touch-action: manipulation;
 }
 .pchip {
   display: inline-flex;

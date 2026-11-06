@@ -21,7 +21,7 @@ import { Bundle } from './Cards.tsx'
 import { Announcer, Chronicle, describe, Who } from './Chronicle.tsx'
 
 type Build = 'road' | 'settlement' | 'city' | 'knight' | 'wall'
-type Deal = { give: Hand; get: Hand; to: 'bank' | number | null }
+type Deal = { give: Hand; get: Hand; to: 'bank' | number | null; any?: number }
 
 const add = (h: Hand, r: Good, d = 1): Hand => ({ ...h, [r]: Math.max(0, h[r] + d) })
 const minus = (a: Hand, b: Partial<Hand>): Hand => Object.fromEntries(GOODS.map((r) => [r, Math.max(0, a[r] - (b[r] ?? 0))])) as Hand
@@ -60,11 +60,10 @@ export function Game({ view }: { view: View }) {
   const mine = me >= 0 && view.current === me
   const main = mine && ph.kind === 'main'
   const hand = me >= 0 ? view.players[me].hand : null
-  const offer = view.offer
-  const myOffer = offer?.from === me ? offer : null
-  // an offer you're part of and haven't turned down (toMe: and haven't answered yet)
-  const inOffer = offer && me >= 0 && offer.from !== me && (offer.to === undefined || offer.to === me) && !offer.declined.includes(me) ? offer : null
-  const toMe = inOffer && !inOffer.accepted.includes(me) ? inOffer : null
+  // open offers: yours, and those put to you that you haven't turned down
+  const myOffers = view.offers.filter((o) => o.from === me)
+  const incoming = me >= 0 ? view.offers.filter((o) => o.from !== me && (o.to === undefined || o.to === me) && !o.declined.includes(me)) : []
+  const toMe = incoming.filter((o) => !o.accepted.includes(me))
   const owe = ph.kind === 'discard' ? ph.owed[me] ?? 0 : 0
 
   const aspect = useAspect()
@@ -98,11 +97,11 @@ export function Game({ view }: { view: View }) {
   useEffect(() => {
     if (!owe) setDrop(emptyHand())
   }, [owe])
-  const hadOffer = useRef(!!myOffer)
+  // saying yes to an offer with a wildcard: tap the cards from your hand that you'll give for it
+  const [pickFor, setPickFor] = useState<{ id: number; need: number; picked: Hand } | null>(null)
   useEffect(() => {
-    if (hadOffer.current && !myOffer) setDeal(null) // your offer was answered (or taken back): the tray clears
-    hadOffer.current = !!myOffer
-  }, [myOffer])
+    if (pickFor && !toMe.some((o) => o.id === pickFor.id)) setPickFor(null)
+  }, [pickFor, toMe])
 
   const can = {
     road: main && view.players[me].pieces.road > 0 && affordable(view, me, 'road') && roadSpots(view, me).length > 0,
@@ -205,8 +204,8 @@ export function Game({ view }: { view: View }) {
   const myFan = ph.kind === 'steal' && !mine && ph.victims.includes(me) ? ph.fans?.[me] ?? null : null
   const progressOwed = ph.kind === 'progressDiscard' ? ph.owed[me] ?? 0 : 0
   const myProgress = view.players[me]?.progress ?? []
-  const progressPlayable = (c: Progress) => progressOwed > 0 || (mine && !myOffer && (c === 'augury' ? ph.kind === 'roll' : ph.kind === 'main'))
-  const trading = main && !myOffer && !plenty && !monopoly
+  const progressPlayable = (c: Progress) => progressOwed > 0 || (mine && !view.offers.length && (c === 'augury' ? ph.kind === 'roll' : ph.kind === 'main'))
+  const trading = main && !plenty && !monopoly
   // while trading: the bank cards that can be had (the bank has one, and some other kind meets its rate)
   const bankKinds: readonly Good[] = view.x ? GOODS : RESOURCES
   const bankGoods: Partial<Record<Good, boolean>> | undefined =
@@ -221,13 +220,11 @@ export function Game({ view }: { view: View }) {
 
   // the tray shows: an offer made to you, your own offer waiting, your discard, or the trade you're putting together
   let tray: TrayContents | null = null
-  if (inOffer) tray = { mode: 'trade', give: inOffer.get, get: inOffer.give, locked: true }
-  else if (myOffer) tray = { mode: 'trade', give: myOffer.give, get: myOffer.get, locked: true }
-  else if (owe) tray = { mode: 'discard', give: drop, get: {} }
-  else if (deal) tray = { mode: 'trade', give: deal.give, get: deal.get }
+  if (owe) tray = { mode: 'discard', give: drop, get: {} }
+  else if (deal) tray = { mode: 'trade', give: deal.give, get: deal.get, any: deal.any }
   // what's on the tray came out of your hand (an offer to you shows what you'd hand over)
   // (an offer to you takes nothing from your hand until you accept it)
-  const onTray = owe ? drop : myOffer ? myOffer.give : inOffer ? {} : deal ? deal.give : {}
+  const onTray = owe ? drop : deal ? deal.give : pickFor ? pickFor.picked : {}
   const shownHand = hand ? minus(hand, onTray) : null
   useEffect(
     () =>
@@ -259,11 +256,20 @@ export function Game({ view }: { view: View }) {
   const on = {
     hand: (r: Good) => {
       if (owe) return handSize(drop) < owe && setDrop(add(drop, r))
+      if (pickFor && hand) {
+        const o = view.offers.find((x) => x.id === pickFor.id)
+        if (!o || (o.give[r] ?? 0) > 0 || hand[r] - (o.get[r] ?? 0) - pickFor.picked[r] <= 0) return
+        const picked = add(pickFor.picked, r)
+        if (handSize(picked) < pickFor.need) return setPickFor({ ...pickFor, picked })
+        setPickFor(null)
+        return void act({ type: 'acceptOffer', id: o.id, pick: picked })
+      }
       if (!trading) return
       openDeal({ give: add(deal?.give ?? emptyHand(), r) })
     },
     trayGive: (r: Good) => (owe ? setDrop(add(drop, r, -1)) : deal && setDeal({ ...deal, give: add(deal.give, r, -1) })),
     trayGet: (r: Good) => deal && setDeal({ ...deal, get: add(deal.get, r, -1) }),
+    trayAny: () => deal && setDeal({ ...deal, any: Math.max(0, (deal.any ?? 0) - 1) }),
     want: (r: Good) => openDeal({ get: add(deal?.get ?? emptyHand(), r) }),
     bank: async (r: Good) => {
       if (pickPhase && targets.includes(r)) return act({ type: 'pick', target: r })
@@ -335,17 +341,17 @@ export function Game({ view }: { view: View }) {
     opponent: (p: number) => {
       if (pickPhase && targets.includes(p)) return act({ type: 'pick', target: p })
       if (victims.includes(p)) return setRobFrom(p)
-      if (myOffer && myOffer.to === undefined && myOffer.accepted.includes(p)) return act({ type: 'confirmTrade', with: p })
+      const ready = myOffers.find((o) => o.to === undefined && o.accepted.includes(p))
+      if (ready) return act({ type: 'confirmTrade', id: ready.id, with: p })
       if (!trading) return
       // a full deal goes to them at once; otherwise they become who it's for (a second tap: everyone again)
-      if (deal && handSize(deal.give) && handSize(deal.get) && !GOODS.some((r) => deal.give[r] && deal.get[r])) return act({ type: 'offerTrade', give: deal.give, get: deal.get, to: p })
+      if (deal && handSize(deal.give) && handSize(deal.get) + (deal.any ?? 0) && !GOODS.some((r) => deal.give[r] && deal.get[r]))
+        return void act({ type: 'offerTrade', give: deal.give, get: deal.get, any: deal.any ?? 0, to: p }).then((ok) => ok && setDeal(null))
       openDeal({ to: deal?.to === p ? null : p })
     },
   }
 
-  const acts = trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop })
-  // while an offer is up, its panel on the tray holds every button for it
-  const offerUp = !!(myOffer || inOffer)
+  const acts = trayActs({ deal, setDeal, owe, drop })
 
   // your turn, while you're in another tab: the tab says so
   useEffect(() => {
@@ -386,11 +392,11 @@ export function Game({ view }: { view: View }) {
       }
       if (!mine) return
       if (e.key.toLowerCase() === 'r' && ph.kind === 'roll') act({ type: 'roll' })
-      if (e.key.toLowerCase() === 'e' && ph.kind === 'main' && !myOffer) act({ type: 'endTurn' })
+      if (e.key.toLowerCase() === 'e' && ph.kind === 'main') act({ type: 'endTurn' })
     }
     window.addEventListener('keydown', f)
     return () => window.removeEventListener('keydown', f)
-  }, [mine, ph.kind, myOffer])
+  }, [mine, ph.kind])
 
   // labels and buttons scale with the table (so they keep their places on it, on any screen)
   const project = useProjector()
@@ -426,7 +432,7 @@ export function Game({ view }: { view: View }) {
         tray={tray}
         building={building}
         can={{
-          hand: !!hand && (trading || owe > 0),
+          hand: !!hand && (trading || owe > 0 || !!pickFor),
           tray: (trading && !!deal) || owe > 0,
           wants: trading,
           bank: trading || !!plenty || monopoly || (!!pickPhase && ['resource', 'commodity', 'good'].includes(pickPhase.need)),
@@ -444,12 +450,13 @@ export function Game({ view }: { view: View }) {
         on={on}
       />
 
-      <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} toMe={toMe} armed={armed && !!picking} />
+      <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} toMe={toMe[toMe.length - 1] ?? null} armed={armed && !!picking} />
 
       <Labels view={view} layout={layout} hand={shownHand} />
 
       {tray && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} />}
-      {(offerUp || typeof deal?.to === 'number') && <OfferStrip view={view} layout={layout} target={offerUp ? null : (deal!.to as number)} />}
+      <Offers view={view} layout={layout} target={typeof deal?.to === 'number' ? deal.to : null} pickFor={pickFor} onPick={setPickFor} />
+      {trading && deal && <AnyButton layout={layout} onAdd={() => setDeal({ ...deal, any: (deal.any ?? 0) + 1 })} />}
 
       <RollFlash view={view} layout={layout} />
       <Announcer view={view} />
@@ -494,7 +501,7 @@ export function Game({ view }: { view: View }) {
         )}
         {/* (on a phone, while the tray's buttons are down here, they take the turn button's place) */}
         {main && !(tray && layout.marks === 'corner' && (acts.ok || acts.no)) && (
-          <button className="stamp-btn go big" disabled={!!myOffer} onClick={() => act({ type: 'endTurn' })}>
+          <button className="stamp-btn go big" onClick={() => act({ type: 'endTurn' })}>
             End turn
           </button>
         )}
@@ -527,7 +534,7 @@ export function Game({ view }: { view: View }) {
 
 // ---------------------------------------------------------------- the two lines at the top
 
-function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean; owe: number; building: Build | null; selected: number | null; progressOwed: number; toMe: View['offer']; armed: boolean }) {
+function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean; owe: number; building: Build | null; selected: number | null; progressOwed: number; toMe: View['offers'][number] | null; armed: boolean }) {
   const { view, plenty, monopoly, owe, building, selected, progressOwed, toMe, armed } = props
   const ph = view.phase
   const mine = view.current === view.you
@@ -544,7 +551,7 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   if (mine && building === 'knight') todo = 'Place or upgrade knight'
   if (mine && building === 'wall') todo = 'Pick city'
   if (mine && selected !== null) todo = 'Move knight'
-  if (view.offer && ph.kind === 'main' && (mine || view.offer.to === undefined || view.offer.to === view.you)) todo = 'Trade pending'
+  if (ph.kind === 'main' && view.offers.some((o) => o.from === view.you || o.to === undefined || o.to === view.you)) todo = 'Trade pending'
   let cancel = false
   if (mine && ph.kind === 'pick') {
     todo = (
@@ -651,23 +658,14 @@ function Labels({ view, layout, hand }: { view: View; layout: ReturnType<typeof 
 
 type TrayActs = { ok: (() => void) | null; no: (() => void) | null; okLive: boolean; okWord: string; noWord: string }
 /** what the tray's two buttons do now (and what they say, where there's room to say it) */
-function trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop }: { view: View; deal: Deal | null; setDeal: (d: Deal | null) => void; toMe: View['offer']; myOffer: View['offer']; owe: number; drop: Hand }): TrayActs {
-  const me = view.you
-  if (toMe)
-    return {
-      ok: () => act({ type: 'acceptOffer' }),
-      okLive: GOODS.every((r) => (view.players[me].hand?.[r] ?? 0) >= (toMe.get[r] ?? 0)),
-      okWord: 'Accept',
-      no: () => act({ type: 'declineOffer' }),
-      noWord: 'Decline',
-    }
-  if (myOffer) return { ok: null, okLive: false, okWord: '', no: () => act({ type: 'cancelOffer' }), noWord: 'Cancel' }
+function trayActs({ deal, setDeal, owe, drop }: { deal: Deal | null; setDeal: (d: Deal | null) => void; owe: number; drop: Hand }): TrayActs {
   if (owe) return { ok: () => act({ type: 'discard', cards: drop }), okLive: handSize(drop) === owe, okWord: `Discard ${owe}`, no: null, noWord: '' }
   if (deal)
-    // the check puts it to everyone, or to the one player picked (by a tap on their cards)
+    // the check puts it to everyone, or to the one player picked (by a tap on their cards); the tray then clears
+    // for the next one
     return {
-      ok: () => act({ type: 'offerTrade', give: deal.give, get: deal.get, ...(typeof deal.to === 'number' ? { to: deal.to } : {}) }),
-      okLive: handSize(deal.give) > 0 && handSize(deal.get) > 0 && !GOODS.some((r) => deal.give[r] && deal.get[r]),
+      ok: () => void act({ type: 'offerTrade', give: deal.give, get: deal.get, any: deal.any ?? 0, ...(typeof deal.to === 'number' ? { to: deal.to } : {}) }).then((ok) => ok && setDeal(null)),
+      okLive: handSize(deal.give) > 0 && handSize(deal.get) + (deal.any ?? 0) > 0 && !GOODS.some((r) => deal.give[r] && deal.get[r]),
       okWord: 'Offer',
       no: () => setDeal(null),
       noWord: 'Clear',
@@ -675,41 +673,107 @@ function trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop }: { view: Vie
   return { ok: null, no: null, okLive: false, okWord: '', noWord: '' }
 }
 
-/**
- * Chips over the tray. Your open offer: one per player it's put to, with ✓, ✕ or … (tap a ✓ to trade). An offer
- * to you: who it's from. A trade you're putting together for one player: who.
- */
-function OfferStrip({ view, layout, target }: { view: View; layout: ReturnType<typeof layoutFor>; target: number | null }) {
+/** a wildcard: "?" at the tray's corner asks for one more card of their choosing */
+function AnyButton({ layout, onAdd }: { layout: ReturnType<typeof layoutFor>; onAdd: () => void }) {
   const project = useProjector()
-  const o = view.offer
+  // (inside the far right corner, on the half that holds what you ask for)
+  const [x, y] = project(layout.tray[0] + TRAY.w / 2 - 18, 0, layout.tray[1] - TRAY.d / 2 + 18)
+  return (
+    <button className="any-btn" style={{ left: x, top: y }} onClick={onAdd} aria-label="Any card">
+      ?
+    </button>
+  )
+}
+
+/**
+ * Open offers, one short row each, over the tray: what goes each way, then who. Yours: a chip per player asked, ✓,
+ * ✕ or … (tap a ✓ to trade), and ✕ to take it back. One put to you: who it's from, and ✓ / ✕ (with a wildcard,
+ * ✓ then the cards from your hand). And a trade you're putting together for one player: who.
+ */
+function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout: ReturnType<typeof layoutFor>; target: number | null; pickFor: { id: number; need: number; picked: Hand } | null; onPick: (p: { id: number; need: number; picked: Hand } | null) => void }) {
+  const project = useProjector()
   const me = view.you
+  const pc = (p: number) => ({ ['--pc' as string]: PLAYER[view.players[p].color].ui })
   const chip = (p: number, mark: React.ReactNode = null, cls = '') => (
-    <span key={p} className={`pchip ${cls}`} style={{ ['--pc' as string]: PLAYER[view.players[p].color].ui }}>
+    <span key={p} className={`pchip ${cls}`} style={pc(p)}>
       {view.players[p].name} {mark !== null && <b>{mark}</b>}
     </span>
   )
-  let chips: React.ReactNode[] = []
-  if (o && o.from === me)
-    chips = view.players
-      .map((_, i) => i)
-      .filter((i) => i !== me && (o.to === undefined || i === o.to))
-      .map((p) => {
-        const st = o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait'
-        if (st === 'yes')
-          return (
-            <button key={p} className="pchip yes go" style={{ ['--pc' as string]: PLAYER[view.players[p].color].ui }} onClick={() => act({ type: 'confirmTrade', with: p })}>
-              {view.players[p].name} <b>⇄</b>
+  const hand = me >= 0 ? view.players[me].hand : null
+  const rows = view.offers
+    .filter((o) => o.from === me || (o.from !== me && (o.to === undefined || o.to === me) && !o.declined.includes(me)))
+    .map((o) => {
+      const mineO = o.from === me
+      // what goes which way, from where you sit: what you give, then what you get
+      const give = mineO ? o.give : { ...o.get }
+      const get = mineO ? o.get : o.give
+      const wild = o.any ? <span className="wild">?{o.any > 1 ? <b>{o.any}</b> : null}</span> : null
+      const what = (
+        <span className="op-what">
+          <Bundle of={give} empty="" />
+          {!mineO && wild}
+          <span className="arrow">→</span>
+          <Bundle of={get} empty="" />
+          {mineO && wild}
+        </span>
+      )
+      if (mineO) {
+        const asked = view.players.map((_, i) => i).filter((i) => i !== me && (o.to === undefined || i === o.to))
+        return (
+          <div key={o.id} className="op-row">
+            {what}
+            {asked.map((p) => {
+              const st = o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait'
+              if (st === 'yes')
+                return (
+                  <button key={p} className="pchip yes go" style={pc(p)} onClick={() => act({ type: 'confirmTrade', id: o.id, with: p })}>
+                    {view.players[p].name} <b>⇄</b>
+                  </button>
+                )
+              return chip(p, st === 'no' ? '✕' : <i className="dots" />, st)
+            })}
+            <button className="op-x" onClick={() => act({ type: 'cancelOffer', id: o.id })} aria-label="Cancel">
+              ✕
             </button>
-          )
-        return chip(p, st === 'no' ? '✕' : <i className="dots" />, st)
-      })
-  else if (o) chips = [chip(o.from, '⇄')]
-  else if (target !== null) chips = [chip(target, '→')]
-  if (!chips.length) return null
+          </div>
+        )
+      }
+      const answered = o.accepted.includes(me)
+      const can = !!hand && GOODS.every((r) => hand[r] >= (o.get[r] ?? 0)) && handSize(hand) - handSize(o.get) >= o.any
+      const picking = pickFor?.id === o.id
+      return (
+        <div key={o.id} className="op-row">
+          {chip(o.from)}
+          {what}
+          {answered ? (
+            <b className="op-done">✓</b>
+          ) : picking ? (
+            <span className="op-pick">
+              <Bundle of={pickFor.picked} empty="" />
+              <span className="wild">?<b>{pickFor.need - handSize(pickFor.picked)}</b></span>
+              <button className="op-x" onClick={() => onPick(null)} aria-label="Back">
+                ✕
+              </button>
+            </span>
+          ) : (
+            <span className="op-ans">
+              <button className="op-ok" disabled={!can} onClick={() => (o.any ? onPick({ id: o.id, need: o.any, picked: emptyHand() }) : act({ type: 'acceptOffer', id: o.id }))} aria-label="Accept">
+                ✓
+              </button>
+              <button className="op-no" onClick={() => act({ type: 'declineOffer', id: o.id })} aria-label="Decline">
+                ✕
+              </button>
+            </span>
+          )}
+        </div>
+      )
+    })
+  if (target !== null) rows.push(<div key="target" className="op-row target">{chip(target, '→')}</div>)
+  if (!rows.length) return null
   const [x, top] = project(layout.tray[0], 0, layout.tray[1] - TRAY.d / 2)
   return (
-    <div className="offer-strip" style={{ left: x, top }}>
-      {chips}
+    <div className="offers" style={{ left: x, top }}>
+      {rows}
     </div>
   )
 }

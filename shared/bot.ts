@@ -50,11 +50,21 @@ export function botAction(s: S, p: number, rnd: () => number): Action | null {
     return { type: 'discardProgress', card: pick(mine, rnd).card }
   }
 
-  if (s.offer && s.offer.from !== p && (s.offer.to === undefined || s.offer.to === p) && ph.kind === 'main' && !s.offer.declined.includes(p) && !s.offer.accepted.includes(p)) {
-    const o = s.offer
-    const fair = handSize(o.give) >= handSize(o.get)
-    const can = hasAll(hand, o.get)
-    return can && fair && rnd() < 0.5 ? { type: 'acceptOffer' } : { type: 'declineOffer' }
+  const o = ph.kind === 'main' ? s.offers.find((x) => x.from !== p && (x.to === undefined || x.to === p) && !x.declined.includes(p) && !x.accepted.includes(p)) : undefined
+  if (o) {
+    const fair = handSize(o.give) >= handSize(o.get) + o.any
+    // a wildcard: give what we have most of (not a kind they give, and beyond what they ask for)
+    const left = { ...hand }
+    for (const r of GOODS) left[r] -= o.get[r] ?? 0
+    const pick = emptyHand()
+    for (let k = 0; k < o.any; k++) {
+      const r = GOODS.filter((g) => left[g] > 0 && !(o.give[g] > 0)).sort((a, b) => left[b] - left[a])[0]
+      if (!r) break
+      left[r]--
+      pick[r]++
+    }
+    const can = hasAll(hand, o.get) && handSize(pick) === o.any
+    return can && fair && rnd() < 0.5 ? { type: 'acceptOffer', id: o.id, ...(o.any ? { pick } : {}) } : { type: 'declineOffer', id: o.id }
   }
 
   if (p !== s.current) return null
@@ -90,7 +100,8 @@ function pick<T>(xs: T[], rnd: () => number): T {
 
 function mainMove(s: S, p: number, hand: Hand, rnd: () => number): Action {
   const me = s.players[p]
-  if (s.offer?.from === p) return s.offer.accepted.length ? { type: 'confirmTrade', with: s.offer.accepted[0] } : { type: 'cancelOffer' }
+  const mineOpen = s.offers.find((x) => x.from === p)
+  if (mineOpen) return mineOpen.accepted.length ? { type: 'confirmTrade', id: mineOpen.id, with: mineOpen.accepted[0] } : { type: 'cancelOffer', id: mineOpen.id }
   if (!s.cardPlayed) {
     if (canPlay(s, p, 'monopoly')) {
       return { type: 'playMonopoly', resource: pick([...RESOURCES], rnd) }
@@ -134,7 +145,8 @@ const PLAY_NOW: Progress[] = ['trader', 'charter', 'corner', 'guild', 'bargain',
 function knightsMove(s: S, p: number, hand: Hand, rnd: () => number): Action {
   const me = s.players[p]
   const x = s.x!
-  if (s.offer?.from === p) return s.offer.accepted.length ? { type: 'confirmTrade', with: s.offer.accepted[0] } : { type: 'cancelOffer' }
+  const mineOpen = s.offers.find((x) => x.from === p)
+  if (mineOpen) return mineOpen.accepted.length ? { type: 'confirmTrade', id: mineOpen.id, with: mineOpen.accepted[0] } : { type: 'cancelOffer', id: mineOpen.id }
 
   // the barbarians: keep enough knights ready to pull our weight
   const near = x.barbarian >= BARBARIAN_STEPS - 3
@@ -194,7 +206,7 @@ function knightsMove(s: S, p: number, hand: Hand, rnd: () => number): Action {
 function playable(s: S, p: number, card: Progress): boolean {
   const me = s.players[p]
   const x = s.x!
-  if (s.offer) return false
+  if (s.offers.length) return false
   switch (card) {
     case 'roadCrew':
       return me.pieces.road > 0 && roadSpots(s, p).length > 0

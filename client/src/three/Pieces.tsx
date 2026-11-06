@@ -253,7 +253,7 @@ export function BoardPieces({ buildings, roads, colors, you = -1, arrive = 0, ex
       }
       const i = n[p.kind]++
       m.setMatrixAt(i, tmpMat.compose(tmpPos, tmpRot, shown ? ONE : ZERO))
-      m.setColorAt(i, p.kind === 'wall' ? stone : p.kind === 'halo' ? gold : p.lying ? restColor(p.color) : pieceColor(p.color))
+      m.setColorAt(i, p.kind === 'wall' ? stone : p.kind === 'halo' || p.kind === 'tower' ? gold : p.lying ? restColor(p.color) : pieceColor(p.color))
     }
     for (const kind of KIND_LIST) {
       const m = refs.current[kind]

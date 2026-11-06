@@ -45,6 +45,8 @@ const newCode = () => {
     if (!rooms.has(c)) return c
   }
 }
+/** how long a victim has to catch a card being sneaked away */
+const SNATCH_MS = 2000
 const BOT_NAMES = ['Bramble', 'Pip', 'Juniper', 'Moss', 'Clover', 'Wren']
 
 function info(r: Room): RoomInfo {
@@ -236,11 +238,25 @@ io.on('connection', (raw) => {
     if (!room?.game) return ack({ ok: false, error: 'No game.' })
     const p = room.game.players.findIndex((x) => x.id === player)
     if (p < 0) return ack({ ok: false, error: 'You are not playing.' })
+    // (only the server ends a snatch, when its moment is up)
+    if (action?.type === 'snatchEnd') return ack({ ok: false, error: 'Not yours to do.' })
     const res = apply(room.game, p, action)
     if (!res.ok) return ack(res)
     room.game = res.state
     ack({ ok: true })
     send(room)
+    // a card being sneaked: the victim has a moment to catch it, then the thief gets away with it
+    const sn = room.game.snatch
+    if (action.type === 'snatch' && sn) {
+      setTimeout(() => {
+        if (!room.game || room.game.snatch?.id !== sn.id) return
+        const end = apply(room.game, sn.thief, { type: 'snatchEnd' })
+        if (end.ok) {
+          room.game = end.state
+          send(room)
+        }
+      }, SNATCH_MS)
+    }
   })
 
   socket.on('disconnect', () => {

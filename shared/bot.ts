@@ -43,6 +43,11 @@ export function botAction(s: S, p: number, rnd: () => number): Action | null {
     return { type: 'discard', cards }
   }
 
+  // someone is sneaking one of our cards: we notice about a third of the time
+  if (s.snatch?.victim === p && (s.snatch.id * 7919) % 100 < 35) return { type: 'catch' }
+  // caught sneaking (we never try, but): give back what we have most of
+  if (ph.kind === 'payback') return ph.thief === p ? { type: 'payback', card: best(GOODS.filter((r) => hand[r] > 0), (r) => hand[r]) } : null
+
   // the barbarians won and we pick which city to lose: a walled one (only its wall goes), else the poorest
   if (ph.kind === 'pillage') {
     const mine = ph.owed[p]

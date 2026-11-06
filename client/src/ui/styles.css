@@ -1547,3 +1547,66 @@ input {
   border-radius: 10px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
+
+.zoom-why {
+  max-width: min(300px, 86vw);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #d2452f;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* a choice in the middle: cards, players or numbers */
+.ch-cards,
+.ch-players,
+.ch-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: min(92vw, 720px);
+}
+.ch-card {
+  width: clamp(64px, 17vw, 100px);
+  aspect-ratio: 200 / 280;
+  border: none;
+  border-radius: 8px;
+  background-size: cover;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.1s;
+  touch-action: manipulation;
+}
+.ch-card:hover,
+.ch-card:active {
+  transform: translateY(-8px);
+}
+.ch-player {
+  min-height: 52px;
+  padding: 0 22px;
+  border: none;
+  border-left: 8px solid var(--pc);
+  border-radius: 10px;
+  background: var(--paper);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+.ch-number {
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  background: var(--paper);
+  font: inherit;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+  touch-action: manipulation;
+}
+.ch-number.red {
+  color: #c0392b;
+}

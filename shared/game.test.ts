@@ -495,3 +495,32 @@ test('robbing: the thief picks a card from the victim\'s fan; the victim may arr
   assert.equal(r.state.players[1].hand.brick, 0)
   assert.equal(r.state.phase.kind, 'main')
 })
+
+test('sneaking a card: caught means giving one back; not caught means a card taken; others never see it', () => {
+  let s = afterSetup()
+  s = must(s, 0, { type: 'roll' })
+  while (s.phase.kind !== 'main') {
+    const p = s.phase.kind === 'discard' ? Number(Object.keys(s.phase.owed)[0]) : 0
+    s = must(s, p, botAction(s, p, rng(8))!)
+  }
+  s.players[1].hand = { ...emptyHand(), ore: 2 }
+  s.players[2].hand = { ...emptyHand(), wool: 1 }
+  // player 2 (not even their turn) sneaks from player 1, who doesn't notice
+  let t = must(s, 2, { type: 'snatch', victim: 1 })
+  assert.equal(apply(t, 2, { type: 'snatch', victim: 1 }).ok, false, 'one at a time, once a turn')
+  assert.equal(viewFor(t, 0).snatch, null, 'nobody else sees it')
+  assert.equal(viewFor(t, 1).snatch?.thief, -1, 'the victim sees it happen, not who')
+  t = must(t, 2, { type: 'snatchEnd' })
+  assert.equal(t.players[2].hand.ore, 1)
+  assert.ok(!viewFor(t, 0).events.some((e) => e.k === 'snatch'), 'not in anyone else\'s history')
+  // next turn, they try again and are caught: they give a card of their choice back
+  t = must(t, 0, { type: 'endTurn' })
+  t = { ...t, phase: { kind: 'main' } }
+  t = must(t, 2, { type: 'snatch', victim: 1 })
+  t = must(t, 1, { type: 'catch' })
+  assert.equal(t.phase.kind, 'payback')
+  assert.equal(apply(t, 1, { type: 'payback', card: 'ore' }).ok, false, 'only the thief gives back')
+  t = must(t, 2, { type: 'payback', card: 'wool' })
+  assert.equal(t.players[1].hand.wool, 1)
+  assert.equal(t.phase.kind, 'main')
+})

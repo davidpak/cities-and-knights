@@ -249,6 +249,24 @@ export function describe(view: View, e: GameEvent, onCard?: (e: GameEvent) => vo
           {!e.what || e.what === 'progress' ? (e.what === 'progress' ? '' : ' card' + (e.count === 1 ? '' : 's')) : ''} from {W(e.from)}
         </>
       )
+    case 'snatch':
+      return e.thief >= 0 ? (
+        <>
+          {W(e.thief)} pinched {e.r ? <Bundle of={one(e.r)} /> : 'a card'} from {W(e.victim)}
+        </>
+      ) : (
+        <>A card went missing: {e.r ? <Bundle of={one(e.r)} /> : 'a card'}</>
+      )
+    case 'caught':
+      return e.r ? (
+        <>
+          {W(e.thief)} gave {W(e.victim)} <Bundle of={one(e.r)} />
+        </>
+      ) : (
+        <>
+          {W(e.thief)} caught stealing from {W(e.victim)}!
+        </>
+      )
     case 'pillage':
       return (
         <>
@@ -316,7 +334,7 @@ export function Chronicle({ view, onCard }: { view: View; onCard?: (e: GameEvent
 }
 
 /** which moments flash up: what others do that changes the table (rolls have their own flash) */
-const HEADLINE = new Set<GameEvent['k']>(['trade', 'steal', 'seven', 'monopoly', 'award', 'bank', 'build', 'play', 'plenty', 'progress', 'metropolis', 'attack', 'robber', 'take', 'unroad', 'swap', 'wall', 'knight', 'improve', 'pillage'])
+const HEADLINE = new Set<GameEvent['k']>(['trade', 'steal', 'seven', 'monopoly', 'award', 'bank', 'build', 'play', 'plenty', 'progress', 'metropolis', 'attack', 'robber', 'take', 'unroad', 'swap', 'wall', 'knight', 'improve', 'pillage', 'caught'])
 const actor = (e: GameEvent): number | null => ('p' in e && typeof e.p === 'number' ? e.p : e.k === 'trade' ? e.from : e.k === 'steal' ? e.thief : null)
 
 /** what others just did, one short flash at a time over the board (your own moves you saw yourself) */

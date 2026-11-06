@@ -52,9 +52,8 @@ function invariants(s: GameState) {
   })
   // progress cards: every one is in a pile, a hand, or laid down
   const held = s.players.reduce((n, p) => n + p.progress.length, 0) + x.points.reduce((n, l) => n + l.length, 0) + TRACKS.reduce((n, t) => n + x.decks[t].length, 0)
-  const pending = s.phase.kind === 'pick' ? 1 : 0
-  // (a played card leaves the game)
-  assert.ok(held + pending <= PROGRESS_TOTAL)
+  // (a played card goes back under its pile: none is ever lost)
+  assert.equal(held, PROGRESS_TOTAL)
   for (const [v, k] of Object.entries(x.knights)) {
     assert.equal(s.buildings[Number(v)], undefined, 'a knight and a building never share a corner')
     assert.ok(k.level >= 1 && k.level <= 3)

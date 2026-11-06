@@ -87,6 +87,8 @@ export type Phase =
   | { kind: 'pick'; card: Progress; need: PickNeed; step: number; data: number[]; then: 'roll' | 'main' }
   /** someone holds more than four progress cards: they put back the extra, then play goes on */
   | { kind: 'progressDiscard'; owed: Record<number, number>; then: Phase }
+  /** a thief caught sneaking a card gives the victim one of their choice */
+  | { kind: 'payback'; thief: number; victim: number; then: Phase }
   /** the barbarians won: each player who loses a city and has more than one to lose picks which (their cities here) */
   | { kind: 'pillage'; owed: Record<number, number[]>; then: Phase }
   | { kind: 'over'; winner: number }
@@ -121,6 +123,10 @@ export type GameEvent = { n: number } & (
   | { k: 'discard'; p: number; count: number }
   | { k: 'robber'; p: number; hex: number }
   | { k: 'steal'; thief: number; victim: number; r?: Good }
+  /** a card sneaked away (only the thief, and the victim without the thief's name, ever see this) */
+  | { k: 'snatch'; thief: number; victim: number; r?: Good }
+  /** caught sneaking a card; the card given back for it */
+  | { k: 'caught'; thief: number; victim: number; r?: Good }
   /** a city picked to lose to the barbarians (or its wall) */
   | { k: 'pillage'; p: number; at: number; wall: boolean }
   | { k: 'barbarians'; at: number }
@@ -166,6 +172,14 @@ export type GameState = {
   cardPlayed: boolean
   offers: Offer[]
   offerSeq: number
+  /**
+   * A card being sneaked out of someone's hand (dragged across the table). The victim has a moment to catch it
+   * ('catch'); if they don't, the server ends it ('snatchEnd') and the thief has a card at random. Caught: the
+   * thief owes them a card of their choice ('payback' phase).
+   */
+  snatch: { id: number; thief: number; victim: number } | null
+  /** the turn each player last tried a snatch (once a turn) */
+  snatched: Record<number, number>
   longestRoad: number | null
   largestArmy: number | null
   log: LogEntry[]
@@ -184,6 +198,14 @@ export type Action =
   | { type: 'steal'; victim: number; index?: number }
   | { type: 'arrange'; order: Good[] }
   | { type: 'pillage'; vertex: number }
+  /** sneak a card from someone (any player, during any main phase, once a turn) */
+  | { type: 'snatch'; victim: number }
+  /** the victim, in time: caught! */
+  | { type: 'catch' }
+  /** (the server only, when the moment has passed: the thief gets away with it) */
+  | { type: 'snatchEnd' }
+  /** caught: the card you give back */
+  | { type: 'payback'; card: Good }
   | { type: 'buyCard' }
   | { type: 'playKnight' }
   | { type: 'playRoadBuilding' }
@@ -260,6 +282,8 @@ export function newGame(seats: Seat[], seed: number, opts: Options = {}): GameSt
     cardPlayed: false,
     offers: [],
     offerSeq: 0,
+    snatch: null,
+    snatched: {},
     longestRoad: null,
     largestArmy: null,
     log: [],
@@ -965,6 +989,7 @@ function startTurn(s: GameState) {
   s.dice = null
   s.cardPlayed = false
   s.offers = []
+  s.snatch = null
 }
 
 /** an offer settled with `to`: the offer's give one way; its get, and the wildcard's pick, the other */
@@ -1011,6 +1036,46 @@ function step(s: GameState, p: number, a: Action): string | void {
     ev(s, { k: 'discard', p, count: n })
     log(s, `${me.name} discards ${n}.`, p)
     if (Object.keys(ph.owed).length === 0) s.phase = ph.then === 'main' ? { kind: 'main' } : { kind: 'robber', then: 'main' }
+    return
+  }
+  if (a.type === 'snatch') {
+    if (ph.kind !== 'main' || s.snatch) return 'Not now.'
+    if (a.victim === p || !s.players[a.victim]) return 'Pick someone else.'
+    if (s.snatched[p] === s.turn) return 'Once a turn.'
+    if (!handSize(s.players[a.victim].hand)) return 'They have no cards.'
+    s.snatch = { id: s.eventCount + 1, thief: p, victim: a.victim }
+    s.snatched[p] = s.turn
+    return
+  }
+  if (a.type === 'catch') {
+    const sn = s.snatch
+    if (!sn || sn.victim !== p) return 'Nothing to catch.'
+    s.snatch = null
+    ev(s, { k: 'caught', thief: sn.thief, victim: sn.victim })
+    // they owe a card back (if they have one)
+    if (handSize(s.players[sn.thief].hand)) s.phase = { kind: 'payback', thief: sn.thief, victim: sn.victim, then: s.phase }
+    return
+  }
+  if (a.type === 'snatchEnd') {
+    const sn = s.snatch
+    if (!sn || sn.thief !== p) return 'Nothing to end.'
+    s.snatch = null
+    const h = s.players[sn.victim].hand
+    const bag = GOODS.flatMap((r) => Array<Good>(h[r]).fill(r))
+    if (!bag.length) return
+    const r = bag[Math.floor(rand(s) * bag.length)]
+    h[r]--
+    s.players[sn.thief].hand[r]++
+    ev(s, { k: 'snatch', thief: sn.thief, victim: sn.victim, r })
+    return
+  }
+  if (a.type === 'payback') {
+    if (ph.kind !== 'payback' || ph.thief !== p) return 'Nothing to give back.'
+    if (!(me.hand[a.card] > 0)) return 'You do not have that card.'
+    me.hand[a.card]--
+    s.players[ph.victim].hand[a.card]++
+    ev(s, { k: 'caught', thief: p, victim: ph.victim, r: a.card })
+    s.phase = ph.then
     return
   }
   if (a.type === 'pillage') {
@@ -1460,6 +1525,8 @@ function expansionStep(s: GameState, p: number, a: ExpansionAction): string | vo
         if (card === 'physician' && (me.pieces.city === 0 || !hasAll(me.hand, { ore: 2, grain: 1 }))) return 'That needs a city piece, 2 ore and 1 grain.'
         if (card === 'turncoat' && Object.values(x.knights).every((k) => k.owner === p)) return 'There is nothing to use it on now.'
         me.progress.splice(i, 1)
+        // a card played goes back under its pile
+        x.decks[PROGRESS[card].track].unshift(card)
         ev(s, { k: 'progress', p, card })
         s.phase = pending
         return
@@ -1468,6 +1535,7 @@ function expansionStep(s: GameState, p: number, a: ExpansionAction): string | vo
       if (card === 'smith' && promoteSpots(s, p).length === 0) return 'None of your knights can be raised.'
       if (card === 'rally' && activateSpots(s, p).length === 0) return 'Your knights are all ready.'
       me.progress.splice(i, 1)
+      x.decks[PROGRESS[card].track].unshift(card)
       ev(s, { k: 'progress', p, card })
       log(s, `${me.name} plays ${PROGRESS[card].name}.`, p)
       const mine = victoryPoints(s, p)
@@ -1527,6 +1595,10 @@ function expansionStep(s: GameState, p: number, a: ExpansionAction): string | vo
     case 'cancelPick': {
       if (ph.kind !== 'pick') return 'Nothing is waiting.'
       if (ph.step > 0) return 'It has already begun.'
+      // (taken back out from under its pile, where playing it put it)
+      const deck = s.x!.decks[PROGRESS[ph.card].track]
+      const at = deck.indexOf(ph.card)
+      if (at >= 0) deck.splice(at, 1)
       me.progress.push({ card: ph.card, turn: s.turn })
       s.phase = { kind: ph.then }
       return
@@ -1683,11 +1755,15 @@ export function viewFor(s: GameState, you: number): View {
   base.events = base.events.map((e) => {
     if (over) return e
     if (e.k === 'steal' && you !== e.thief && you !== e.victim) return { ...e, r: undefined }
+    // a card sneaked away: the thief knows; the victim knows a card went, not who took it; nobody else knows at all
+    if (e.k === 'snatch' && you !== e.thief) return you === e.victim ? { ...e, thief: -1 } : null
     // a drawn progress card is the drawer's secret (point cards are laid down for all to see), and so is a spied one
     if (e.k === 'draw' && e.p !== you && e.card && !PROGRESS_POINTS.includes(e.card)) return { ...e, card: undefined }
     if (e.k === 'take' && e.card && you !== e.p && you !== e.from) return { ...e, card: undefined }
     return e
-  })
+  }).filter((e): e is GameEvent => e !== null)
+  // a snatch under way: the victim sees that it's happening, not who; the thief sees theirs; nobody else anything
+  if (base.snatch && you !== base.snatch.thief) base.snatch = you === base.snatch.victim ? { ...base.snatch, thief: -1 } : null
   const xv = x ? { ...structuredClone(x), decks: { trade: x.decks.trade.length, politics: x.decks.politics.length, science: x.decks.science.length } } : null
   return {
     ...base,

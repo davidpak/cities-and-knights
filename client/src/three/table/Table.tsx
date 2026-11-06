@@ -52,6 +52,8 @@ export type TableProps = BoardProps & {
     bank: boolean
     /** while trading: which bank cards can be had (the rest are dimmed) */
     bankGoods?: Partial<Record<Good, boolean>>
+    /** someone is sneaking a card of yours: this one rises a little (tap your cards to catch them) */
+    snatched?: Good | null
     deck: boolean
     supply: Record<Build, boolean>
     supplyTap: boolean
@@ -69,6 +71,10 @@ export type TableProps = BoardProps & {
     trayGive: (r: Good) => void
     trayGet: (r: Good) => void
     trayAny?: () => void
+    /** things dropped where they mean something: an opponent's card into your hand (a snatch), a piece of your
+     *  supply onto the board (build there), a bank card into your hand (trade for it) */
+    snatch?: (p: number) => void
+    dropPiece?: (w: Build, x: number, z: number) => void
     want: (r: Good) => void
     bank: (r: Good) => void
     deck: () => void
@@ -199,7 +205,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
   if (hand)
     kinds.forEach((r) => {
       const id = `hand:${r}`
-      card({ id, family: 'res', look: `res:${r}`, n: hand[r], home: cardHome(id, spots[r], { loose: 0.3 }), enabled: can.hand && hand[r] > 0, onClick: () => on.hand(r), ...fromTile(me, r) })
+      card({ id, family: 'res', look: `res:${r}`, n: hand[r], home: cardHome(id, spots[r], { loose: 0.3 }), enabled: can.hand && hand[r] > 0, lift: can.snatched === r ? 9 : 0, onClick: () => on.hand(r), ...fromTile(me, r) })
     })
   // your development cards, by kind; the ones you can play now stand a little proud
   const cards = pl?.cards ?? []
@@ -565,9 +571,18 @@ export function TableView(props: TableProps) {
   const statics = staticsFor(layout, !!tray, props)
   const reach = Math.max(-layout.bounds.minX, layout.bounds.maxX, -layout.bounds.minZ, layout.bounds.maxZ) + 40
   // a card from your hand dropped on the tray goes on the tray
+  // your hand's footprint on the table (where a card dropped counts as into your hand)
+  const handXs = layout.hand.map(([x]) => x)
+  const inHand = (at: Vector3) => at.x > Math.min(...handXs) - 70 && at.x < Math.max(...handXs) + 70 && Math.abs(at.z - layout.hand[0][1]) < CARD.d
   const onDrop = (t: Thing, at: Vector3) => {
-    if (!tray || !can.hand || !t.pile?.startsWith('hand:')) return
-    if (Math.abs(at.x - layout.tray[0]) < TRAY.w / 2 && Math.abs(at.z - layout.tray[1]) < TRAY.d / 2) on.hand(t.pile.slice(5) as Good)
+    const pile = t.pile ?? ''
+    if (pile.startsWith('hand:')) {
+      if (tray && can.hand && Math.abs(at.x - layout.tray[0]) < TRAY.w / 2 && Math.abs(at.z - layout.tray[1]) < TRAY.d / 2) on.hand(pile.slice(5) as Good)
+      return
+    }
+    if (pile.startsWith('opp:') && inHand(at)) return on.snatch?.(Number(pile.slice(4)))
+    if (pile.startsWith('bank:') && inHand(at)) return on.bank(pile.slice(5) as Good)
+    if (pile === 'supply:road' || pile === 'supply:settlement' || pile === 'supply:city') return on.dropPiece?.(pile.slice(7) as Build, at.x, at.z)
   }
   return (
     <Canvas {...canvasProps()}>

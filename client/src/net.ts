@@ -94,9 +94,35 @@ export const room = {
   },
 }
 
+/** does a move; with the reason when it can't (nothing is toasted: the caller shows it) */
+export async function tryAct(a: Action): Promise<string | null> {
+  if (store.solo) {
+    if (!solo) return 'No game.'
+    const who = solo.players.findIndex((x) => x.id === 'you')
+    const r = apply(solo, who, a)
+    if (!r.ok) return r.error.replace(/\.$/, '')
+    solo = r.state
+    soloPublish()
+    return null
+  }
+  const r = await call('game:action', a)
+  return r.ok ? null : r.error.replace(/\.$/, '')
+}
+
 /** does a move; says why not when it can't */
 export async function act(a: Action): Promise<boolean> {
-  if (store.solo) return soloAct(0, a)
+  if (store.solo) {
+    if (a.type === 'snatchEnd') return false
+    const ok = soloAct(0, a)
+    // a card being sneaked: the moment to catch it, then the thief has it
+    const sn = solo?.snatch
+    if (ok && a.type === 'snatch' && sn)
+      setTimeout(() => {
+        if (!solo || solo.snatch?.id !== sn.id) return
+        soloAct(sn.thief, { type: 'snatchEnd' }, true)
+      }, 2000)
+    return ok
+  }
   const r = await call('game:action', a)
   if (!r.ok) toast(r.error.replace(/\.$/, ''))
   return r.ok

@@ -10,11 +10,12 @@ import {
 } from '../../../shared/engine.ts'
 import { BARBARIAN_STEPS, CARD_TEXT, TRACK_GOOD, TRACK_LEVELS, TRACK_PERK, GOODS, KNIGHT_COST, PROGRESS, RESOURCES, TRACKS, TRACK_NAME, emptyHand, handSize, hasAll, type Card, type Good, type Hand, type Progress, type Resource, type Track } from '../../../shared/rules.ts'
 import { PLAYER, TRACK_COLOR } from '../lib/palette.ts'
-import { act, playerId, room, useStore } from '../net.ts'
+import { act, playerId, room, tryAct, useStore } from '../net.ts'
 import { GLOW_AT, type PickKind, type Picking } from '../three/Board.tsx'
 import { useProjector } from '../three/labels.ts'
 import { TableView, packHand, type TrayContents } from '../three/table/Table.tsx'
 import { CARD, TRAY, layoutFor, raidToTable, seatParts, type Spot } from '../three/table/layout.ts'
+import { edgeAt, vertexAt } from '../three/spec.ts'
 import { SHIELD } from '../lib/icons.ts'
 import { faceURL, paintFace } from '../three/table/faces.ts'
 import { publishState } from '../three/TestHook.tsx'
@@ -68,6 +69,8 @@ export function Game({ view }: { view: View }) {
   const incoming = me >= 0 ? view.offers.filter((o) => o.from !== me && (o.to === undefined || o.to === me) && !o.declined.includes(me)) : []
   const toMe = incoming.filter((o) => !o.accepted.includes(me))
   const owe = ph.kind === 'discard' ? ph.owed[me] ?? 0 : 0
+  // someone is sneaking a card of yours right now
+  const beingRobbed = !!view.snatch && view.snatch.victim === me
 
   const aspect = useAspect()
   const knightsMode = !!view.x
@@ -84,6 +87,9 @@ export function Game({ view }: { view: View }) {
   const [played, setPlayed] = useState<View['events'][number] | null>(null)
   // a card of yours, held up close (tap one in your hand)
   const [zoom, setZoom] = useState<{ kind: 'dev'; card: Card } | { kind: 'prog'; card: Progress } | null>(null)
+  // why the card up close couldn't be played (when Play was tried)
+  const [zoomWhy, setZoomWhy] = useState<string | null>(null)
+  useEffect(() => setZoomWhy(null), [zoom])
   // one of your city tracks, up close: what each level gives, and Improve
   const [trackZoom, setTrackZoom] = useState<Track | null>(null)
   /** a finger has shown a piece on the board: tap it again to place it */
@@ -266,6 +272,8 @@ export function Game({ view }: { view: View }) {
 
   const on = {
     hand: (r: Good) => {
+      // someone is sneaking a card of yours: a tap on your cards catches them
+      if (beingRobbed) return void act({ type: 'catch' })
       if (owe) return handSize(drop) < owe && setDrop(add(drop, r))
       if (pickFor && hand) {
         const o = view.offers.find((x) => x.id === pickFor.id)
@@ -281,6 +289,17 @@ export function Game({ view }: { view: View }) {
     trayGive: (r: Good) => (owe ? setDrop(add(drop, r, -1)) : deal && setDeal({ ...deal, give: add(deal.give, r, -1) })),
     trayGet: (r: Good) => deal && setDeal({ ...deal, get: add(deal.get, r, -1) }),
     trayAny: () => deal && setDeal({ ...deal, any: Math.max(0, (deal.any ?? 0) - 1) }),
+    snatch: (p: number) => void act({ type: 'snatch', victim: p }),
+    // a piece dropped on the board: built at the nearest spot it can go, if one is close
+    dropPiece: (w: Build, x: number, z: number) => {
+      if (!main || (w !== 'road' && w !== 'settlement' && w !== 'city') || !can[w]) return
+      const spots = w === 'road' ? roadSpots(view, me) : w === 'settlement' ? settlementSpots(view, me) : citySpots(view, me)
+      const at = (id: number) => (w === 'road' ? edgeAt(id) : vertexAt(id))
+      const near = spots.map((id) => ({ id, d: Math.hypot(at(id)[0] - x, at(id)[1] - z) })).sort((a, b) => a.d - b.d)[0]
+      if (!near || near.d > 40) return
+      setBuilding(null)
+      void act(w === 'road' ? { type: 'buildRoad', edge: near.id } : w === 'settlement' ? { type: 'buildSettlement', vertex: near.id } : { type: 'buildCity', vertex: near.id })
+    },
     want: (r: Good) => openDeal({ get: add(deal?.get ?? emptyHand(), r) }),
     bank: async (r: Good) => {
       if (pickPhase && targets.includes(r)) return act({ type: 'pick', target: r })
@@ -440,7 +459,8 @@ export function Game({ view }: { view: View }) {
         tray={tray}
         building={building}
         can={{
-          hand: !!hand && (trading || owe > 0 || !!pickFor),
+          hand: !!hand && (trading || owe > 0 || !!pickFor || beingRobbed),
+          snatched: beingRobbed && hand ? GOODS.filter((r) => hand[r] > 0)[view.snatch!.id % Math.max(1, GOODS.filter((r) => hand[r] > 0).length)] ?? null : null,
           tray: (trading && !!deal) || owe > 0,
           wants: trading,
           bank: trading || !!plenty || monopoly || (!!pickPhase && ['resource', 'commodity', 'good'].includes(pickPhase.need)),
@@ -478,6 +498,46 @@ export function Game({ view }: { view: View }) {
           onClose={() => setPlayed(null)}
         />
       )}
+      {/* a choice that isn't a place on the board: in the middle of the screen */}
+      {pickPhase && ['resource', 'commodity', 'good'].includes(pickPhase.need) && (
+        <Chooser
+          title={PROGRESS[pickPhase.card].name}
+          cards={(targets as Good[]).map((r) => ({ key: r, look: `res:${r}`, go: () => act({ type: 'pick', target: r }) }))}
+          onCancel={pickPhase.step === 0 ? () => act({ type: 'cancelPick' }) : undefined}
+        />
+      )}
+      {pickPhase && pickPhase.need === 'player' && (
+        <Chooser
+          title={PROGRESS[pickPhase.card].name}
+          players={(targets as number[]).map((p) => ({ p, go: () => act({ type: 'pick', target: p }) }))}
+          view={view}
+          onCancel={pickPhase.step === 0 ? () => act({ type: 'cancelPick' }) : undefined}
+        />
+      )}
+      {pickPhase && pickPhase.need === 'number' && (
+        <Chooser
+          title={PROGRESS[pickPhase.card].name}
+          numbers={(targets as number[]).map((n) => ({ n, go: () => act({ type: 'pick', target: n }) }))}
+          onCancel={pickPhase.step === 0 ? () => act({ type: 'cancelPick' }) : undefined}
+        />
+      )}
+      {mine && ph.kind === 'steal' && ph.victims.length > 1 && robFrom === null && (
+        <Chooser title="Rob" players={ph.victims.map((p) => ({ p, go: () => setRobFrom(p) }))} view={view} />
+      )}
+      {mine && plenty && (
+        <Chooser
+          title={`Take ${2 - plenty.length}`}
+          cards={RESOURCES.filter((r) => view.bank[r] > 0).map((r) => ({ key: r, look: `res:${r}`, go: () => on.bank(r) }))}
+          onCancel={() => setPlenty(null)}
+        />
+      )}
+      {mine && monopoly && (
+        <Chooser
+          title="Monopoly"
+          cards={RESOURCES.map((r) => ({ key: r, look: `res:${r}`, go: () => on.bank(r) }))}
+          onCancel={() => setMonopoly(false)}
+        />
+      )}
       {mine && ph.kind === 'pick' && ph.card === 'spy' && ph.need === 'theirCard' && (
         <StealFan
           n={view.players[ph.data[0]].progressCount}
@@ -499,7 +559,10 @@ export function Game({ view }: { view: View }) {
       {myFan && myFan.length > 0 && <MyFan order={myFan} />}
       <TurnBanner view={view} />
       <Flash text={owe ? `Discard ${owe}` : progressOwed ? `Discard ${progressOwed} progress` : ph.kind === 'pillage' && ph.owed[me] ? 'Pick city to lose' : mine && ph.kind === 'robber' ? 'Move robber' : null} />
-      {owe > 0 && hand && <DiscardFan hand={hand} drop={drop} owe={owe} setDrop={setDrop} />}
+      {owe > 0 && hand && <DiscardFan hand={hand} drop={drop} owe={owe} setDrop={setDrop} onDone={() => act({ type: 'discard', cards: drop })} />}
+      {ph.kind === 'payback' && ph.thief === me && hand && (
+        <DiscardFan title="Caught! Give 1" hand={hand} drop={drop} owe={1} setDrop={setDrop} onDone={() => act({ type: 'payback', card: GOODS.find((r) => drop[r] > 0)! }).then(() => setDrop(emptyHand()))} word="Give" />
+      )}
       {progressOwed > 0 && myProgress.length > 0 && (
         <div className="fan-back must">
           <div className="must-head">Discard {progressOwed} progress</div>
@@ -521,14 +584,30 @@ export function Game({ view }: { view: View }) {
         const held = zoom.kind === 'dev' ? devs.some((c) => c.card === zoom.card) : myProgress.some((c) => c.card === zoom.card)
         if (!held) return null
         const close = () => setZoom(null)
-        const live = zoom.kind === 'prog' ? progressPlayable(zoom.card) : playable(zoom.card)
+        // a progress card always offers Play: if it can't be played now, the reason shows right there
+        const live = zoom.kind === 'prog' ? zoom.card !== 'townCharter' && zoom.card !== 'press' : playable(zoom.card)
         const word = zoom.kind === 'prog' && progressOwed ? 'Discard' : 'Play'
         return (
           <CardZoom
             look={`${zoom.kind}:${zoom.card}`}
             caption={zoom.kind === 'dev' ? CARD_TEXT[zoom.card] : null}
             onClose={close}
-            action={live ? { word, go: () => (close(), zoom.kind === 'dev' ? on.playDev(zoom.card) : on.playProgress(zoom.card)) } : null}
+            action={
+              live
+                ? {
+                    word,
+                    go: async () => {
+                      if (zoom.kind === 'dev') return close(), on.playDev(zoom.card)
+                      setBuilding(null)
+                      setSelected(null)
+                      const why = await tryAct(progressOwed ? { type: 'discardProgress', card: zoom.card } : { type: 'playProgress', card: zoom.card })
+                      if (why) setZoomWhy(why)
+                      else close()
+                    },
+                  }
+                : null
+            }
+            why={zoomWhy}
           />
         )
       })()}
@@ -622,6 +701,7 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   if (ph.kind === 'progressDiscard') todo = progressOwed ? `Discard ${progressOwed} progress` : 'Discarding…'
   if (ph.kind === 'over') todo = <>{<Who view={view} p={ph.winner} />} wins</>
   if (ph.kind === 'pillage') todo = ph.owed[view.you] ? 'Pick city to lose' : 'Barbarians win'
+  if (ph.kind === 'payback') todo = ph.thief === view.you ? 'Caught! Give a card' : 'Caught!'
   if (armed) todo = 'Tap again'
   // an offer to you: what you'd get, for what
   if (toMe)
@@ -956,13 +1036,17 @@ function Flash({ text }: { text: string | null }) {
  * Discarding: your whole hand, big, front and centre. Tap cards to pick them (they rise); tap again to put one back.
  * The button discards once enough are picked.
  */
-function DiscardFan({ hand, drop, owe, setDrop }: { hand: Hand; drop: Hand; owe: number; setDrop: (h: Hand) => void }) {
+function DiscardFan({ hand, drop, owe, setDrop, onDone, title, word = 'Discard' }: { hand: Hand; drop: Hand; owe: number; setDrop: (h: Hand) => void; onDone: () => void; title?: string; word?: string }) {
   const cards = GOODS.flatMap((r) => Array.from({ length: hand[r] }, (_, k) => ({ r, k })))
   const n = handSize(drop)
   return (
     <div className="fan-back must">
       <div className="must-head">
-        Discard <b>{n}</b>/<b>{owe}</b>
+        {title ?? (
+          <>
+            Discard <b>{n}</b>/<b>{owe}</b>
+          </>
+        )}
       </div>
       <div className="fan" style={{ ['--n' as string]: cards.length }}>
         {cards.map(({ r, k }, i) => {
@@ -978,8 +1062,8 @@ function DiscardFan({ hand, drop, owe, setDrop }: { hand: Hand; drop: Hand; owe:
           )
         })}
       </div>
-      <button className="zoom-btn go" disabled={n !== owe} onClick={() => act({ type: 'discard', cards: drop })}>
-        Discard
+      <button className="zoom-btn go" disabled={n !== owe} onClick={onDone}>
+        {word}
       </button>
     </div>
   )
@@ -1021,6 +1105,47 @@ function TrackZoom({ track, level, onClose, onImprove }: { track: Track; level: 
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- a choice, in the middle
+
+/** pick one: cards (a resource, a commodity), players, or numbers; ✕ backs out where that's allowed */
+function Chooser({ title, cards, players, numbers, view, onCancel }: { title: string; cards?: { key: string; look: string; go: () => void }[]; players?: { p: number; go: () => void }[]; numbers?: { n: number; go: () => void }[]; view?: View; onCancel?: () => void }) {
+  return (
+    <div className="fan-back must chooser">
+      <div className="must-head">{title}</div>
+      {cards && (
+        <div className="ch-cards">
+          {cards.map((c) => (
+            <button key={c.key} className="ch-card" style={{ backgroundImage: `url(${faceURL(c.look)})` }} onClick={c.go} aria-label={c.key} />
+          ))}
+        </div>
+      )}
+      {players && view && (
+        <div className="ch-players">
+          {players.map(({ p, go }) => (
+            <button key={p} className="ch-player" style={{ ['--pc' as string]: PLAYER[view.players[p].color].ui }} onClick={go}>
+              {view.players[p].name}
+            </button>
+          ))}
+        </div>
+      )}
+      {numbers && (
+        <div className="ch-numbers">
+          {numbers.map(({ n, go }) => (
+            <button key={n} className={`ch-number ${n === 6 || n === 8 ? 'red' : ''}`} onClick={go}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+      {onCancel && (
+        <button className="zoom-btn" onClick={onCancel} aria-label="Back">
+          ✕
+        </button>
+      )}
     </div>
   )
 }
@@ -1112,7 +1237,7 @@ function whatFollowed(view: View, e: View['events'][number]): React.ReactNode {
   return out.length ? out : null
 }
 
-function CardZoom({ look, caption, after, action, onClose }: { look: string; caption: string | null; after?: React.ReactNode; action: { word: string; go: () => void } | null; onClose: () => void }) {
+function CardZoom({ look, caption, after, action, why, onClose }: { look: string; caption: string | null; after?: React.ReactNode; action: { word: string; go: () => void } | null; why?: string | null; onClose: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     if (ref.current) paintFace(look, ref.current, 2 * Math.min(2, window.devicePixelRatio || 1))
@@ -1125,6 +1250,7 @@ function CardZoom({ look, caption, after, action, onClose }: { look: string; cap
         <canvas ref={ref} className="zoom-card" />
         {caption && <div className="zoom-cap">{caption}</div>}
         {after && <div className="zoom-after">{after}</div>}
+        {why && <div className="zoom-why">{why}</div>}
         <div className="zoom-row">
           {action && (
             <button className="zoom-btn go" onClick={action.go}>

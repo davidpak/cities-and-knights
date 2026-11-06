@@ -6,13 +6,15 @@
  * time, to one pixel per CSS pixel at the least (any lower is blurry), and if that's still not enough the shadow
  * map halves.
  * Long smooth stretches let it step back up, one step, and never again to a step it already had to leave.
+ * A lowered resolution is only for motion: a quarter second after the table comes to rest it draws once more at full
+ * resolution (the drawing is idle then, so that costs nothing), and goes back down when things start moving again.
  * What a device managed is remembered for next time (quality.ts), so a weak machine starts where it can keep up.
  *
  * Steps happen at most every second and a half: a change of resolution re-makes the drawing surface, and doing
  * that often would itself be a stutter.
  */
 import { useFrame, useThree } from '@react-three/fiber'
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { DirectionalLight } from 'three'
 import { QUALITY, rememberDpr } from './quality.ts'
 
@@ -23,14 +25,31 @@ const WINDOW = 30 // frames per judgement
 export function Adaptive() {
   const { gl, scene, invalidate } = useThree()
   const setDpr = useThree((s) => s.setDpr)
-  const st = useRef({ last: 0, n: 0, sum: 0, good: 0, at: 0, dpr: QUALITY.startDpr, shadow: QUALITY.shadowSize, ceiling: QUALITY.maxDpr, before: 0, from: 0, locked: false })
+  const st = useRef({ last: 0, n: 0, sum: 0, good: 0, at: 0, dpr: QUALITY.startDpr, shadow: QUALITY.shadowSize, ceiling: QUALITY.maxDpr, before: 0, from: 0, locked: false, sharp: 0, timer: 0 })
+  useEffect(() => () => clearTimeout(st.current.timer), [])
 
   useFrame(() => {
     const s = st.current
-    if (!QUALITY.adapt || s.locked) return
+    if (!QUALITY.adapt) return
     const now = performance.now()
     const dt = now - s.last
     s.last = now
+    // at rest: one frame at full resolution; moving again: back to what this device keeps up with
+    // (the sharp drawing can take a frame or two; more than that, or a new start after a pause, is motion)
+    if (s.sharp) {
+      if (dt <= 120 && ++s.sharp <= 4) return
+      s.sharp = 0
+      setDpr(s.dpr)
+    }
+    clearTimeout(s.timer)
+    if (s.dpr < QUALITY.maxDpr)
+      s.timer = window.setTimeout(() => {
+        s.sharp = 1
+        s.last = performance.now()
+        setDpr(QUALITY.maxDpr)
+        invalidate()
+      }, 250)
+    if (s.locked) return
     // a pause: this frame starts a new run of motion
     if (dt > 120) {
       s.n = 0

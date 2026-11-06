@@ -2,11 +2,10 @@
  * How hard the table works, chosen once per device (and overridable in the address for measuring:
  * ?dpr=1&aa=0&shadow=0&shmap=1024).
  *
- *   resolution    the screen's own pixel density, at most 2 (1.5 on a weak GPU); the game lowers it by itself if
- *                 frames run long (Adaptive.tsx), never below one pixel per CSS pixel (below that it's blurry),
- *                 remembers what this device managed, and starts there next time
- *   antialiasing  multisampling on ordinary screens (edges stay clean); not on a high-density screen, where the
- *                 pixels are too small to see stairs and multisampling would be the costliest thing to ask for
+ *   resolution    the screen's own pixel density, at most 3 (2 on a weak GPU); while things move the game lowers
+ *                 it by itself if frames run long (Adaptive.tsx), never below one pixel per CSS pixel, and once the
+ *                 table is still it draws one more frame at full resolution, so what you look at is always sharp
+ *   antialiasing  multisampling, except on a weak GPU at a high density (there the pixels are small enough)
  *   shadows       one shadow map, drawn again only when something moves
  */
 const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams()
@@ -15,8 +14,7 @@ const num = (k: string) => (q.has(k) ? Number(q.get(k)) : undefined)
 
 /**
  * A weak GPU, by name (as PlayCanvas and others do): integrated Intel graphics, phone and tablet GPUs, and software
- * renderers. These get the cheapest soft shadows and a smaller shadow map, and at most one and a half pixels per CSS
- * pixel; the frame-time watcher (Adaptive.tsx) takes them lower if it must.
+ * renderers. These get the cheapest soft shadows and a smaller shadow map, and at most two pixels per CSS pixel; the frame-time watcher (Adaptive.tsx) takes them lower if it must.
  */
 function gpuName() {
   try {
@@ -36,13 +34,13 @@ const weak = q.has('weak') ? q.get('weak') === '1' : /intel|hd graphics|uhd|iris
 
 let learned: number | undefined
 try {
-  const v = Number(localStorage.getItem('tp.dpr2'))
+  const v = Number(localStorage.getItem('tp.dpr3'))
   if (v > 0) learned = v
 } catch {
   // private window: start from the top each time
 }
 
-const top = Math.min(screenDpr, weak ? 1.5 : 2)
+const top = Math.min(screenDpr, weak ? 2 : 3)
 export const QUALITY = {
   gpu: GPU,
   weak,
@@ -52,7 +50,7 @@ export const QUALITY = {
   startDpr: num('dpr') ?? Math.min(top, learned ?? top),
   /** never below this */
   minDpr: num('dpr') ?? Math.min(screenDpr, 1),
-  antialias: q.has('aa') ? q.get('aa') === '1' : screenDpr < 1.5,
+  antialias: q.has('aa') ? q.get('aa') === '1' : !weak || screenDpr < 1.5,
   shadows: q.get('shadow') !== '0',
   shadowSize: num('shmap') ?? (weak ? 1024 : 2048),
   /** samples per pixel for soft shadows: 4 (each hardware-filtered), or 1 on a weak GPU */
@@ -65,7 +63,7 @@ export const QUALITY = {
 
 export function rememberDpr(dpr: number) {
   try {
-    localStorage.setItem('tp.dpr2', dpr.toFixed(2))
+    localStorage.setItem('tp.dpr3', dpr.toFixed(2))
   } catch {
     // nowhere to keep it
   }

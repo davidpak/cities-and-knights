@@ -60,7 +60,9 @@ export function Game({ view }: { view: View }) {
   const hand = me >= 0 ? view.players[me].hand : null
   const offer = view.offer
   const myOffer = offer?.from === me ? offer : null
-  const toMe = offer && offer.from !== me && (offer.to === undefined || offer.to === me) && !offer.accepted.includes(me) && !offer.declined.includes(me) ? offer : null
+  // an offer you're part of and haven't turned down (toMe: and haven't answered yet)
+  const inOffer = offer && me >= 0 && offer.from !== me && (offer.to === undefined || offer.to === me) && !offer.declined.includes(me) ? offer : null
+  const toMe = inOffer && !inOffer.accepted.includes(me) ? inOffer : null
   const owe = ph.kind === 'discard' ? ph.owed[me] ?? 0 : 0
 
   const aspect = useAspect()
@@ -201,12 +203,12 @@ export function Game({ view }: { view: View }) {
 
   // the tray shows: an offer made to you, your own offer waiting, your discard, or the trade you're putting together
   let tray: TrayContents | null = null
-  if (toMe) tray = { mode: 'trade', give: toMe.get, get: toMe.give, locked: true }
+  if (inOffer) tray = { mode: 'trade', give: inOffer.get, get: inOffer.give, locked: true }
   else if (myOffer) tray = { mode: 'trade', give: myOffer.give, get: myOffer.get, locked: true }
   else if (owe) tray = { mode: 'discard', give: drop, get: {} }
   else if (deal) tray = { mode: 'trade', give: deal.give, get: deal.get }
   // what's on the tray came out of your hand (an offer to you shows what you'd hand over)
-  const onTray = owe ? drop : myOffer ? myOffer.give : toMe ? toMe.get : deal ? deal.give : {}
+  const onTray = owe ? drop : myOffer ? myOffer.give : inOffer ? inOffer.get : deal ? deal.give : {}
   const shownHand = hand ? minus(hand, onTray) : null
   useEffect(
     () =>
@@ -327,6 +329,8 @@ export function Game({ view }: { view: View }) {
   }
 
   const acts = trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop })
+  // while an offer is up, its panel on the tray holds every button for it
+  const offerUp = !!(myOffer || inOffer)
 
   // keys: R roll, E end turn, Esc put everything back
   useEffect(() => {
@@ -398,23 +402,23 @@ export function Game({ view }: { view: View }) {
         on={on}
       />
 
-      <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} toMe={toMe} acts={acts} armed={armed && !!picking} corner={layout.marks === 'corner'} />
+      <Lines view={view} plenty={plenty} monopoly={monopoly} owe={owe} building={building} selected={selected} progressOwed={progressOwed} toMe={toMe} armed={armed && !!picking} />
 
       <Labels view={view} layout={layout} hand={shownHand} />
 
-      {/* (an offer to you is answered in the top line, in words) */}
-      {tray && layout.marks !== 'corner' && !toMe && <TrayMarks layout={layout} acts={acts} />}
+      {tray && layout.marks !== 'corner' && !offerUp && <TrayMarks layout={layout} acts={acts} />}
+      {offerUp && <OfferPanel view={view} layout={layout} acts={acts} />}
 
       <RollFlash view={view} layout={layout} />
 
       <div className="corner">
         {/* on a phone the tray's buttons are here, big, with words */}
-        {tray && layout.marks === 'corner' && acts.no && (
+        {tray && layout.marks === 'corner' && !offerUp && acts.no && (
           <button className="stamp-btn big no" onClick={acts.no}>
             {acts.noWord}
           </button>
         )}
-        {tray && layout.marks === 'corner' && acts.ok && (
+        {tray && layout.marks === 'corner' && !offerUp && acts.ok && (
           <button className="stamp-btn go big ok" disabled={!acts.okLive} onClick={acts.ok}>
             {acts.okWord}
           </button>
@@ -425,7 +429,7 @@ export function Game({ view }: { view: View }) {
           </button>
         )}
         {/* (on a phone, while the tray's buttons are down here, they take the turn button's place) */}
-        {main && !(tray && layout.marks === 'corner' && (acts.ok || acts.no)) && (
+        {main && !(tray && layout.marks === 'corner' && !offerUp && (acts.ok || acts.no)) && (
           <button className="stamp-btn go big" disabled={!!myOffer} onClick={() => act({ type: 'endTurn' })}>
             End turn
           </button>
@@ -452,8 +456,8 @@ export function Game({ view }: { view: View }) {
 
 // ---------------------------------------------------------------- the two lines at the top
 
-function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean; owe: number; building: Build | null; selected: number | null; progressOwed: number; toMe: View['offer']; acts: TrayActs; armed: boolean; corner: boolean }) {
-  const { view, plenty, monopoly, owe, building, selected, progressOwed, toMe, acts, armed, corner } = props
+function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean; owe: number; building: Build | null; selected: number | null; progressOwed: number; toMe: View['offer']; armed: boolean }) {
+  const { view, plenty, monopoly, owe, building, selected, progressOwed, toMe, armed } = props
   const ph = view.phase
   const mine = view.current === view.you
   const who = <Who view={view} p={view.current} you={false} />
@@ -481,32 +485,18 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   if (ph.kind === 'progressDiscard') todo = progressOwed ? `Put back ${progressOwed} progress card${progressOwed > 1 ? 's' : ''} (four at most)` : 'Waiting for progress cards to be put back'
   if (ph.kind === 'over') todo = <>{<Who view={view} p={ph.winner} />} won!</>
   if (armed) todo = 'Tap it again to confirm'
-  // an offer to you: what you'd get and what you'd give, said plainly, and the answer right there
-  let answer: React.ReactNode = null
-  if (toMe) {
+  // an offer to you: what you'd get and what you'd give, said plainly (the answer is on the tray's panel)
+  if (toMe)
     todo = (
       <>
         <Who view={view} p={toMe.from} you={false} /> offers <Bundle of={toMe.give} /> <span className="for">for your</span> <Bundle of={toMe.get} />
       </>
     )
-    // (on a phone the answer is down by your thumb, in the corner)
-    answer = corner ? null : (
-      <span className="answer">
-        <button className="ans no" onClick={acts.no ?? undefined}>
-          Decline
-        </button>
-        <button className="ans ok" disabled={!acts.okLive} onClick={acts.ok ?? undefined}>
-          Accept
-        </button>
-      </span>
-    )
-  }
   const last = [...view.events].reverse().find((e) => e.k !== 'turn' && e.k !== 'answer')
   return (
     <div className="lines">
       <div className={`todo ${mine ? 'mine' : ''} ${toMe ? 'offer' : ''}`}>
         {todo}
-        {answer}
         {cancel && (
           <button className="todo-x" onClick={() => act({ type: 'cancelPick' })} aria-label="Put it back">
             ✕
@@ -615,6 +605,81 @@ function trayActs({ view, deal, setDeal, toMe, myOffer, owe, drop }: { view: Vie
       noWord: 'Clear',
     }
   return { ok: null, no: null, okLive: false, okWord: '', noWord: '' }
+}
+
+/**
+ * An open offer, on the tray: one row for each player it's put to, saying plainly whether they've accepted, declined
+ * or are still deciding. The one who offered trades with a click on an accepted row; the ones it's put to answer on
+ * their own row. Everyone involved sees everyone else's answers as they come in.
+ */
+function OfferPanel({ view, layout, acts }: { view: View; layout: ReturnType<typeof layoutFor>; acts: TrayActs }) {
+  const project = useProjector()
+  const o = view.offer
+  if (!o) return null
+  const me = view.you
+  const mineOffer = o.from === me
+  const asked = view.players.map((_, i) => i).filter((i) => i !== o.from && (o.to === undefined || i === o.to))
+  const state = (p: number) => (o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait')
+  const nobody = asked.every((p) => state(p) === 'no')
+  // just above the tray, as wide as it (at least wide enough for a name and two buttons), kept on the screen
+  const [x0, top] = project(layout.tray[0] - TRAY.w / 2, 0, layout.tray[1] - TRAY.d / 2)
+  const [x1] = project(layout.tray[0] + TRAY.w / 2, 0, layout.tray[1] - TRAY.d / 2)
+  const width = Math.min(window.innerWidth - 16, Math.max(x1 - x0 + 24, 280))
+  const left = Math.max(8, Math.min(window.innerWidth - 8 - width, (x0 + x1) / 2 - width / 2))
+  const from = view.players[o.from]
+  // (your own answer, while you haven't given it, is the two buttons along the bottom)
+  const rows = asked.filter((p) => p !== me || state(p) !== 'wait')
+  return (
+    <div className="offer-panel" style={{ left, top, width, ['--n' as string]: Math.max(1, rows.length) }}>
+      <div className="op-head">
+        {mineOffer ? (
+          o.to === undefined ? (
+            'Your offer to everyone'
+          ) : (
+            <>
+              Your offer to <Who view={view} p={o.to} you={false} />
+            </>
+          )
+        ) : (
+          <>
+            <Who view={view} p={o.from} you={false} /> offers {o.to === undefined ? 'everyone' : 'you'}
+          </>
+        )}
+      </div>
+      {rows.map((p) => {
+        const st = state(p)
+        const pl = view.players[p]
+        return (
+          <div key={p} className={`op-row ${st}`} style={{ ['--pc' as string]: PLAYER[pl.color].ui }}>
+            <span className="op-name">{p === me ? 'You' : pl.name}</span>
+            {mineOffer && st === 'yes' ? (
+              <button className="op-btn trade" onClick={() => act({ type: 'confirmTrade', with: p })}>
+                Trade
+              </button>
+            ) : (
+              <span className={`op-state ${st}`}>{st === 'yes' ? '✓ Accepted' : st === 'no' ? '✕ Declined' : <>Deciding<i className="dots" /></>}</span>
+            )}
+          </div>
+        )
+      })}
+      {asked.includes(me) && state(me) === 'wait' && (
+        <div className="op-ans">
+          <button className="op-btn no" onClick={acts.no ?? undefined}>
+            Decline
+          </button>
+          <button className="op-btn ok" disabled={!acts.okLive} onClick={acts.ok ?? undefined}>
+            {acts.okLive ? 'Accept' : "You don't have it"}
+          </button>
+        </div>
+      )}
+      {!mineOffer && o.accepted.includes(me) && <div className="op-foot">Waiting for {from.name} to pick</div>}
+      {mineOffer && (
+        <button className={`op-btn back ${nobody ? 'loud' : ''}`} onClick={acts.no ?? undefined}>
+          {nobody ? 'Nobody wants it: take it back' : 'Take back'}
+        </button>
+      )}
+    </div>
+  )
 }
 
 /** the tray's two marks: a green check and a red cross, beside it */

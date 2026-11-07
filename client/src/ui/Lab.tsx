@@ -1,9 +1,9 @@
 /**
  * The lab: where the bots' training shows its progress. Everything on it is real: the phases and their results
- * (from the server, which the trainer updates), the simulator itself running here in the browser, today's Expert's
- * view of a fixed board, and (once training runs) each generation's strength, what it has learned, and how it plays.
+ * (from the server, which the trainer updates), what the trainer is doing right now, today's Expert's view of a
+ * fixed board, and (once training runs) each generation's strength, what it has learned, and how it plays.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { TOPO } from '../../../shared/board.ts'
 import { openingValues } from '../../../shared/bot.ts'
 import { newGame, resourceOf } from '../../../shared/engine.ts'
@@ -12,7 +12,8 @@ import { TERRAIN } from '../lib/palette.ts'
 type Fact = { label: string; value: string }
 type PhaseInfo = { key: string; name: string; status: 'done' | 'now' | 'next'; summary: string; facts: Fact[] }
 type Generation = { gen: number; at: string; games: number; winVsExpert: number; lo: number; hi: number; promoted: boolean; heat?: Record<string, number> }
-type Status = { updated: string; phases: PhaseInfo[]; training: null | { generations: Generation[]; live?: { gamesPerSec: number; totalGames: number; step: string } } }
+type Live = { step: string; gamesPerSec: number; totalGames: number; positions?: number; generation?: number }
+type Status = { updated: string; phases: PhaseInfo[]; training: null | { generations: Generation[]; live?: Live } }
 
 const SERVER = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? `${location.protocol}//${location.hostname}:3001` : location.origin)
 const n0 = new Intl.NumberFormat('en')
@@ -82,7 +83,7 @@ export function Lab() {
       )}
 
       <div className="lab-grid">
-        <LiveSim />
+        <TrainerNow live={status?.training?.live ?? null} updated={status?.training ? status.updated : undefined} />
         <OpeningMap />
       </div>
 
@@ -91,54 +92,27 @@ export function Lab() {
   )
 }
 
-/** the simulator, running here: real games of the base game, played with random legal moves */
-function LiveSim() {
-  const [on, setOn] = useState(true)
-  const [t, setT] = useState({ games: 0, moves: 0, turns: 0, won: 0, ms: 0, rate: 0 })
-  const [error, setError] = useState<string | null>(null)
-  const worker = useRef<Worker | null>(null)
-  useEffect(() => {
-    const w = new Worker('/lab/sim-worker.js')
-    worker.current = w
-    const recent: { games: number; ms: number }[] = []
-    w.onmessage = (e) => {
-      if (e.data.error) return setError(e.data.error)
-      const d = e.data as { games: number; won: number; moves: number; turns: number; ms: number }
-      recent.push({ games: d.games, ms: d.ms })
-      if (recent.length > 20) recent.shift()
-      const rate = (recent.reduce((a, r) => a + r.games, 0) / recent.reduce((a, r) => a + r.ms, 0)) * 1000
-      setT((p) => ({ games: p.games + d.games, moves: p.moves + d.moves, turns: p.turns + d.turns, won: p.won + d.won, ms: p.ms + d.ms, rate }))
-    }
-    return () => w.terminate()
-  }, [])
-  // runs while on and the page is in view (a hidden tab rests)
-  useEffect(() => {
-    const go = () => worker.current?.postMessage(on && !document.hidden ? 'start' : 'stop')
-    go()
-    document.addEventListener('visibilitychange', go)
-    return () => document.removeEventListener('visibilitychange', go)
-  }, [on])
+/** the trainer, right now: what it's doing and how much it has played (reported by the trainer itself) */
+function TrainerNow({ live, updated }: { live: Live | null; updated?: string }) {
   return (
     <section className="lab-card">
-      <h2>The simulator, running in this browser</h2>
-      <p className="lab-note">Whole base games, every move a random legal one, on the same rules as the real game. On your PC, 16 threads of this feed the training.</p>
-      {error ? (
-        <p className="lab-note">Couldn't start: {error}</p>
-      ) : (
+      <h2>Training now</h2>
+      {live ? (
         <>
+          <p className="lab-note">{live.step}</p>
           <div className="lab-big">
-            <b>{n0.format(t.games)}</b>
-            <span>games played here</span>
+            <b>{n0.format(live.totalGames)}</b>
+            <span>self-play games learned from</span>
           </div>
           <div className="lab-row">
-            <div><b>{n0.format(Math.round(t.rate))}</b><span>games a second</span></div>
-            <div><b>{compact.format(t.moves)}</b><span>moves</span></div>
-            <div><b>{t.games ? Math.round(t.turns / t.games) : '–'}</b><span>turns a game</span></div>
+            <div><b>{n0.format(Math.round(live.gamesPerSec))}</b><span>games a second</span></div>
+            <div><b>{compact.format(live.positions ?? 0)}</b><span>positions learned from</span></div>
+            <div><b>{live.generation ?? 0}</b><span>generation</span></div>
           </div>
-          <button className="lab-btn" type="button" onClick={() => setOn((x) => !x)}>
-            {on ? 'Pause' : 'Run'}
-          </button>
+          {updated && <p className="lab-note">Last report {new Date(updated).toLocaleString()}</p>}
         </>
+      ) : (
+        <p className="lab-note lab-idle">Nothing is training yet. When training runs on your PC, it reports here: what it's doing, games played and learned from, and which generation it's on.</p>
       )}
     </section>
   )

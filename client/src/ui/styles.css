@@ -2407,6 +2407,7 @@ html:has(.lab), body:has(.lab) { overflow: auto; height: auto; }
 .lab-board { width: 100%; height: auto; display: block; background: radial-gradient(circle at 50% 45%, #3b6273, #2c4a57 72%); border-radius: 14px; }
 .lab-board text { font-family: 'Zilla Slab', Georgia, serif; }
 .lab-hover { min-height: 1.5em; }
+.lab-idle { font-size: 16px; color: var(--cream); }
 .lab-chart { width: 100%; height: auto; display: block; }
 .lab-gridline { stroke: rgba(241, 227, 198, 0.1); stroke-width: 1; }
 .lab-fair { stroke: rgba(241, 227, 198, 0.45); stroke-width: 1; stroke-dasharray: 4 4; }

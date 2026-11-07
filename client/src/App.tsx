@@ -5,6 +5,8 @@ import { Lobby } from './ui/Lobby.tsx'
 
 /** pieces and the board on their own pages (?part=…), for building and checking them alone */
 const Parts = lazy(() => import('./ui/Parts.tsx'))
+/** the lab (/lab): the bots' training, and how far it has come */
+const Lab = lazy(() => import('./ui/Lab.tsx').then((m) => ({ default: m.Lab })))
 /** the board (and three.js with it) loads only once a game starts, so the home screen opens instantly */
 const Game = lazy(() => import('./ui/Game.tsx').then((m) => ({ default: m.Game })))
 // start fetching it in the background straight away; the physics engine (the biggest part) a moment later
@@ -12,6 +14,12 @@ void import('./ui/Game.tsx')
 setTimeout(() => void import('./three/physics.ts').then((m) => m.loadRapier()), 1200)
 
 export default function App() {
+  if (location.pathname.replace(/\/$/, '') === '/lab')
+    return (
+      <Suspense fallback={null}>
+        <Lab />
+      </Suspense>
+    )
   const part = new URLSearchParams(location.search).get('part')
   if (part)
     return (

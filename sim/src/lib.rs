@@ -1072,3 +1072,85 @@ pub fn action_json(a: &Action) -> String {
         Action::EndTurn => r#"{"type":"endTurn"}"#.into(),
     }
 }
+
+// ---------------------------------------------------------------- games with random legal moves (the benchmark, and the browser demo)
+
+/// a small, fast random-number generator for choosing moves (not the game's own: that one deals the dice)
+pub struct Pick(pub u64);
+impl Pick {
+    pub fn below(&mut self, n: usize) -> usize {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        (self.0 % n as u64) as usize
+    }
+}
+
+/// one whole game, every move a random legal one (builds and cards preferred over trades and passing);
+/// returns (moves, turns, winner or -1)
+pub fn random_game(players: usize, seed: i32, pick: &mut Pick, legal: &mut Vec<Action>) -> (u32, u32, i8) {
+    let mut g = Game::new(players, seed);
+    let mut moves = 0;
+    for _ in 0..4000 {
+        let Some(p) = g.actor() else { break };
+        let owed = g.owed(p);
+        let a = if owed > 0 {
+            let mut c = [0u8; 5];
+            let mut h = g.players[p].hand;
+            for _ in 0..owed {
+                let r = (0..5).find(|&r| h[r] > 0).unwrap();
+                h[r] -= 1;
+                c[r] += 1;
+            }
+            Action::Discard(c)
+        } else {
+            g.legal(legal);
+            let builds = legal.iter().filter(|a| !matches!(a, Action::BankTrade(..) | Action::EndTurn)).count();
+            if builds > 0 && pick.below(10) < 8 {
+                let k = pick.below(builds);
+                legal.iter().filter(|a| !matches!(a, Action::BankTrade(..) | Action::EndTurn)).nth(k).unwrap().clone()
+            } else {
+                legal[pick.below(legal.len())].clone()
+            }
+        };
+        g.play(p, &a);
+        moves += 1;
+    }
+    let winner = if let Phase::Over { winner } = g.phase { winner as i8 } else { NO };
+    (moves, g.turn, winner)
+}
+
+#[cfg(target_arch = "wasm32")]
+mod web {
+    use super::*;
+    static mut MOVES: u32 = 0;
+    static mut TURNS: u32 = 0;
+    /// plays n games from seed; the moves and turns they took are read with moves() and turns()
+    #[no_mangle]
+    pub extern "C" fn play(n: u32, seed: u32) -> u32 {
+        let mut pick = Pick((seed as u64).wrapping_mul(0x9E3779B97F4A7C15) | 1);
+        let mut legal = Vec::with_capacity(128);
+        let (mut m, mut t, mut done) = (0u32, 0u32, 0u32);
+        for k in 0..n {
+            let (mv, tu, w) = random_game(4, seed.wrapping_add(k) as i32, &mut pick, &mut legal);
+            m += mv;
+            t += tu;
+            if w >= 0 {
+                done += 1;
+            }
+        }
+        unsafe {
+            MOVES = m;
+            TURNS = t;
+        }
+        done
+    }
+    #[no_mangle]
+    pub extern "C" fn moves() -> u32 {
+        unsafe { MOVES }
+    }
+    #[no_mangle]
+    pub extern "C" fn turns() -> u32 {
+        unsafe { TURNS }
+    }
+}

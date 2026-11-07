@@ -2355,3 +2355,69 @@ html {
   transform: translateY(calc(-100% - 6px));
   justify-items: end;
 }
+
+/* ---------------------------------------------------------------- the lab (/lab): training and its progress */
+.lab {
+  min-height: 100%;
+  background: var(--wood);
+  color: var(--cream);
+  padding: max(28px, calc(env(safe-area-inset-top) + 16px)) max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left));
+  display: grid;
+  gap: 28px;
+  align-content: start;
+  max-width: 1140px;
+  margin: 0 auto;
+}
+html:has(.lab), body:has(.lab) { overflow: auto; height: auto; }
+.lab-head { display: grid; gap: 6px; }
+.lab-back { color: var(--cream-2); font-size: 14px; text-decoration: none; }
+.lab-back:hover { color: var(--cream); }
+.lab h1 { margin: 0; font-family: 'IM Fell English SC', 'Zilla Slab', Georgia, serif; font-weight: 400; font-size: clamp(52px, 9vw, 88px); line-height: 0.9; }
+.lab-status { margin: 0; font-size: 18px; color: var(--cream-2); }
+.lab-status b { color: var(--gold); font-weight: 700; }
+.lab-phases { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.lab-phase { background: var(--wood-2); border-radius: 14px; padding: 14px; display: grid; gap: 8px; align-content: start; grid-template-columns: auto 1fr; column-gap: 10px; border: 1px solid rgba(241, 227, 198, 0.08); }
+.lab-phase > p, .lab-phase > dl { grid-column: 1 / -1; }
+.lab-phase-n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: rgba(0, 0, 0, 0.22); color: var(--cream-2); }
+.lab-phase b { display: block; font-size: 16px; line-height: 1.2; }
+.lab-phase-st { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cream-2); }
+.lab-phase p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--cream-2); }
+.lab-phase.done .lab-phase-n { background: var(--go); color: #fff; }
+.lab-phase.done .lab-phase-st { color: #9fd08a; }
+.lab-phase.now { border-color: var(--gold); }
+.lab-phase.now .lab-phase-n { background: var(--gold); color: var(--ink); }
+.lab-phase.now .lab-phase-st { color: var(--gold); }
+.lab-phase dl { margin: 4px 0 0; display: grid; gap: 8px; }
+.lab-phase dl div { display: grid; }
+.lab-phase dd { margin: 0; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--cream); }
+.lab-phase dt { font-size: 12px; color: var(--cream-2); line-height: 1.3; }
+.lab-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
+.lab-card { background: linear-gradient(180deg, #5a3f2e, #523928); border-radius: 16px; padding: 20px; display: grid; gap: 12px; align-content: start; box-shadow: inset 0 0 0 1px rgba(241, 227, 198, 0.09), 0 10px 30px rgba(0, 0, 0, 0.22); min-width: 0; }
+.lab-card h2 { margin: 0; font-family: 'IM Fell English SC', 'Zilla Slab', Georgia, serif; font-weight: 400; font-size: 26px; line-height: 1.1; }
+.lab-note { margin: 0; font-size: 14px; line-height: 1.5; color: var(--cream-2); max-width: 64ch; }
+.lab-big { display: grid; }
+.lab-big b { font-size: clamp(44px, 7vw, 64px); line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold); }
+.lab-big span { color: var(--cream-2); font-size: 14px; }
+.lab-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lab-row div { background: rgba(0, 0, 0, 0.18); border-radius: 10px; padding: 10px 12px; display: grid; }
+.lab-row b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.lab-row span { font-size: 12px; color: var(--cream-2); }
+.lab-btn { justify-self: start; font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 9px 20px; background: var(--cream); color: var(--ink); cursor: pointer; }
+.lab-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.lab-board { width: 100%; height: auto; display: block; background: radial-gradient(circle at 50% 45%, #3b6273, #2c4a57 72%); border-radius: 14px; }
+.lab-board text { font-family: 'Zilla Slab', Georgia, serif; }
+.lab-hover { min-height: 1.5em; }
+.lab-chart { width: 100%; height: auto; display: block; }
+.lab-gridline { stroke: rgba(241, 227, 198, 0.1); stroke-width: 1; }
+.lab-fair { stroke: rgba(241, 227, 198, 0.45); stroke-width: 1; stroke-dasharray: 4 4; }
+.lab-tick { font-size: 11px; fill: var(--cream-2); font-variant-numeric: tabular-nums; }
+.lab-band { fill: rgba(227, 167, 44, 0.18); }
+.lab-line { fill: none; stroke: var(--gold); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.lab-dot { fill: var(--wood-2); stroke: var(--gold); stroke-width: 2; }
+.lab-dot.kept { fill: var(--gold); }
+.lab-empty { position: relative; display: grid; }
+.lab-empty p { position: absolute; inset: 0; margin: auto; height: fit-content; max-width: 38ch; text-align: center; color: var(--cream); background: rgba(42, 29, 19, 0.82); padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+@media (max-width: 900px) {
+  .lab-phases { grid-template-columns: minmax(0, 1fr); }
+  .lab-grid { grid-template-columns: minmax(0, 1fr); }
+}

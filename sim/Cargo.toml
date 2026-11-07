@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "A fast copy of the Towns and Peasants base-game rules, for self-play training"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

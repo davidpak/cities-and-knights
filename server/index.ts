@@ -69,6 +69,34 @@ const app = express()
 const http = createServer(app)
 const io = new Server<ClientToServer, ServerToClient>(http, { cors: { origin: '*' }, pingInterval: 20_000, pingTimeout: 25_000 })
 
+// ---------------------------------------------------------------- the lab: where training reports its progress
+// GET /api/lab: the status (phases, and once training runs, each generation). POST /api/lab with
+// "Authorization: Bearer <LAB_TOKEN>" replaces it: the trainer does this after each generation.
+const LAB_FILE = () => join(DATA, 'lab.json')
+const LAB_START = join(here, 'lab-start.json')
+app.get('/api/lab', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache')
+  const file = existsSync(LAB_FILE()) ? LAB_FILE() : LAB_START
+  try {
+    res.type('json').send(readFileSync(file, 'utf8'))
+  } catch {
+    res.status(500).json({ error: 'no lab status' })
+  }
+})
+app.post('/api/lab', express.json({ limit: '4mb' }), (req, res) => {
+  const token = process.env.LAB_TOKEN
+  if (!token || req.headers.authorization !== `Bearer ${token}`) return void res.status(401).json({ error: 'not allowed' })
+  try {
+    mkdirSync(DATA, { recursive: true })
+    writeFileSync(LAB_FILE() + '.tmp', JSON.stringify({ ...req.body, updated: new Date().toISOString() }))
+    renameSync(LAB_FILE() + '.tmp', LAB_FILE())
+    res.json({ ok: true })
+  } catch (e) {
+    log('lab write failed', e)
+    res.status(500).json({ error: 'could not save' })
+  }
+})
+
 app.get('/health', (_req, res) =>
   void res.json({ ok: true, rooms: rooms.size, games: [...rooms.values()].filter((r) => r.game).length, online: sockets.size }),
 )

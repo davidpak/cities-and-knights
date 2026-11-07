@@ -459,7 +459,7 @@ function siteValue(c: Ctx, v: number): number {
 /** where a settlement could still go, roads aside */
 const openSite = (s: S, v: number) => s.buildings[v] === undefined && s.x?.knights[v] === undefined && TOPO.vertices[v].neighbors.every((u) => s.buildings[u] === undefined)
 
-function setupMove(c: Ctx): Action {
+function setupMove(c: Ctx, values?: Map<number, number>): Action {
   const { s, p, rnd } = c
   const ph = s.phase
   if (ph.kind !== 'setup') return { type: 'endTurn' }
@@ -505,26 +505,30 @@ function setupMove(c: Ctx): Action {
     const jitter = () => 1 + c.lv.noise * 0.5 * (rnd() - 0.5)
     // an expert's first corner looks ahead: the others pick in between (each the richest corner left), and then
     // the best second corner beside this one has to be worth having too
-    if (c.b.level === 'expert' && ph.round === 1 && TUNE.look) {
-      const between = 2 * c.n - 2 - 2 * p
-      const top = [...spots].sort((a, b) => score(b, c.rate, 1) - score(a, c.rate, 1)).slice(0, 10)
-      const all = TOPO.vertices.map((_, i) => i)
-      return {
-        type: 'buildSettlement',
-        vertex: best(top, (v1) => {
-          const taken = new Set<number>([v1])
-          const free = (w: number) => !taken.has(w) && openSite(s, w) && TOPO.vertices[w].neighbors.every((u) => !taken.has(u))
-          for (let k = 0; k < between; k++) {
-            const left = all.filter(free)
-            if (!left.length) break
-            taken.add(best(left, (w) => pips(s, w)))
-          }
-          const rate = sub(c.rate, yieldAt(s, v1, false), 1)
-          const left = all.filter(free)
-          const second = left.length ? Math.max(...left.map((w) => score(w, rate, 2))) : 0
-          return score(v1, c.rate, 1) + 0.9 * second
-        }),
+    const between = 2 * c.n - 2 - 2 * p
+    const all = TOPO.vertices.map((_, i) => i)
+    /** a first corner's worth, looking ahead: the others pick in between, then our best second corner */
+    const withSecond = (v1: number) => {
+      const taken = new Set<number>([v1])
+      const free = (w: number) => !taken.has(w) && openSite(s, w) && TOPO.vertices[w].neighbors.every((u) => !taken.has(u))
+      for (let k = 0; k < between; k++) {
+        const left = all.filter(free)
+        if (!left.length) break
+        taken.add(best(left, (w) => pips(s, w)))
       }
+      const rate = sub(c.rate, yieldAt(s, v1, false), 1)
+      const left = all.filter(free)
+      const second = left.length ? Math.max(...left.map((w) => score(w, rate, 2))) : 0
+      return score(v1, c.rate, 1) + 0.9 * second
+    }
+    // (asked only for the values: every open corner's, as an expert sees it)
+    if (values) {
+      for (const v of spots) values.set(v, ph.round === 1 ? withSecond(v) : score(v, c.rate, ph.round))
+      return { type: 'endTurn' }
+    }
+    if (c.b.level === 'expert' && ph.round === 1 && TUNE.look) {
+      const top = [...spots].sort((a, b) => score(b, c.rate, 1) - score(a, c.rate, 1)).slice(0, 10)
+      return { type: 'buildSettlement', vertex: best(top, withSecond) }
     }
     return { type: 'buildSettlement', vertex: best(spots, (v) => score(v, c.rate, ph.round) * jitter()) }
   }
@@ -542,6 +546,13 @@ function setupMove(c: Ctx): Action {
       return top + rnd() * 0.3
     }),
   }
+}
+
+/** how an expert values every open corner for its next settlement at the start of the game (for the lab page) */
+export function openingValues(s: S, p: number): Map<number, number> {
+  const values = new Map<number, number>()
+  setupMove(ctxOf(s, p, () => 0.5, brain('expert')), values)
+  return values
 }
 
 // ---------------------------------------------------------------- goals

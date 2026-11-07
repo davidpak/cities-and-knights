@@ -12,11 +12,11 @@ import { createServer } from 'node:http'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Server, type Socket } from 'socket.io'
-import { botAction } from '../shared/bot.ts'
+import { BOT_CAST, LEVELS, botAction, brain, type Brain, type Level } from '../shared/bot.ts'
 import { OFFER_MS, apply, newGame, viewFor, type GameState } from '../shared/engine.ts'
 import { MAX_SEATS, NAME_MAX, type ClientToServer, type RoomInfo, type Seat, type ServerToClient } from '../shared/protocol.ts'
 
-type Room = { code: string; host: string; seats: Seat[]; game: GameState | null; knights: boolean; botTimer?: NodeJS.Timeout; emptySince?: number }
+type Room = { code: string; host: string; seats: Seat[]; game: GameState | null; knights: boolean; botTimer?: NodeJS.Timeout; emptySince?: number; brains?: Record<string, Brain> }
 type Sock = Socket<ClientToServer, ServerToClient, Record<string, never>, { player: string }>
 
 const rooms = new Map<string, Room>()
@@ -47,7 +47,6 @@ const newCode = () => {
 }
 /** how long a victim has to catch a card being sneaked away */
 const SNATCH_MS = 2000
-const BOT_NAMES = ['Bramble', 'Pip', 'Juniper', 'Moss', 'Clover', 'Wren']
 
 function info(r: Room): RoomInfo {
   return { code: r.code, host: r.host, seats: r.seats, started: r.game !== null, knights: r.knights }
@@ -57,7 +56,9 @@ function info(r: Room): RoomInfo {
 function armOffers(r: Room) {
   for (const o of r.game?.offers ?? []) {
     if (o.expires) continue
-    o.expires = Date.now() + OFFER_MS
+    // (a bot's offer waits less: it has a turn to get on with)
+    const ms = r.seats.find((x) => x.id === r.game!.players[o.from].id)?.bot ? 10_000 : OFFER_MS
+    o.expires = Date.now() + ms
     setTimeout(() => {
       const g = r.game
       if (!g || !g.offers.some((x) => x.id === o.id)) return
@@ -65,7 +66,7 @@ function armOffers(r: Room) {
       if (!res.ok) return
       r.game = res.state
       send(r)
-    }, OFFER_MS)
+    }, ms)
   }
 }
 
@@ -80,23 +81,46 @@ function send(r: Room) {
   scheduleBots(r)
 }
 
+/** each bot's mind for this game: its level, its persona, and what it remembers */
+function brainOf(r: Room, seat: Seat): Brain {
+  r.brains ??= {}
+  const b = (r.brains[seat.id] ??= brain(seat.level ?? 'normal', seat.persona ?? 'steady'))
+  b.people = r.game ? r.game.players.map((pl, i) => (r.seats.find((x) => x.id === pl.id)?.bot ? -1 : i)).filter((i) => i >= 0) : []
+  return b
+}
+
 function scheduleBots(r: Room) {
   if (!r.game || r.botTimer || r.game.phase.kind === 'over') return
   const g = r.game
-  const bots = g.players.map((p, i) => ({ p, i })).filter(({ p }) => r.seats.find((s) => s.id === p.id)?.bot)
+  const bots = g.players.map((p, i) => ({ p, i, seat: r.seats.find((s) => s.id === p.id) })).filter((b) => b.seat?.bot)
   // a discard or an answer to an offer can be anyone's; otherwise only the current player moves
-  const next = bots.find(({ i }) => botAction(viewFor(g, i), i, Math.random) !== null)
+  const next = bots.find(({ i, seat }) => botAction(viewFor(g, i), i, Math.random, brainOf(r, seat!)) !== null)
   if (!next) return
   r.botTimer = setTimeout(() => {
     r.botTimer = undefined
     if (!r.game) return
-    const a = botAction(viewFor(r.game, next.i), next.i, Math.random)
+    const a = botAction(viewFor(r.game, next.i), next.i, Math.random, brainOf(r, next.seat!))
     if (!a) return
     const res = apply(r.game, next.i, a)
     if (res.ok) r.game = res.state
     else console.warn(`bot ${next.p.name} tried ${a.type}: ${res.error}`)
     send(r)
+    if (res.ok && a.type === 'snatch') armSnatch(r)
   }, r.game.phase.kind === 'setup' ? 500 : r.game.phase.kind === 'steal' ? 2500 : 750)
+}
+
+/** a card being sneaked: the victim has a moment to catch it, then the thief gets away with it */
+function armSnatch(room: Room) {
+  const sn = room.game?.snatch
+  if (!sn) return
+  setTimeout(() => {
+    if (!room.game || room.game.snatch?.id !== sn.id) return
+    const end = apply(room.game, sn.thief, { type: 'snatchEnd' })
+    if (end.ok) {
+      room.game = end.state
+      send(room)
+    }
+  }, SNATCH_MS)
 }
 
 function leave(player: string) {
@@ -204,12 +228,22 @@ io.on('connection', (raw) => {
     send(room)
   })
 
-  socket.on('room:addBot', () => {
+  socket.on('room:addBot', (level) => {
     const room = myRoom()
     if (!room || room.host !== player || room.game || room.seats.length >= MAX_SEATS) return
     const used = new Set(room.seats.map((s) => s.name))
-    const name = BOT_NAMES.find((n) => !used.has(n)) ?? 'Bot'
-    room.seats.push({ id: `bot-${Math.random().toString(36).slice(2, 10)}`, name, ready: true, bot: true, connected: true })
+    const free = BOT_CAST.filter((c) => !used.has(c.name))
+    const cast = free.length ? free[Math.floor(Math.random() * free.length)] : { name: 'Bot', persona: 'steady' as const }
+    const lv: Level = LEVELS.includes(level as Level) ? (level as Level) : 'normal'
+    room.seats.push({ id: `bot-${Math.random().toString(36).slice(2, 10)}`, name: cast.name, ready: true, bot: true, connected: true, level: lv, persona: cast.persona })
+    send(room)
+  })
+
+  socket.on('room:botLevel', (id, level) => {
+    const room = myRoom()
+    const seat = room?.seats.find((s) => s.id === id && s.bot)
+    if (!room || !seat || room.host !== player || room.game || !LEVELS.includes(level)) return
+    seat.level = level
     send(room)
   })
 
@@ -235,6 +269,7 @@ io.on('connection', (raw) => {
     if (room.seats.length < 2) return ack({ ok: false, error: 'You need at least 2 players (add a bot?).' })
     if (!room.seats.every((s) => s.ready || s.id === player)) return ack({ ok: false, error: 'Everyone needs to be ready.' })
     room.game = newGame(room.seats.map((s) => ({ id: s.id, name: s.name })), (Math.random() * 2 ** 31) | 0, { knights: room.knights })
+    room.brains = {}
     ack({ ok: true })
     send(room)
   })
@@ -262,18 +297,7 @@ io.on('connection', (raw) => {
     room.game = res.state
     ack({ ok: true })
     send(room)
-    // a card being sneaked: the victim has a moment to catch it, then the thief gets away with it
-    const sn = room.game.snatch
-    if (action.type === 'snatch' && sn) {
-      setTimeout(() => {
-        if (!room.game || room.game.snatch?.id !== sn.id) return
-        const end = apply(room.game, sn.thief, { type: 'snatchEnd' })
-        if (end.ok) {
-          room.game = end.state
-          send(room)
-        }
-      }, SNATCH_MS)
-    }
+    if (action.type === 'snatch') armSnatch(room)
   })
 
   socket.on('disconnect', () => {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { RoomInfo } from '../../../shared/protocol.ts'
 import { MAX_SEATS } from '../../../shared/protocol.ts'
+import { LEVELS, LEVEL_NAME, PERSONA_TAG } from '../../../shared/bot.ts'
 import { room, toast, useStore } from '../net.ts'
 import { Title } from './Title.tsx'
 
@@ -66,6 +67,15 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
                 )}
               </span>
               <span className={`ready ${s.ready || s.id === info.host ? 'yes' : ''}`}>{s.id === info.host ? 'host' : s.ready ? 'ready' : 'not ready'}</span>
+              {s.bot && s.persona && <span className="persona">{PERSONA_TAG[s.persona]}</span>}
+              {s.bot &&
+                (host ? (
+                  <button className="level" title="Level" onClick={() => room.botLevel(s.id, LEVELS[(LEVELS.indexOf(s.level ?? 'normal') + 1) % LEVELS.length])}>
+                    {LEVEL_NAME[s.level ?? 'normal']}
+                  </button>
+                ) : (
+                  <span className="level">{LEVEL_NAME[s.level ?? 'normal']}</span>
+                ))}
               {host && s.bot && (
                 <button className="link" onClick={() => room.removeSeat(s.id)}>
                   remove
@@ -85,7 +95,7 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
               {seat?.ready ? "Not ready" : "Ready"}
             </button>
           )}
-          {host && info.seats.length < MAX_SEATS && <button onClick={() => room.addBot()}>Add a bot</button>}
+          {host && info.seats.length < MAX_SEATS && <button onClick={() => room.addBot((LEVELS.find((l) => l === localStorage.getItem('tp.level')) ?? 'normal'))}>Add a bot</button>}
           {host && (
             <button
               className="go"

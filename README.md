@@ -109,11 +109,33 @@ weakest hardware) showed where the time goes, and each fix was kept only if it p
 - The canvas is opaque, and laptops with two GPUs use the faster one.
 - The home screen loads without three.js; the physics engine follows in the background.
 
+## Bots
+
+Four levels, picked on the home screen (solo) or per bot in a room (tap its level to change it):
+
+- **Easy** builds whatever it can afford, trades at random and now and then forgets to build.
+- **Normal** plans: every goal (a city, a settlement and the roads to it, a card, the longest road, a city
+  improvement, a knight) is weighed by points and production against the rounds it would take to afford.
+- **Hard** plans tightly, trades only when a trade speeds its plan, won't help whoever is ahead, aims the robber at
+  the leader and spends down before a 7 can cut its hand.
+- **Expert** also counts every card it sees change hands (so it knows who holds what, times its monopolies and asks
+  the right player), looks ahead in the opening draft for a second corner that fits its first, and bargains: it asks
+  two for one before settling for one for one.
+
+Each bot at the table also has a way of playing: Bramble holds grudges (it remembers who robbed it, puts the robber
+on them, and won't trade with them, even when that costs it), Clover trades all day and pays over the odds, Wren
+builds roads, Flint keeps knights and fights for the largest army, Pip sneaks cards, Juniper buys cards and climbs
+science, Moss plays it straight.
+
+`npx tsx shared/tourney.ts 200 base expert hard hard hard` plays bots against each other (seats rotate). In 4-player
+base games a fair share is 25%: Easy wins about 1% against three Normals, Normal and Hard about 55% against three of
+the level below, and Expert about 46% against three Hards.
+
 ## Layout
 
 | Folder | What's in it |
 |---|---|
-| `shared/` | The rules (`engine.ts`), the generated board layout (`board.ts`), costs and counts (`rules.ts`), a simple bot (`bot.ts`), the socket protocol, and tests |
+| `shared/` | The rules (`engine.ts`), the generated board layout (`board.ts`), costs and counts (`rules.ts`), the bots (`bot.ts`, and `tourney.ts` to pit them against each other), the socket protocol, and tests |
 | `server/` | Node + socket.io. Rooms, lobby, bots, reconnecting after a refresh. Also serves the built client |
 | `client/` | React + react-three-fiber. The 3D table (`src/three/`), the HUD (`src/ui/`), the connection (`src/net.ts`) |
 
@@ -137,7 +159,7 @@ without the server.
 ## Checks
 
 ```sh
-npm test            # rules: 24 tests, including 120 whole bot games (and 60 with the expansion) checked after every move
+npm test            # rules: whole bot games checked after every move, every level and personality, and level order
 npm run check       # the 3D spec's fit checks; that nothing on the table overlaps (2-4 players, wide and tall);
                     # the physics table headless (stacks lie still, moved cards land, tossed things go home, all sleep);
                     # 30 real dice throws land flat in the tray showing the roll

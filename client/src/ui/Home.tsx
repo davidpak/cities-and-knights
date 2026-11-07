@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { LEVELS, LEVEL_NAME, type Level } from '../../../shared/bot.ts'
 import { myName, rememberName, room, startSolo, toast, useStore } from '../net.ts'
 import { Title } from './Title.tsx'
 
@@ -7,6 +8,7 @@ export function Home() {
   const [name, setName] = useState(myName())
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('room') ?? '')
   const [bots, setBots] = useState(2)
+  const [level, setLevel] = useState<Level>(() => (LEVELS.find((l) => l === localStorage.getItem('tp.level')) ?? 'normal'))
   const [knights, setKnights] = useState(() => localStorage.getItem('tp.knights') !== '0')
   const named = name.trim()
   const keep = () => rememberName(named)
@@ -47,11 +49,18 @@ export function Home() {
               ))}
               <span className="after">{bots > 1 ? 'bots' : 'bot'}</span>
             </span>
+            <span className="choices">
+              {LEVELS.map((l) => (
+                <button key={l} className={level === l ? 'on' : ''} onClick={() => (setLevel(l), localStorage.setItem('tp.level', l))}>
+                  {LEVEL_NAME[l]}
+                </button>
+              ))}
+            </span>
             <button
               className="go"
               onClick={() => {
                 keep()
-                startSolo(named, bots, knights)
+                startSolo(named, bots, knights, level)
               }}
             >
               Start

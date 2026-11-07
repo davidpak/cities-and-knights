@@ -1012,6 +1012,23 @@ input {
 .ready.yes {
   color: #9fd08a;
 }
+/* a bot's way of playing, and its level (the host taps to change it) */
+.seat .persona {
+  font-size: 13px;
+  color: #a58f6e;
+}
+.seat .level {
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(241, 227, 198, 0.25);
+  background: transparent;
+  color: var(--cream-2);
+}
+button.level {
+  cursor: pointer;
+}
 .menu .toast {
   background: var(--cream);
 }

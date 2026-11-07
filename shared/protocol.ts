@@ -1,7 +1,9 @@
 /** What the server and clients say to each other over the socket. */
 import type { Action, View } from './engine.ts'
+import type { Level, Persona } from './bot.ts'
 
-export type Seat = { id: string; name: string; ready: boolean; bot: boolean; connected: boolean }
+/** a bot's seat also says how well it plays (level) and how (persona) */
+export type Seat = { id: string; name: string; ready: boolean; bot: boolean; connected: boolean; level?: Level; persona?: Persona }
 /** knights: play with the expansion (knights, barbarians, commodities, city improvements, progress cards) */
 export type RoomInfo = { code: string; host: string; seats: Seat[]; started: boolean; knights: boolean }
 export type Ack = { ok: true; code?: string } | { ok: false; error: string }
@@ -17,7 +19,9 @@ export interface ClientToServer {
   'room:leave': () => void
   'room:rename': (name: string) => void
   'room:ready': () => void
-  'room:addBot': () => void
+  'room:addBot': (level?: Level) => void
+  /** the host changes a bot's level */
+  'room:botLevel': (id: string, level: Level) => void
   'room:removeSeat': (id: string) => void
   'room:start': (ack: (a: Ack) => void) => void
   'room:end': () => void

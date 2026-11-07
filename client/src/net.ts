@@ -6,7 +6,7 @@
  */
 import { useSyncExternalStore, type ReactNode } from 'react'
 import { io, type Socket } from 'socket.io-client'
-import { botAction } from '../../shared/bot.ts'
+import { BOT_CAST, botAction, brain, type Brain, type Level } from '../../shared/bot.ts'
 import { OFFER_MS, apply, newGame, viewFor, type Action, type GameState, type View } from '../../shared/engine.ts'
 import type { Ack, ClientToServer, RoomInfo, ServerToClient } from '../../shared/protocol.ts'
 import type { Progress } from '../../shared/rules.ts'
@@ -83,7 +83,8 @@ export const room = {
   },
   rename: (name: string) => socket?.emit('room:rename', name),
   ready: () => socket?.emit('room:ready'),
-  addBot: () => socket?.emit('room:addBot'),
+  addBot: (level?: Level) => socket?.emit('room:addBot', level),
+  botLevel: (id: string, level: Level) => socket?.emit('room:botLevel', id, level),
   knights: (on: boolean) => socket?.emit('room:knights', on),
   removeSeat: (id: string) => socket?.emit('room:removeSeat', id),
   start: () => call('room:start'),
@@ -114,13 +115,7 @@ export async function act(a: Action): Promise<boolean> {
   if (store.solo) {
     if (a.type === 'snatchEnd') return false
     const ok = soloAct(0, a)
-    // a card being sneaked: the moment to catch it, then the thief has it
-    const sn = solo?.snatch
-    if (ok && a.type === 'snatch' && sn)
-      setTimeout(() => {
-        if (!solo || solo.snatch?.id !== sn.id) return
-        soloAct(sn.thief, { type: 'snatchEnd' }, true)
-      }, 2000)
+    if (ok && a.type === 'snatch') armSoloSnatch()
     return ok
   }
   const r = await call('game:action', a)
@@ -131,6 +126,7 @@ export async function act(a: Action): Promise<boolean> {
 // ---------------------------------------------------------------- solo: you against bots, all in the browser
 
 let solo: GameState | null = null
+const BOT_OFFER_MS = 10_000
 const AUTO = typeof location !== 'undefined' && /[?&]auto/.test(location.search) && /[?&]test/.test(location.search)
 /** ?test&auto=N: stop playing your seat at turn N */
 const autoStop = () => {
@@ -151,14 +147,16 @@ function soloPublish() {
   // a new offer gets its time; when that runs out (and it's still open), it closes
   for (const o of solo.offers) {
     if (o.expires) continue
-    o.expires = Date.now() + OFFER_MS
+    // (a bot's offer waits less: it has a turn to get on with)
+    const ms = solo.players[o.from].id === 'you' ? OFFER_MS : BOT_OFFER_MS
+    o.expires = Date.now() + ms
     setTimeout(() => {
       if (!solo?.offers.some((x) => x.id === o.id)) return
       const r = apply(solo, o.from, { type: 'cancelOffer', id: o.id })
       if (!r.ok) return
       solo = r.state
       soloPublish()
-    }, OFFER_MS)
+    }, ms)
   }
   const you = solo.players.findIndex((p) => p.id === 'you')
   set({ view: viewFor(solo, you) })
@@ -167,12 +165,12 @@ function soloPublish() {
   const g = solo
   // (?test&auto: a bot plays your seat too, for looking at a game in progress)
   const auto = AUTO && !autoStop()
-  const next = g.players.map((_, i) => i).find((i) => (auto || i !== you) && botAction(viewFor(g, i), i, Math.random) !== null)
+  const next = g.players.map((_, i) => i).find((i) => (auto || i !== you) && botAction(viewFor(g, i), i, Math.random, soloBrain(i)) !== null)
   if (next === undefined || held) return
   soloTimer = setTimeout(() => {
     if (!solo) return
-    const a = botAction(viewFor(solo, next), next, Math.random)
-    if (a) soloAct(next, a, true)
+    const a = botAction(viewFor(solo, next), next, Math.random, soloBrain(next))
+    if (a && soloAct(next, a, true) && a.type === 'snatch') armSoloSnatch()
   }, AUTO ? 40 : solo.phase.kind === 'setup' ? 450 : solo.phase.kind === 'steal' ? 2500 : 700)
 }
 
@@ -230,13 +228,35 @@ function soloAct(p: number, a: Action, bot = false): boolean {
   return true
 }
 
-export function startSolo(name: string, bots: number, knights = true) {
-  const names = ['Bramble', 'Pip', 'Juniper']
-  const seats = [{ id: 'you', name: name || 'You' }, ...names.slice(0, bots).map((n, i) => ({ id: `bot${i}`, name: n }))]
+/** each bot's mind: its level, its persona, what it remembers (your seat, under ?test&auto, plays as a normal bot) */
+let soloBrains: Brain[] = []
+const soloBrain = (i: number) => (soloBrains[i] ??= brain())
+
+/** a card being sneaked: the moment to catch it, then the thief has it */
+function armSoloSnatch() {
+  const sn = solo?.snatch
+  if (sn)
+    setTimeout(() => {
+      if (!solo || solo.snatch?.id !== sn.id) return
+      soloAct(sn.thief, { type: 'snatchEnd' }, true)
+    }, 2000)
+}
+
+export function startSolo(name: string, bots: number, knights = true, level: Level = 'normal') {
+  // a random few from the cast, each with its own way of playing
+  const cast = [...BOT_CAST].sort(() => Math.random() - 0.5).slice(0, bots)
+  const seats = [{ id: 'you', name: name || 'You' }, ...cast.map((c, i) => ({ id: `bot${i}`, name: c.name }))]
   solo = newGame(seats, (Math.random() * 2 ** 31) | 0, { knights })
+  soloBrains = [brain(), ...cast.map((c) => ({ ...brain(level, c.persona), people: [0] }))]
   set({
     solo: true,
-    room: { code: 'SOLO', host: 'you', started: true, knights, seats: seats.map((s) => ({ ...s, ready: true, bot: s.id !== 'you', connected: true })) },
+    room: {
+      code: 'SOLO',
+      host: 'you',
+      started: true,
+      knights,
+      seats: seats.map((s, i) => ({ ...s, ready: true, bot: s.id !== 'you', connected: true, ...(i ? { level, persona: cast[i - 1].persona } : {}) })),
+    },
   })
   soloPublish()
 }

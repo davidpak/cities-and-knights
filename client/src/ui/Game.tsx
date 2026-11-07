@@ -254,6 +254,12 @@ export function Game({ view }: { view: View }) {
   let tray: TrayContents | null = null
   if (owe) tray = { mode: 'discard', give: drop, get: {} }
   else if (deal) tray = { mode: 'trade', give: deal.give, get: deal.get, any: deal.any }
+  else if (!layout.portrait) {
+    // (on a wide table an open offer keeps the tray out, showing it, until it's settled: one put to you that you
+    // haven't answered first, else your latest; from where you sit, what you'd give near, what you'd get far)
+    const o = toMe[toMe.length - 1] ?? myOffers[myOffers.length - 1] ?? incoming[incoming.length - 1]
+    if (o) tray = o.from === me ? { mode: 'trade', give: o.give, get: o.get, any: o.any, locked: true } : { mode: 'trade', give: o.get, get: o.give, locked: true }
+  }
   // what's on the tray came out of your hand (an offer to you shows what you'd hand over)
   // (an offer to you takes nothing from your hand until you accept it)
   const onTray = owe ? drop : deal ? deal.give : pickFor ? pickFor.picked : {}
@@ -990,8 +996,11 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
   if (target !== null) rows.push(<div key="target" className="op-row target">{chip(target, '→')}</div>)
   if (!rows.length) return null
   const [x, top] = project(layout.tray[0], 0, layout.tray[1] - TRAY.d / 2)
+  // (a tray near the screen's right edge: the rows line up with its right side and grow leftward, staying on screen)
+  const [right] = project(layout.tray[0] + TRAY.w / 2, 0, layout.tray[1] - TRAY.d / 2)
+  const nearRight = x > window.innerWidth * 0.62
   return (
-    <div className="offers" style={{ left: x, top }}>
+    <div className={`offers ${nearRight ? 'to-left' : ''}`} style={nearRight ? { right: Math.max(8, window.innerWidth - right), top } : { left: x, top }}>
       {rows}
     </div>
   )

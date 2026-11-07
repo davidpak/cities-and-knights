@@ -193,7 +193,11 @@ input {
 /* ---------------------------------------------------------------- the game: the table fills the screen */
 .game {
   position: fixed;
-  inset: 0;
+  /* (inside what a phone's notch, status bar and home bar leave: as an installed app the page runs under them) */
+  top: env(safe-area-inset-top, 0px);
+  right: env(safe-area-inset-right, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: env(safe-area-inset-left, 0px);
 }
 .game > div:first-child {
   position: absolute !important;
@@ -1945,18 +1949,6 @@ input {
     gap: 20px;
   }
 }
-/* (a phone's notch and home bar: the page runs under them, the buttons don't) */
-.corner {
-  bottom: max(calc(var(--u) * 14), 10px, calc(env(safe-area-inset-bottom) + 6px));
-  right: max(calc(var(--u) * 14), 10px, calc(env(safe-area-inset-right) + 6px));
-}
-.history-btn {
-  top: max(calc(var(--u) * 10), 6px, calc(env(safe-area-inset-top) + 4px));
-  right: max(calc(var(--u) * 12), 6px, calc(env(safe-area-inset-right) + 6px));
-}
-.lines {
-  top: max(calc(var(--u) * 10), calc(env(safe-area-inset-top) + 4px));
-}
 .my-fan,
 .results-btn {
   bottom: max(12px, calc(env(safe-area-inset-bottom) + 6px));
@@ -2145,4 +2137,13 @@ body {
   border-radius: 6px;
   border-left: 5px solid var(--tc);
   background: var(--paper-2);
+}
+
+/* (the start screen and the room: clear of the status bar and home bar when installed) */
+.menu {
+  padding-top: max(32px, calc(env(safe-area-inset-top) + 16px));
+  padding-bottom: max(32px, calc(env(safe-area-inset-bottom) + 16px));
+}
+html {
+  background: #4a3324;
 }

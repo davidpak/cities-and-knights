@@ -2416,6 +2416,9 @@ html:has(.lab), body:has(.lab) { overflow: auto; height: auto; }
 .lab-line { fill: none; stroke: var(--gold); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .lab-dot { fill: var(--wood-2); stroke: var(--gold); stroke-width: 2; }
 .lab-dot.kept { fill: var(--gold); }
+.lab-line-2 { fill: none; stroke: #6fb3d2; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.lab-dot-2 { fill: #6fb3d2; stroke: #bfe0ef; stroke-width: 1.5; }
+.lab-legend { font-size: 12px; fill: var(--cream-2); }
 .lab-empty { position: relative; display: grid; }
 .lab-grid.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .lab-seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(0, 0, 0, 0.2); justify-self: start; }

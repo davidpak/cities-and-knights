@@ -15,7 +15,7 @@ type Habits = { settlements: number; cities: number; roads: number; cards: numbe
 type Generation = {
   gen: number; at: string; games: number; positions: number; holdout: number; turns: number
   vsChampion: number; lo: number; hi: number; promoted: boolean; rating: number; ratingLo: number; ratingHi: number; vsRandom: number
-  habits: Habits; heat: Record<string, number>; winVsExpert?: number
+  habits: Habits; heat: Record<string, number>; winVsExpert?: number; winVsExpertLo?: number; winVsExpertHi?: number
 }
 type Live = { step: string; gamesPerSec: number; totalGames: number; positions?: number; generation?: number }
 type Status = { updated: string; phases: PhaseInfo[]; training: null | { generations: Generation[]; live?: Live; machine?: string } }
@@ -208,8 +208,9 @@ function OpeningMap({ gens }: { gens: Generation[] }) {
   )
 }
 
-/** a measure across the generations: a line, an optional band, a reference line */
-function GenChart({ gens, y, band, ref, fmt, domain, label }: { gens: Generation[]; y: (g: Generation) => number; band?: (g: Generation) => [number, number]; ref?: { value: number; label: string }; fmt: (v: number) => string; domain: [number, number]; label: string }) {
+/** a measure across the generations: a line, an optional band, a reference line, and an optional second line
+ *  (for example the win rate against today's Expert, which only exists where a generation was promoted) */
+function GenChart({ gens, y, band, ref, fmt, domain, label, y2, tip2, legend }: { gens: Generation[]; y: (g: Generation) => number; band?: (g: Generation) => [number, number]; ref?: { value: number; label: string }; fmt: (v: number) => string; domain: [number, number]; label: string; y2?: (g: Generation) => number | undefined; tip2?: (g: Generation) => string | undefined; legend?: [string, string] }) {
   const W = 1000, H = 260, m = { l: 56, r: 16, t: 14, b: 30 }
   const last = Math.max(4, ...gens.map((g) => g.gen))
   const x = (g: number) => m.l + (g / last) * (W - m.l - m.r)
@@ -249,6 +250,23 @@ function GenChart({ gens, y, band, ref, fmt, domain, label }: { gens: Generation
         {gens.map((g) => (
           <circle key={g.gen} cx={x(g.gen)} cy={yy(y(g))} r={g.promoted ? 6 : 4} className={g.promoted ? 'lab-dot kept' : 'lab-dot'} />
         ))}
+        {y2 && (() => {
+          const pts = gens.filter((g) => Number.isFinite(y2(g) as number))
+          return (
+            <>
+              {pts.length > 1 && <polyline points={pts.map((g) => `${x(g.gen)},${yy(y2(g) as number)}`).join(' ')} className="lab-line-2" />}
+              {pts.map((g) => <circle key={g.gen} cx={x(g.gen)} cy={yy(y2(g) as number)} r={5} className="lab-dot-2" />)}
+            </>
+          )
+        })()}
+        {legend && (
+          <g>
+            <line x1={m.l + 6} x2={m.l + 26} y1={m.t + 8} y2={m.t + 8} className="lab-line" />
+            <text x={m.l + 32} y={m.t + 12} className="lab-legend">{legend[0]}</text>
+            <line x1={m.l + 6} x2={m.l + 26} y1={m.t + 26} y2={m.t + 26} className="lab-line-2" />
+            <text x={m.l + 32} y={m.t + 30} className="lab-legend">{legend[1]}</text>
+          </g>
+        )}
         {hover && <line x1={x(hover.gen)} x2={x(hover.gen)} y1={m.t} y2={H - m.b} className="lab-cursor" />}
       </svg>
       {hover && (
@@ -257,6 +275,7 @@ function GenChart({ gens, y, band, ref, fmt, domain, label }: { gens: Generation
           <br />
           {fmt(y(hover))}
           {band && <> ({fmt(band(hover)[0])} to {fmt(band(hover)[1])})</>}
+          {tip2 && tip2(hover) && <><br />{tip2(hover)}</>}
         </div>
       )}
     </div>
@@ -304,9 +323,19 @@ function Training({ training }: { training: Status['training'] }) {
           <GenChart gens={gens} y={(g) => g.holdout} ref={{ value: Math.log(4), label: 'guessing' }} fmt={(v) => v.toFixed(2)} domain={[Math.min(0.8, ...gens.map((g) => g.holdout)), Math.max(1.6, ...gens.map((g) => g.holdout))]} label="Prediction loss on new games by generation" />
         </section>
         <section className="lab-card">
-          <h2>Against random play</h2>
-          <p className="lab-note">A yardstick that never changes: the generation against three players making random legal moves. A fair share is 25%.</p>
-          <GenChart gens={gens} y={(g) => g.vsRandom} ref={{ value: 0.25, label: 'fair share' }} fmt={(v) => `${Math.round(v * 100)}%`} domain={[0, 1]} label="Win rate against random play by generation" />
+          <h2>Against random play and today's Expert</h2>
+          <p className="lab-note">Two fixed yardsticks: the champion in one seat against three players making random legal moves, and against three of today's hand-written Expert. Measured on promotion. A fair share is 25%; the goal is to leave Expert far behind.</p>
+          <GenChart
+            gens={gens}
+            y={(g) => g.vsRandom}
+            y2={(g) => g.winVsExpert}
+            legend={['vs random', "vs today's Expert"]}
+            tip2={(g) => (g.winVsExpert != null ? `vs Expert ${Math.round(g.winVsExpert * 100)}%${g.winVsExpertLo != null ? ` (${Math.round(g.winVsExpertLo * 100)}–${Math.round(g.winVsExpertHi! * 100)})` : ''}` : undefined)}
+            ref={{ value: 0.25, label: 'fair share' }}
+            fmt={(v) => `${Math.round(v * 100)}%`}
+            domain={[0, 1]}
+            label="Win rate against random play and today's Expert by generation"
+          />
         </section>
       </div>
       <section className="lab-card">

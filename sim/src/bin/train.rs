@@ -36,10 +36,12 @@ struct Args {
     keep: usize,
     l2: f32,
     warmup: usize,
+    /// games played against today's Expert after each promotion (0: don't; needs node + tsx on PATH)
+    expert_games: usize,
 }
 
 fn args() -> Args {
-    let mut a = Args { games: 2000, gens: 1000, eval: 400, threads: std::thread::available_parallelism().map(|x| x.get()).unwrap_or(4), out: "runs/base".into(), hidden: 256, window: 3, epochs: 2., explore: 0.05, lr: 1e-3, batch: 256, keep: 40, l2: 1e-6, warmup: 20000 };
+    let mut a = Args { games: 2000, gens: 1000, eval: 400, threads: std::thread::available_parallelism().map(|x| x.get()).unwrap_or(4), out: "runs/base".into(), hidden: 256, window: 3, epochs: 2., explore: 0.05, lr: 1e-3, batch: 256, keep: 40, l2: 1e-6, warmup: 20000, expert_games: 400 };
     let v: Vec<String> = std::env::args().collect();
     let mut i = 1;
     while i + 1 < v.len() {
@@ -59,6 +61,7 @@ fn args() -> Args {
             "--keep" => a.keep = x.parse().unwrap(),
             "--l2" => a.l2 = x.parse().unwrap(),
             "--warmup" => a.warmup = x.parse().unwrap(),
+            "--expert-games" => a.expert_games = x.parse().unwrap(),
             other => panic!("unknown option {other}"),
         }
         i += 2;
@@ -277,6 +280,17 @@ fn main() {
             champion.save(&champ_path).unwrap();
         }
         println!("  match: {w}/{n} = {:.1}% (90%: {:.1}–{:.1}) {} · against random play {:.0}%", share * 100., lo * 100., hi * 100., if promoted { "PROMOTED" } else { "kept training" }, vs_random * 100.);
+        // the number that matters most: the new champion against today's Expert (only when something was promoted)
+        let (mut win_vs_expert, mut wve_lo, mut wve_hi) = (serde_json::Value::Null, serde_json::Value::Null, serde_json::Value::Null);
+        if promoted && a.expert_games > 0 {
+            lab.post(&status(&history, serde_json::json!({ "step": format!("Generation {gen}: the new champion against today's Expert"), "gamesPerSec": rate, "totalGames": total_games, "positions": total_positions, "generation": gen })));
+            if let Some((es, elo, ehi)) = vs_expert(&champ_path, a.expert_games, 424_242i32.wrapping_add(gen as i32 * 13), a.threads.min(12)) {
+                println!("  vs Expert: {:.1}% (90%: {:.1}–{:.1})", es * 100., elo * 100., ehi * 100.);
+                win_vs_expert = serde_json::json!(es);
+                wve_lo = serde_json::json!(elo);
+                wve_hi = serde_json::json!(ehi);
+            }
+        }
         // ---- 5. report
         let h = |x: u32| x as f64 / n as f64;
         let heat: serde_json::Map<String, serde_json::Value> = opening_values(&champion, 4, 20261107).into_iter().map(|(v, x)| (v.to_string(), serde_json::json!(x))).collect();
@@ -284,13 +298,36 @@ fn main() {
             "gen": gen, "at": chrono_now(), "games": total_games, "positions": total_positions, "loss": loss, "holdout": holdout, "turns": avg_turns,
             "vsChampion": share, "lo": lo, "hi": hi, "promoted": promoted,
             "rating": prev + gap, "ratingLo": prev + rating_gap(lo, 4.), "ratingHi": prev + rating_gap(hi, 4.), "championRating": rating,
-            "vsRandom": vs_random, "gamesPerSec": rate,
+            "vsRandom": vs_random, "winVsExpert": win_vs_expert, "winVsExpertLo": wve_lo, "winVsExpertHi": wve_hi, "gamesPerSec": rate,
             "habits": { "settlements": h(habits.settlements), "cities": h(habits.cities), "roads": h(habits.roads), "cards": h(habits.cards), "knights": h(habits.knights), "bankTrades": h(habits.bank_trades), "longestRoad": h(habits.longest_road), "largestArmy": h(habits.largest_army), "points": h(habits.points) },
             "heat": heat,
         }));
         std::fs::write(&hist_path, serde_json::to_string(&history).unwrap()).unwrap();
         lab.post(&status(&history, serde_json::json!({ "step": format!("Generation {gen} done: {}", if promoted { "promoted" } else { "not yet better: training on" }), "gamesPerSec": rate, "totalGames": total_games, "positions": total_positions, "generation": gen + 1 })));
     }
+}
+
+/// the champion against today's Expert: runs train/vs-expert.ts (node + tsx) and reads back its share and 90%
+/// interval. Returns None if node/tsx isn't there or the match failed (training carries on without the number).
+fn vs_expert(champ_path: &str, games: usize, seed: i32, workers: usize) -> Option<(f64, f64, f64)> {
+    let out = std::process::Command::new("node")
+        .args(["--import", "tsx", "../train/vs-expert.ts", champ_path, &games.to_string(), &seed.to_string(), &workers.to_string()])
+        .output();
+    let out = match out {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("(vs-expert: could not start node: {e})");
+            return None;
+        }
+    };
+    if !out.status.success() {
+        eprintln!("(vs-expert failed: {})", String::from_utf8_lossy(&out.stderr).trim());
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let line = stdout.lines().rev().find(|l| l.trim_start().starts_with('{'))?;
+    let v: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
+    Some((v["share"].as_f64()?, v["lo"].as_f64()?, v["hi"].as_f64()?))
 }
 
 /// now, as an ISO time (UTC), without a date library

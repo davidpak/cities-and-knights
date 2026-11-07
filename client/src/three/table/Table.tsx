@@ -250,7 +250,7 @@ function useSpecs({ view, layout, hand, tray, can, on, building }: TableProps): 
     const f = fanPose(layout.fan, kinds.length, i)
     const spot: Spot = grid ?? [f.x, f.z]
     // on a wide table a neat small stack per kind; else one card of each, fanned
-    card({ id, family: 'res', look: `res:${r}`, n: grid ? Math.min(BANK_STACK, view.bank[r]) : Math.min(1, view.bank[r]), small: !!grid, home: grid ? cardHome(id, grid, { loose: 0.2 }) : () => ({ x: f.x, y: f.base + CT / 2, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0 && (!can.bankGoods || !!can.bankGoods[r]), dim: !!can.bankGoods && !can.bankGoods[r], onClick: () => on.bank(r) })
+    card({ id, family: 'res', look: `res:${r}`, n: grid ? Math.min(BANK_STACK, view.bank[r]) : Math.min(1, view.bank[r]), small: !!grid, home: grid ? cardHome(id, grid, { loose: 0.2 }) : () => ({ x: f.x, y: f.base + CT / 2, z: f.z, yaw: f.yaw }), from: spot, to: spot, enabled: can.bank && view.bank[r] > 0, dim: !!can.bankGoods && !can.bankGoods[r], onClick: () => on.bank(r) })
   })
   if (x && K)
     TRACKS.forEach((t) => {

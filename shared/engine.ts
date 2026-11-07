@@ -104,7 +104,9 @@ export type Phase =
  * `any` asks for that many more cards of the answerer's choosing (a wildcard): each yes says which (`picks`).
  * Several offers may be open at once.
  */
-export type Offer = { id: number; from: number; to?: number; give: Hand; get: Hand; any: number; accepted: number[]; declined: number[]; picks: Record<number, Hand>; expires?: number }
+export type Offer = { id: number; from: number; to?: number; give: Hand; get: Hand; any: number; accepted: number[]; declined: number[]; picks: Record<number, Hand>; expires?: number; counters?: Record<number, Hand> }
+/** a request: an offer that gives nothing ("I want this"); each answer is a counter, what they'd want for it */
+export const isRequest = (o: Pick<Offer, 'give'>) => handSize(o.give) === 0
 /** how long an offer stays open (ms): then it closes by itself (the server keeps the time, and writes `expires`) */
 export const OFFER_MS = 30_000
 /** at most this many offers open at once */
@@ -229,6 +231,8 @@ export type Action =
   /** `pick`: the cards you choose for its wildcard */
   | { type: 'acceptOffer'; id?: number; pick?: Partial<Hand> }
   | { type: 'declineOffer'; id?: number }
+  /** an answer to a request: what you'd want for the cards it asks for */
+  | { type: 'counter'; id: number; want: Partial<Hand> }
   | { type: 'confirmTrade'; with: number; id?: number }
   | { type: 'endTurn' }
   // the expansion
@@ -1010,13 +1014,15 @@ function trade(s: GameState, o: Offer, to: number, pick: Hand): string | void {
   const them = s.players[to]
   const get = fullHand(o.get)
   addTo(get, pick, 1)
-  if (!hasAll(from.hand, o.give)) return o.from === s.current ? 'You no longer have what you offered.' : 'They no longer have what they offered.'
+  // (a request gives what the one it's settled with asked for)
+  const give = fullHand(o.counters?.[to] ?? o.give)
+  if (!hasAll(from.hand, give)) return o.from === s.current ? 'You no longer have what you offered.' : 'They no longer have what they offered.'
   if (!hasAll(them.hand, get)) return 'They no longer have what you asked for.'
-  addTo(from.hand, o.give, -1)
-  addTo(them.hand, o.give, 1)
+  addTo(from.hand, give, -1)
+  addTo(them.hand, give, 1)
   addTo(them.hand, get, -1)
   addTo(from.hand, get, 1)
-  ev(s, { k: 'trade', from: o.from, to, give: { ...o.give }, get })
+  ev(s, { k: 'trade', from: o.from, to, give: { ...give }, get })
   log(s, `${from.name} trades with ${them.name}.`, o.from)
 }
 
@@ -1135,11 +1141,27 @@ function step(s: GameState, p: number, a: Action): string | void {
     if (Object.keys(ph.owed).length === 0) s.phase = ph.then
     return
   }
+  if (a.type === 'counter') {
+    if (ph.kind !== 'main') return 'There is no trade on the table.'
+    const o = s.offers.find((x) => x.id === a.id && x.from !== p && (x.to === undefined || x.to === p) && !x.accepted.includes(p) && !x.declined.includes(p))
+    if (!o || !isRequest(o)) return 'There is no request on the table.'
+    const kinds: readonly Good[] = s.mode === 'knights' ? GOODS : RESOURCES
+    const want = fullHand(a.want ?? {})
+    if (GOODS.some((r) => !Number.isInteger(want[r]) || want[r] < 0 || (want[r] > 0 && !kinds.includes(r)))) return 'That is not a trade.'
+    if (handSize(want) === 0 || handSize(want) > 7) return 'Ask for something.'
+    if (GOODS.some((r) => want[r] > 0 && o.get[r] > 0)) return 'Not a kind they want.'
+    if (!hasAll(me.hand, o.get)) return 'You do not have what they want.'
+    o.counters = { ...(o.counters ?? {}), [p]: want }
+    o.accepted.push(p)
+    ev(s, { k: 'answer', p, yes: true })
+    return
+  }
   if (a.type === 'acceptOffer' || a.type === 'declineOffer') {
     if (ph.kind !== 'main') return 'There is no trade on the table.'
     const open = s.offers.filter((o) => o.from !== p && (o.to === undefined || o.to === p) && !o.accepted.includes(p) && !o.declined.includes(p))
     const o = a.id !== undefined ? open.find((x) => x.id === a.id) : open[open.length - 1]
     if (!o) return 'There is no trade on the table.'
+    if (a.type === 'acceptOffer' && isRequest(o)) return 'Say what you want for it.'
     let pick = emptyHand()
     if (a.type === 'acceptOffer') {
       if (o.any) {
@@ -1376,7 +1398,9 @@ function step(s: GameState, p: number, a: Action): string | void {
       const valid = (h: Hand) => GOODS.every((r) => Number.isInteger(h[r] ?? 0) && (h[r] ?? 0) >= 0) && (s.mode === 'knights' || COMMODITIES.every((c) => !h[c]))
       const any = a.any ?? 0
       if (!valid(a.give) || !valid(a.get) || !Number.isInteger(any) || any < 0 || any > 7) return 'That is not a trade.'
-      if (handSize(a.give) === 0 || handSize(a.get) + any === 0) return 'Offer something and ask for something.'
+      if (handSize(a.get) + any === 0) return 'Ask for something.'
+      // (nothing given is a request: the others say what they'd want for it; no wildcard on a request)
+      if (handSize(a.give) === 0 && any) return 'That is not a trade.'
       if (GOODS.some((r) => a.give[r] > 0 && a.get[r] > 0)) return 'You cannot give and get the same kind.'
       if (!hasAll(me.hand, a.give)) return 'You do not have what you are offering.'
       if (a.to !== undefined && (a.to === p || !s.players[a.to])) return 'Pick another player to trade with.'

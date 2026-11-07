@@ -122,6 +122,15 @@ export function Game({ view }: { view: View }) {
   useEffect(() => {
     if (pickFor && !toMe.some((o) => o.id === pickFor.id)) setPickFor(null)
   }, [pickFor, toMe])
+  // answering a request ("want X"): tap the bank cards you'd want for it
+  const [counterFor, setCounterFor] = useState<{ id: number; want: Hand } | null>(null)
+  const countering = counterFor ? toMe.find((o) => o.id === counterFor.id) ?? null : null
+  useEffect(() => {
+    if (counterFor && !countering) setCounterFor(null)
+  }, [counterFor, countering])
+  // (the last bank card tapped, and when: a quick second tap trades at once)
+  const lastBank = useRef({ r: '' as Good | '', t: 0 })
+  const wantMore = (r: Good) => counterFor && countering && !countering.get[r] && setCounterFor({ ...counterFor, want: add(counterFor.want, r) })
 
   const can = {
     road: main && view.players[me].pieces.road > 0 && affordable(view, me, 'road') && roadSpots(view, me).length > 0,
@@ -253,6 +262,7 @@ export function Game({ view }: { view: View }) {
   // the tray shows: an offer made to you, your own offer waiting, your discard, or the trade you're putting together
   let tray: TrayContents | null = null
   if (owe) tray = { mode: 'discard', give: drop, get: {} }
+  else if (counterFor && countering) tray = { mode: 'trade', give: countering.get, get: counterFor.want }
   else if (deal) tray = { mode: 'trade', give: deal.give, get: deal.get, any: deal.any }
   else if (!layout.portrait) {
     // (on a wide table an open offer keeps the tray out, showing it, until it's settled: one put to you that you
@@ -262,7 +272,7 @@ export function Game({ view }: { view: View }) {
   }
   // what's on the tray came out of your hand (an offer to you shows what you'd hand over)
   // (an offer to you takes nothing from your hand until you accept it)
-  const onTray = owe ? drop : deal ? deal.give : pickFor ? pickFor.picked : {}
+  const onTray = owe ? drop : countering ? countering.get : deal ? deal.give : pickFor ? pickFor.picked : {}
   const shownHand = hand ? minus(hand, onTray) : null
   useEffect(
     () =>
@@ -308,7 +318,7 @@ export function Game({ view }: { view: View }) {
       openDeal({ give: add(deal?.give ?? emptyHand(), r) })
     },
     trayGive: (r: Good) => (owe ? setDrop(add(drop, r, -1)) : deal && setDeal({ ...deal, give: add(deal.give, r, -1) })),
-    trayGet: (r: Good) => deal && setDeal({ ...deal, get: add(deal.get, r, -1) }),
+    trayGet: (r: Good) => (counterFor ? setCounterFor({ ...counterFor, want: add(counterFor.want, r, -1) }) : deal && setDeal({ ...deal, get: add(deal.get, r, -1) })),
     trayAny: () => deal && setDeal({ ...deal, any: Math.max(0, (deal.any ?? 0) - 1) }),
     snatch: (p: number) => void act({ type: 'snatch', victim: p }),
     // a piece dropped on the board: built at the nearest spot it can go, if one is close
@@ -326,9 +336,10 @@ export function Game({ view }: { view: View }) {
       setBuilding(null)
       void act(w === 'road' ? { type: 'buildRoad', edge: near.id } : w === 'settlement' ? { type: 'buildSettlement', vertex: near.id } : { type: 'buildCity', vertex: near.id })
     },
-    want: (r: Good) => openDeal({ get: add(deal?.get ?? emptyHand(), r) }),
+    want: (r: Good) => (countering ? wantMore(r) : openDeal({ get: add(deal?.get ?? emptyHand(), r) })),
     bank: async (r: Good) => {
       if (pickPhase && targets.includes(r)) return act({ type: 'pick', target: r })
+      if (countering) return wantMore(r)
       if (plenty) {
         const picks = [...plenty, r as Resource]
         if (picks.length < 2) return setPlenty(picks)
@@ -347,17 +358,22 @@ export function Game({ view }: { view: View }) {
         const pay = bankKinds.filter((k) => k !== r && hand[k] >= ratios[k]).sort((a, b) => ratios[a] - ratios[b] || hand[b] - hand[a])[0] ?? null
         return setBankOpen({ give: pay, get: r })
       }
-      const give = deal?.give ?? emptyHand()
+      // one tap: on the tray's far side, to ask for (or to buy with ✓); a quick second tap: straight from the bank
+      const now = Date.now()
+      const twice = lastBank.current.r === r && now - lastBank.current.t < 400
+      lastBank.current = { r, t: twice ? 0 : now }
+      if (!twice) return openDeal({ get: add(deal?.get ?? emptyHand(), r) })
+      const before = deal ? { ...deal, get: add(deal.get, r, -1) } : null
+      const give = before?.give ?? emptyHand()
       // what pays for it: what's on the tray (exactly the bank's rate of one kind, or else enough of one kind), or
       // with nothing fit on the tray, straight from the hand (the best rate; of those, the kind held most)
       const kinds = bankKinds.filter((g) => g !== r && give[g] >= ratios[g])
       const fromTray = kinds.find((k) => give[k] === ratios[k]) ?? kinds[0]
       const g = fromTray ?? bankKinds.filter((k) => k !== r && hand[k] >= ratios[k]).sort((a, b) => ratios[a] - ratios[b] || hand[b] - hand[a])[0]
-      if (!g) return
-      if ((await act({ type: 'bankTrade', give: g, get: r })) && fromTray) {
-        const left = add(give, g, -ratios[g])
-        setDeal(handSize(left) || handSize(deal?.get ?? emptyHand()) ? { ...(deal as Deal), give: left } : null)
-      }
+      const settle = (d: Deal | null) => setDeal(d && (handSize(d.give) || handSize(d.get) || d.any) ? d : null)
+      if (!g) return settle(before)
+      if (!(await act({ type: 'bankTrade', give: g, get: r }))) return settle(before)
+      settle(before && (fromTray ? { ...before, give: add(give, g, -ratios[g]) } : before))
     },
     deck: () => {
       if (!main) return
@@ -409,7 +425,15 @@ export function Game({ view }: { view: View }) {
     },
   }
 
-  const acts = trayActs({ view, deal, setDeal, owe, drop })
+  const acts = countering && counterFor
+    ? {
+        ok: () => void act({ type: 'counter', id: countering.id, want: counterFor.want }).then((ok) => ok && setCounterFor(null)),
+        okLive: handSize(counterFor.want) > 0 && handSize(counterFor.want) <= 7,
+        okWord: 'Ask',
+        no: () => setCounterFor(null),
+        noWord: 'Back',
+      }
+    : trayActs({ view, deal, setDeal, owe, drop })
   // the wildcard: ask for one more card of their choosing
   const addAny = () => deal && setDeal({ ...deal, any: (deal.any ?? 0) + 1 })
 
@@ -495,9 +519,9 @@ export function Game({ view }: { view: View }) {
         can={{
           hand: !!hand && (trading || owe > 0 || !!pickFor || beingRobbed),
           snatched: beingRobbed && hand ? GOODS.filter((r) => hand[r] > 0)[view.snatch!.id % Math.max(1, GOODS.filter((r) => hand[r] > 0).length)] ?? null : null,
-          tray: (trading && !!deal) || owe > 0,
-          wants: trading,
-          bank: trading || !!plenty || monopoly || (!!pickPhase && ['resource', 'commodity', 'good'].includes(pickPhase.need)),
+          tray: (trading && !!deal) || owe > 0 || !!countering,
+          wants: trading || !!countering,
+          bank: trading || !!countering || !!plenty || monopoly || (!!pickPhase && ['resource', 'commodity', 'good'].includes(pickPhase.need)),
           bankGoods,
           deck: main && !view.x,
           supply: { road: can.road, settlement: can.settlement, city: can.city },
@@ -520,7 +544,7 @@ export function Game({ view }: { view: View }) {
       {beingRobbed && hand && <SnatchCue layout={layout} hand={shownHand ?? hand} r={GOODS.filter((g) => hand[g] > 0)[view.snatch!.id % Math.max(1, GOODS.filter((g) => hand[g] > 0).length)]} />}
 
       {tray && !owe && layout.marks !== 'corner' && <TrayMarks layout={layout} acts={acts} onAny={trading && deal ? addAny : undefined} />}
-      <Offers view={view} layout={layout} target={typeof deal?.to === 'number' ? deal.to : null} pickFor={pickFor} onPick={setPickFor} />
+      <Offers view={view} layout={layout} target={typeof deal?.to === 'number' ? deal.to : null} pickFor={pickFor} onPick={setPickFor} lift={tray?.mode === 'trade' && !tray.locked} counterFor={counterFor} onCounter={(c) => (setCounterFor(c), c && setPickFor(null))} />
 
       <RollFlash view={view} layout={layout} />
       <Announcer view={view} />
@@ -572,6 +596,10 @@ export function Game({ view }: { view: View }) {
           onTrade={async () => {
             if (!bankOpen.give || !bankOpen.get) return
             if (await act({ type: 'bankTrade', give: bankOpen.give, get: bankOpen.get })) setBankOpen({ give: null, get: null })
+          }}
+          onAsk={() => {
+            if (bankOpen.get) openDeal({ get: add(deal?.get ?? emptyHand(), bankOpen.get) })
+            setBankOpen(null)
           }}
           onClose={() => setBankOpen(null)}
         />
@@ -768,7 +796,16 @@ function Lines(props: { view: View; plenty: Resource[] | null; monopoly: boolean
   if (toMe)
     todo = (
       <>
-        <Who view={view} p={toMe.from} you={false} /> <Bundle of={toMe.give} /> <span className="for">for</span> <Bundle of={toMe.get} />
+        <Who view={view} p={toMe.from} you={false} />{' '}
+        {handSize(toMe.give) ? (
+          <>
+            <Bundle of={toMe.give} /> <span className="for">for</span> <Bundle of={toMe.get} />
+          </>
+        ) : (
+          <>
+            <span className="for">wants</span> <Bundle of={toMe.get} />
+          </>
+        )}
       </>
     )
   const last = [...view.events].reverse().find((e) => e.k !== 'turn' && e.k !== 'answer')
@@ -894,8 +931,9 @@ function trayActs({ view, deal, setDeal, owe, drop }: { view: View; deal: Deal |
         if (bank) return void act({ type: 'bankTrade', ...bank }).then((ok) => ok && setDeal(null))
         void act({ type: 'offerTrade', give: deal.give, get: deal.get, any: deal.any ?? 0, ...(typeof deal.to === 'number' ? { to: deal.to } : {}) }).then((ok) => ok && setDeal(null))
       },
-      okLive: handSize(deal.give) > 0 && handSize(deal.get) + (deal.any ?? 0) > 0 && !GOODS.some((r) => deal.give[r] && deal.get[r]),
-      okWord: 'Offer',
+      // (nothing given: a request, the others say what they'd want for it)
+      okLive: (handSize(deal.give) > 0 ? handSize(deal.get) + (deal.any ?? 0) > 0 : handSize(deal.get) > 0 && !deal.any) && !GOODS.some((r) => deal.give[r] && deal.get[r]),
+      okWord: handSize(deal.give) ? 'Offer' : 'Ask',
       no: () => setDeal(null),
       noWord: 'Clear',
     }
@@ -915,7 +953,7 @@ function OfferTimer({ o }: { o: View['offers'][number] }) {
  * ✕ or … (tap a ✓ to trade), and ✕ to take it back. One put to you: who it's from, and ✓ / ✕ (with a wildcard,
  * ✓ then the cards from your hand). And a trade you're putting together for one player: who.
  */
-function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout: ReturnType<typeof layoutFor>; target: number | null; pickFor: { id: number; need: number; picked: Hand } | null; onPick: (p: { id: number; need: number; picked: Hand } | null) => void }) {
+function Offers({ view, layout, target, pickFor, onPick, lift, counterFor, onCounter }: { view: View; layout: ReturnType<typeof layoutFor>; target: number | null; lift: boolean; pickFor: { id: number; need: number; picked: Hand } | null; onPick: (p: { id: number; need: number; picked: Hand } | null) => void; counterFor: { id: number; want: Hand } | null; onCounter: (c: { id: number; want: Hand } | null) => void }) {
   const project = useProjector()
   const me = view.you
   const pc = (p: number) => ({ ['--pc' as string]: PLAYER[view.players[p].color].ui })
@@ -929,16 +967,18 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
     .filter((o) => o.from === me || (o.from !== me && (o.to === undefined || o.to === me) && !o.declined.includes(me)))
     .map((o) => {
       const mineO = o.from === me
+      // a request: nothing offered, each says what they'd want for it
+      const request = handSize(o.give) === 0
       // what goes which way, from where you sit: what you give, then what you get
       const give = mineO ? o.give : { ...o.get }
       const get = mineO ? o.get : o.give
       const wild = o.any ? <span className="wild">?{o.any > 1 ? <b>{o.any}</b> : null}</span> : null
       const what = (
         <span className="op-what">
-          <Bundle of={give} empty="" />
+          {mineO && request ? <span className="wild">?</span> : <Bundle of={give} empty="" />}
           {!mineO && wild}
           <span className="arrow">→</span>
-          <Bundle of={get} empty="" />
+          {!mineO && request ? <span className="wild">?</span> : <Bundle of={get} empty="" />}
           {mineO && wild}
         </span>
       )
@@ -950,10 +990,11 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
             {what}
             {asked.map((p) => {
               const st = o.accepted.includes(p) ? 'yes' : o.declined.includes(p) ? 'no' : 'wait'
+              const counter = request ? o.counters?.[p] : undefined
               if (st === 'yes')
                 return (
-                  <button key={p} className="pchip yes go" style={pc(p)} onClick={() => act({ type: 'confirmTrade', id: o.id, with: p })}>
-                    {view.players[p].name} {o.any > 0 && o.picks[p] && <Bundle of={o.picks[p]} empty="" />} <b>⇄</b>
+                  <button key={p} className="pchip yes go" style={pc(p)} disabled={!!counter && !!hand && !GOODS.every((r) => hand[r] >= (counter[r] ?? 0))} onClick={() => act({ type: 'confirmTrade', id: o.id, with: p })}>
+                    {view.players[p].name} {o.any > 0 && o.picks[p] && <Bundle of={o.picks[p]} empty="" />} {counter && <Bundle of={counter} empty="" />} <b>⇄</b>
                   </button>
                 )
               return chip(p, st === 'no' ? '✕' : <i className="dots" />, st)
@@ -967,13 +1008,21 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
       const answered = o.accepted.includes(me)
       const can = !!hand && GOODS.every((r) => hand[r] >= (o.get[r] ?? 0)) && handSize(hand) - handSize(o.get) >= o.any
       const picking = pickFor?.id === o.id
+      const countering = counterFor?.id === o.id
       return (
         <div key={o.id} className="op-row">
           <OfferTimer o={o} />
           {chip(o.from)}
           {what}
           {answered ? (
-            <b className="op-done">✓</b>
+            <b className="op-done">{request && o.counters?.[me] ? <Bundle of={o.counters[me]} empty="" /> : '✓'}</b>
+          ) : countering ? (
+            <span className="op-pick">
+              <Bundle of={counterFor.want} empty="" />
+              <button className="op-x" onClick={() => onCounter(null)} aria-label="Back">
+                ✕
+              </button>
+            </span>
           ) : picking ? (
             <span className="op-pick">
               <Bundle of={pickFor.picked} empty="" />
@@ -984,7 +1033,7 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
             </span>
           ) : (
             <span className="op-ans">
-              <button className="op-ok" disabled={!can} onClick={() => (o.any ? onPick({ id: o.id, need: o.any, picked: emptyHand() }) : act({ type: 'acceptOffer', id: o.id }))} aria-label="Accept">
+              <button className="op-ok" disabled={!can} onClick={() => (request ? onCounter({ id: o.id, want: emptyHand() }) : o.any ? onPick({ id: o.id, need: o.any, picked: emptyHand() }) : act({ type: 'acceptOffer', id: o.id }))} aria-label="Accept">
                 ✓
               </button>
               <button className="op-no" onClick={() => act({ type: 'declineOffer', id: o.id })} aria-label="Decline">
@@ -997,7 +1046,9 @@ function Offers({ view, layout, target, pickFor, onPick }: { view: View; layout:
     })
   if (target !== null) rows.push(<div key="target" className="op-row target">{chip(target, '→')}</div>)
   if (!rows.length) return null
-  const [x, top] = project(layout.tray[0], 0, layout.tray[1] - TRAY.d / 2)
+  const [x, trayTop] = project(layout.tray[0], 0, layout.tray[1] - TRAY.d / 2)
+  // (while the cards to ask for lie behind the tray, the rows sit above them)
+  const top = lift ? Math.min(trayTop, ...layout.hand.map((_, i) => project(layout.wants(i)[0], 0, layout.wants(i)[1] - (CARD.d * CARD.small) / 2)[1])) : trayTop
   // (a tray near the screen's right edge: the rows line up with its right side and grow leftward, staying on screen)
   const [right] = project(layout.tray[0] + TRAY.w / 2, 0, layout.tray[1] - TRAY.d / 2)
   const nearRight = x > window.innerWidth * 0.62
@@ -1294,13 +1345,15 @@ function TrackZoom({ track, level, onClose, onImprove, why }: { track: Track; le
 
 // ---------------------------------------------------------------- the bank, open in the middle (a phone)
 
-function BankPanel({ view, hand, kinds, pick, onPick, onTrade, onClose }: { view: View; hand: Hand; kinds: readonly Good[]; pick: { give: Good | null; get: Good | null }; onPick: (p: { give: Good | null; get: Good | null }) => void; onTrade: () => void; onClose: () => void }) {
+function BankPanel({ view, hand, kinds, pick, onPick, onTrade, onAsk, onClose }: { view: View; hand: Hand; kinds: readonly Good[]; pick: { give: Good | null; get: Good | null }; onPick: (p: { give: Good | null; get: Good | null }) => void; onTrade: () => void; onAsk: () => void; onClose: () => void }) {
   const ratios = tradeRatios(view, view.you)
   const payable = kinds.filter((r) => hand[r] >= ratios[r])
   const gettable = kinds.filter((r) => view.bank[r] > 0)
   const ready = !!pick.give && !!pick.get && pick.give !== pick.get
+  // (the tap that opened it ends in a click on the backdrop, which mustn't close it: only a press begun there does)
+  const down = useRef(false)
   return (
-    <div className="fan-back must bank-panel" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="fan-back must bank-panel" onPointerDown={(e) => (down.current = e.target === e.currentTarget)} onClick={(e) => e.target === e.currentTarget && down.current && onClose()}>
       <div className="must-head">Bank</div>
       <div className="bp-label">Give</div>
       <div className="ch-cards">
@@ -1329,6 +1382,10 @@ function BankPanel({ view, hand, kinds, pick, onPick, onTrade, onClose }: { view
           ) : (
             'Trade'
           )}
+        </button>
+        {/* (or ask the others for it: onto the tray, to send with its check) */}
+        <button className="zoom-btn" disabled={!pick.get} onClick={onAsk}>
+          Ask {pick.get && <Icon r={pick.get} size={18} />}
         </button>
         <button className="zoom-btn" onClick={onClose} aria-label="Close">
           ✕

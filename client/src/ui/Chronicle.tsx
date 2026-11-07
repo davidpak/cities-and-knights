@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { TOPO } from '../../../shared/board.ts'
 import type { GameEvent, View } from '../../../shared/engine.ts'
-import { CARD_NAME, PROGRESS, RESOURCES, TRACK_NAME, type Good, type Hand } from '../../../shared/rules.ts'
+import { CARD_NAME, PROGRESS, handSize, RESOURCES, TRACK_NAME, type Good, type Hand } from '../../../shared/rules.ts'
 import { PLAYER } from '../lib/palette.ts'
 import { faceURL } from '../three/table/faces.ts'
 import { Bundle, Icon, PieceIcon, Pips } from './Cards.tsx'
@@ -102,7 +102,15 @@ export function describe(view: View, e: GameEvent, onCard?: (e: GameEvent) => vo
     case 'offer':
       return (
         <>
-          {W(e.p)} offered <Bundle of={e.give} /> for <Bundle of={e.get} />
+          {handSize(e.give) ? (
+            <>
+              {W(e.p)} offered <Bundle of={e.give} /> for <Bundle of={e.get} />
+            </>
+          ) : (
+            <>
+              {W(e.p)} asked for <Bundle of={e.get} />
+            </>
+          )}
           {e.to !== undefined && <> to {W(e.to)}</>}
         </>
       )

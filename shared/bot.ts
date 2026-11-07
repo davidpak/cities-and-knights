@@ -953,6 +953,7 @@ function answer(c: Ctx, o: S['offers'][number]): Action {
   const { s, hand, rnd, b } = c
   const no: Action = { type: 'declineOffer', id: o.id }
   if (!hasAll(hand, o.get)) return no
+  if (handSize(o.give) === 0) return counter(c, o)
   // a wildcard: give what we need least (not a kind they give)
   let left = sub(hand, o.get)
   const pickH = emptyHand()
@@ -974,6 +975,31 @@ function answer(c: Ctx, o: S['offers'][number]): Action {
   const lead = ptsOf(s, o.from) - c.vp
   const bar = c.lv.accept + c.pe.accept + tune(c, 'accept') + c.lv.leader * Math.max(0, lead) * 0.12 + (ptsOf(s, o.from) >= c.win - 2 ? c.lv.leader * 2 : 0)
   return gain > bar + (b.level === 'normal' ? (rnd() - 0.5) * 0.3 : 0) ? yes : no
+}
+
+/** someone asks for cards ("want X"): say what we'd want for them, or no */
+function counter(c: Ctx, o: S['offers'][number]): Action {
+  const { s, hand, rnd, b } = c
+  const no: Action = { type: 'declineOffer', id: o.id }
+  const kinds = c.kinds.filter((g) => !(o.get[g] > 0))
+  if (b.level === 'easy') {
+    // (easy: now and then, the kind it holds least of)
+    if (rnd() < 0.4) return no
+    return { type: 'counter', id: o.id, want: { [best(kinds, (g) => -hand[g] + rnd())]: 1 } }
+  }
+  if (c.mem.grudge[o.from] * c.pe.grudge >= 2.5) return no
+  const plans = rank(c).slice(0, 2)
+  const now = utility(c, hand, plans)
+  const lead = ptsOf(s, o.from) - c.vp
+  const bar = c.lv.accept + c.pe.accept + c.lv.leader * Math.max(0, lead) * 0.12 + (ptsOf(s, o.from) >= c.win - 2 ? c.lv.leader * 2 : 0)
+  // each ask: one card of a kind, or two (a little less likely to be taken)
+  let top: { want: Partial<Hand>; gain: number } | null = null
+  for (const g of kinds)
+    for (const n of [1, 2]) {
+      const gain = utility(c, sub(sub(hand, o.get), { [g]: n }, 1), plans) - now - (n - 1) * 0.3
+      if (gain > bar && (!top || gain > top.gain)) top = { want: { [g]: n }, gain }
+    }
+  return top ? { type: 'counter', id: o.id, want: top.want } : no
 }
 
 // ---------------------------------------------------------------- the robber

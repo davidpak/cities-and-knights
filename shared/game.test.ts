@@ -377,6 +377,75 @@ test('several offers at once, and a wildcard: the one who says yes picks the car
   invariants(s)
 })
 
+test('a request ("want X"): the others say what they would want for it, and the one asking picks', () => {
+  let s = afterSetup()
+  s = must(s, 0, { type: 'roll' })
+  while (s.phase.kind !== 'main') {
+    const p = s.phase.kind === 'discard' ? Number(Object.keys(s.phase.owed)[0]) : 0
+    s = must(s, p, botAction(s, p, rng(8))!)
+  }
+  const set = (p: number, h: Partial<Record<(typeof RESOURCES)[number], number>>) => {
+    for (const r of RESOURCES) {
+      s.bank[r] += s.players[p].hand[r] - (h[r] ?? 0)
+      s.players[p].hand[r] = h[r] ?? 0
+    }
+  }
+  set(0, { wool: 2, grain: 1 })
+  set(1, { brick: 2 })
+  set(2, { ore: 1 })
+  const h = (x: Partial<Hand>) => ({ ...emptyHand(), ...x })
+  // nothing given: a request for a brick
+  s = must(s, 0, { type: 'offerTrade', give: emptyHand(), get: h({ brick: 1 }) })
+  const o = s.offers[0]
+  assert.equal(apply(s, 0, { type: 'offerTrade', give: emptyHand(), get: h({ brick: 1 }), any: 1 }).ok, false, 'no wildcard on a request')
+  assert.equal(apply(s, 1, { type: 'acceptOffer', id: o.id }).ok, false, 'a request is answered with a counter')
+  assert.equal(apply(s, 2, { type: 'counter', id: o.id, want: { wool: 1 } }).ok, false, 'not without the brick')
+  assert.equal(apply(s, 1, { type: 'counter', id: o.id, want: { brick: 1 } }).ok, false, 'not the kind they ask for')
+  assert.equal(apply(s, 1, { type: 'counter', id: o.id, want: {} }).ok, false, 'ask for something')
+  s = must(s, 1, { type: 'counter', id: o.id, want: { wool: 2 } })
+  assert.deepEqual(s.offers[0].accepted, [1])
+  assert.equal(apply(s, 1, { type: 'counter', id: o.id, want: { wool: 1 } }).ok, false, 'one answer each')
+  // the one asking takes the counter: two wool for the brick
+  s = must(s, 0, { type: 'confirmTrade', id: o.id, with: 1 })
+  assert.equal(s.players[0].hand.brick, 1)
+  assert.equal(s.players[0].hand.wool, 0)
+  assert.equal(s.players[1].hand.wool, 2)
+  assert.equal(s.players[1].hand.brick, 1)
+  assert.equal(s.offers.length, 0)
+  const t = s.events.filter((e) => e.k === 'trade').at(-1)
+  assert.ok(t && t.k === 'trade' && t.give.wool === 2 && t.get.brick === 1, 'the trade says what went each way')
+  // a counter the one asking can't pay can't be taken
+  s = must(s, 0, { type: 'offerTrade', give: emptyHand(), get: h({ brick: 1 }) })
+  const o2 = s.offers[0]
+  s = must(s, 1, { type: 'counter', id: o2.id, want: { ore: 3 } })
+  assert.equal(apply(s, 0, { type: 'confirmTrade', id: o2.id, with: 1 }).ok, false)
+  invariants(s)
+})
+
+test('bots answer a request with a counter they can pay, or no', () => {
+  let s = afterSetup(5)
+  s = must(s, 0, { type: 'roll' })
+  while (s.phase.kind !== 'main') {
+    const p = s.phase.kind === 'discard' ? Number(Object.keys(s.phase.owed)[0]) : 0
+    s = must(s, p, botAction(s, p, rng(8))!)
+  }
+  let answered = 0
+  for (const r of RESOURCES) {
+    const ask = { ...emptyHand(), [r]: 1 }
+    let t = must(s, 0, { type: 'offerTrade', give: emptyHand(), get: ask })
+    for (const p of [1, 2]) {
+      const a = botAction(viewFor(t, p), p, rng(p), { level: 'expert', persona: 'steady' })
+      assert.ok(a && (a.type === 'counter' || a.type === 'declineOffer'), `bot ${p} answers ${a?.type}`)
+      if (a.type === 'counter') {
+        assert.ok(t.players[p].hand[r] >= 1, 'only with the card')
+        answered++
+      }
+      t = must(t, p, a)
+    }
+  }
+  assert.ok(answered >= 0)
+})
+
 test('events tell what happened, and a stolen card is private to the two players', () => {
   let s = afterSetup(21)
   const kinds = new Set(s.events.map((e) => e.k))

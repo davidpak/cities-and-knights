@@ -164,7 +164,8 @@ npm run check       # the 3D spec's fit checks; that nothing on the table overla
                     # the physics table headless (stacks lie still, moved cards land, tossed things go home, all sleep);
                     # 30 real dice throws land flat in the tray showing the roll
 npm run typecheck   # shared, server and client
-npm run e2e         # two scripted players and a bot play a whole game through a running server
+npm run e2e         # starts its own server: two players and a bot play two whole games through it, with a dropped
+                    # connection, junk messages, "again", a server restart mid-game, and a player leaving mid-game
 ```
 
 ## Pages for looking at things alone
@@ -174,8 +175,11 @@ npm run e2e         # two scripted players and a bot play a whole game through a
 
 ## Deploying
 
-- **Railway (everything):** `railway.json` / `nixpacks.toml` build the client and run the server, which serves the
-  client on the same address. One URL, solo and online both work.
+- **Railway (everything, recommended):** `railway.json` / `nixpacks.toml` build the client and run the server, which
+  serves the client on the same address. One URL, solo and online both work, over https (so links copy and the app
+  installs on a phone). Add a **volume** to the service, mounted at `/data`, and set `DATA_DIR=/data`: rooms and games
+  are saved there as they change, so a redeploy or restart puts everyone straight back in their game. `/health`
+  answers with the number of rooms, games and people online (set it as the health check path).
 - **Vercel (the client):** import the repo as-is; `vercel.json` builds `client/` from the repo root. Vercel can't run
   the socket server, so set `VITE_SERVER_URL` in the Vercel project to the server's address (the Railway one) for
   online play. Without it, solo works and the home screen says online play is off.

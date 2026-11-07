@@ -4,7 +4,7 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "start": "tsx index.ts",
+    "start": "node --import tsx index.ts",
     "dev": "tsx watch index.ts",
     "typecheck": "tsc --noEmit"
   },

@@ -30,7 +30,7 @@ function Play() {
   if (!view) return <div className="menu"><div className="menu-col">Loading the table…</div></div>
   return (
     <Suspense fallback={<div className="menu">Loading the table…</div>}>
-      <Game view={view} />
+      <Game key={`${room.code}:${room.game}`} view={view} />
     </Suspense>
   )
 }

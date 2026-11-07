@@ -58,7 +58,7 @@ function useAspect() {
 }
 
 export function Game({ view }: { view: View }) {
-  const { toast, room: info, solo } = useStore()
+  const { toast, room: info, solo, connected } = useStore()
   const host = !!info && info.host === (solo ? 'you' : playerId)
   const me = view.you
   const ph = view.phase
@@ -721,7 +721,8 @@ export function Game({ view }: { view: View }) {
         </aside>
       )}
 
-      {ph.kind === 'over' && <GameOver view={view} />}
+      {!solo && !connected && <div className="offline" aria-label="Reconnecting">Reconnecting</div>}
+      {ph.kind === 'over' && <GameOver view={view} host={host} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   )
@@ -1571,7 +1572,7 @@ function RollFlash({ view, layout }: { view: View; layout: ReturnType<typeof lay
   )
 }
 
-function GameOver({ view }: { view: View }) {
+function GameOver({ view, host }: { view: View; host: boolean }) {
   const ph = view.phase
   // (the results can be put aside to look at the table, and brought back)
   const [away, setAway] = useState(false)
@@ -1600,8 +1601,14 @@ function GameOver({ view }: { view: View }) {
           <button className="stamp-btn" onClick={() => setAway(true)}>
             Board
           </button>
-          <button className="stamp-btn go" onClick={() => room.leave()}>
-            Menu
+          {/* the host takes everyone back to the room for another game; anyone can leave */}
+          {host && (
+            <button className="stamp-btn go" onClick={() => room.again()}>
+              Again
+            </button>
+          )}
+          <button className={`stamp-btn ${host ? '' : 'go'}`} onClick={() => room.leave()}>
+            Leave
           </button>
         </div>
       </div>

@@ -51,14 +51,23 @@ const SERVER = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? `${loca
 let socket: Socket<ServerToClient, ClientToServer> | null = null
 export function connect() {
   if (socket) return
-  socket = io(SERVER, { auth: { player: playerId }, transports: ['websocket', 'polling'] })
+  // websockets first; where a network blocks them, plain requests instead (slower, but it plays). Reconnecting keeps
+  // trying for good, a little apart, so a phone coming back from sleep or a server restarting finds its way back.
+  socket = io(SERVER, { auth: { player: playerId }, transports: ['websocket', 'polling'], tryAllTransports: true, reconnectionDelayMax: 4000 })
   let failures = 0
   socket.on('connect', () => ((failures = 0), set({ connected: true, serverDown: false })))
   // no game server here (a static host with no server set): say so, rather than "connecting" forever
   socket.on('connect_error', () => ++failures >= 3 && !store.serverDown && set({ serverDown: true }))
   socket.on('disconnect', () => set({ connected: false }))
-  socket.on('room', (room) => !store.solo && set(room?.started ? { room } : { room, view: null }))
-  socket.on('game', (view) => !store.solo && set({ view }))
+  socket.on('room', (room) => {
+    if (store.solo) return
+    // a new game (or none): the old view goes with the old game
+    const same = room?.started && store.room?.started && store.room.code === room.code && store.room.game === room.game
+    set(same ? { room } : { room, view: null })
+    // a room link (?room=CODE) has done its job once you're in
+    if (room && new URLSearchParams(location.search).has('room')) history.replaceState(null, '', location.pathname)
+  })
+  socket.on('game', (view) => !store.solo && store.room?.started && set({ view }))
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -68,10 +77,11 @@ export function toast(msg: ReactNode) {
   toastTimer = setTimeout(() => set({ toast: null }), 3200)
 }
 
+/** a request the server answers; one it doesn't answer in time (a dropped line) fails rather than hangs */
 const call = <A extends unknown[]>(ev: keyof ClientToServer, ...args: A) =>
   new Promise<Ack>((res) => {
-    if (!socket?.connected) return res({ ok: false, error: 'Not connected to the server.' })
-    ;(socket.emit as (...a: unknown[]) => void)(ev, ...args, res)
+    if (!socket?.connected) return res({ ok: false, error: 'Offline' })
+    ;(socket.timeout(8000).emit as (...a: unknown[]) => void)(ev, ...args, (err: unknown, a: Ack) => res(err ? { ok: false, error: 'No answer' } : a))
   })
 
 export const room = {
@@ -91,6 +101,11 @@ export const room = {
   /** the host ends the game for everyone (solo: back to the start) */
   end: () => {
     if (store.solo) return endSolo()
+    socket?.emit('room:end')
+  },
+  /** after a game: another one (online, back to the room with everyone; solo, a fresh game the same way) */
+  again: () => {
+    if (store.solo && lastSolo) return startSolo(...lastSolo)
     socket?.emit('room:end')
   },
 }
@@ -230,6 +245,7 @@ function soloAct(p: number, a: Action, bot = false): boolean {
 
 /** each bot's mind: its level, its persona, what it remembers (your seat, under ?test&auto, plays as a normal bot) */
 let soloBrains: Brain[] = []
+let soloGames = 0
 const soloBrain = (i: number) => (soloBrains[i] ??= brain())
 
 /** a card being sneaked: the moment to catch it, then the thief has it */
@@ -242,7 +258,9 @@ function armSoloSnatch() {
     }, 2000)
 }
 
+let lastSolo: [string, number, boolean, Level] | null = null
 export function startSolo(name: string, bots: number, knights = true, level: Level = 'normal') {
+  lastSolo = [name, bots, knights, level]
   // a random few from the cast, each with its own way of playing
   const cast = [...BOT_CAST].sort(() => Math.random() - 0.5).slice(0, bots)
   const seats = [{ id: 'you', name: name || 'You' }, ...cast.map((c, i) => ({ id: `bot${i}`, name: c.name }))]
@@ -254,6 +272,7 @@ export function startSolo(name: string, bots: number, knights = true, level: Lev
       code: 'SOLO',
       host: 'you',
       started: true,
+      game: ++soloGames,
       knights,
       seats: seats.map((s, i) => ({ ...s, ready: true, bot: s.id !== 'you', connected: true, ...(i ? { level, persona: cast[i - 1].persona } : {}) })),
     },

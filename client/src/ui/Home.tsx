@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LEVELS, LEVEL_NAME, type Level } from '../../../shared/bot.ts'
 import { myName, rememberName, room, startSolo, toast, useStore } from '../net.ts'
 import { Title } from './Title.tsx'
@@ -12,6 +12,21 @@ export function Home() {
   const [knights, setKnights] = useState(() => localStorage.getItem('tp.knights') !== '0')
   const named = name.trim()
   const keep = () => rememberName(named)
+  const join = async () => {
+    keep()
+    const r = await room.join(code, named)
+    if (!r.ok) toast(r.error)
+  }
+  // a room link: straight in, once connected (a name first, if there isn't one yet)
+  const linked = useRef(!!code)
+  const nameBox = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!linked.current || !connected || code.length < 5) return
+    if (!named) return nameBox.current?.focus()
+    linked.current = false
+    void join()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected])
 
   return (
     <div className="menu">
@@ -20,7 +35,7 @@ export function Home() {
 
         <label className="menu-name">
           <span>Your name</span>
-          <input value={name} maxLength={16} placeholder="Name" onChange={(e) => setName(e.target.value)} />
+          <input ref={nameBox} value={name} maxLength={16} placeholder="Name" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && named && code.length === 5 && void join()} />
         </label>
 
         <section className="menu-row">
@@ -86,11 +101,8 @@ export function Home() {
             <input value={code} maxLength={5} placeholder="CODE" className="code" onChange={(e) => setCode(e.target.value.toUpperCase())} />
             <button
               disabled={!connected || !named || code.length < 5}
-              onClick={async () => {
-                keep()
-                const r = await room.join(code, named)
-                if (!r.ok) toast(r.error)
-              }}
+              className={code.length === 5 ? 'go' : ''}
+              onClick={join}
             >
               Join
             </button>

@@ -5,8 +5,38 @@ import { LEVELS, LEVEL_NAME, PERSONA_TAG } from '../../../shared/bot.ts'
 import { room, toast, useStore } from '../net.ts'
 import { Title } from './Title.tsx'
 
+const canShare = typeof navigator !== 'undefined' && !!navigator.share && matchMedia('(pointer: coarse)').matches
+
+/** a phone: its own share sheet; elsewhere, the clipboard (with an old-style copy where the clipboard isn't allowed, e.g. plain http) */
+async function shareLink(link: string, code: string) {
+  if (canShare) {
+    try {
+      await navigator.share({ title: 'Towns and Peasants', text: `Room ${code}`, url: link })
+      return
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(link)
+    return toast('Copied')
+  } catch {
+    /* not allowed here: the old way */
+  }
+  const t = document.createElement('textarea')
+  t.value = link
+  t.setAttribute('readonly', '')
+  t.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
+  document.body.appendChild(t)
+  t.select()
+  t.setSelectionRange(0, link.length)
+  const ok = document.execCommand('copy')
+  t.remove()
+  toast(ok ? 'Copied' : link)
+}
+
 export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
-  const { toast: msg } = useStore()
+  const { toast: msg, connected } = useStore()
   const host = info.host === me
   const seat = info.seats.find((s) => s.id === me)
   const [editing, setEditing] = useState(false)
@@ -21,8 +51,8 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
         <Title small />
         <div className="room-code">
           <span>Room</span> <b>{info.code}</b>
-          <button className="link" onClick={() => navigator.clipboard?.writeText(link).then(() => toast('Link copied'))}>
-            Copy link
+          <button className="link" onClick={() => shareLink(link, info.code)}>
+            {canShare ? 'Share link' : 'Copy link'}
           </button>
         </div>
         <div className="menu-acts">
@@ -115,6 +145,7 @@ export function Lobby({ info, me }: { info: RoomInfo; me: string }) {
         {host && info.seats.length < 2 && <small>Share the code or add a bot</small>}
         {host && info.seats.length >= 2 && !allReady && <small>Waiting for players…</small>}
       </div>
+      {!connected && <div className="offline">Reconnecting</div>}
       {msg && <div className="toast">{msg}</div>}
     </div>
   )

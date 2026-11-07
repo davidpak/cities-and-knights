@@ -827,6 +827,26 @@ input {
   margin-left: auto;
   font-size: 22px;
 }
+/* the line to the server is down: a small mark, top middle, until it's back */
+.offline {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(40, 28, 18, 0.85);
+  color: #f1e3c6;
+  font-size: 13px;
+  pointer-events: none;
+  animation: offline-pulse 1.4s ease-in-out infinite;
+}
+@keyframes offline-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
 .toast {
   position: fixed;
   left: 50%;

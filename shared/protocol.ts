@@ -3,9 +3,10 @@ import type { Action, View } from './engine.ts'
 import type { Level, Persona } from './bot.ts'
 
 /** a bot's seat also says how well it plays (level) and how (persona) */
-export type Seat = { id: string; name: string; ready: boolean; bot: boolean; connected: boolean; level?: Level; persona?: Persona }
+export type Seat = { id: string; name: string; ready: boolean; bot: boolean; connected: boolean; level?: Level; persona?: Persona; /** a bot holding the seat of someone who left mid-game */ standIn?: boolean }
 /** knights: play with the expansion (knights, barbarians, commodities, city improvements, progress cards) */
-export type RoomInfo = { code: string; host: string; seats: Seat[]; started: boolean; knights: boolean }
+/** game: which game this is in the room (a new number each time one starts) */
+export type RoomInfo = { code: string; host: string; seats: Seat[]; started: boolean; knights: boolean; game: number }
 export type Ack = { ok: true; code?: string } | { ok: false; error: string }
 
 export interface ServerToClient {

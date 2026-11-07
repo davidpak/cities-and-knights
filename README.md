@@ -175,7 +175,7 @@ npm run e2e         # starts its own server: two players and a bot play two whol
 
 ## Deploying
 
-- **Railway (everything, recommended):** `railway.json` / `nixpacks.toml` build the client and run the server, which
+- **Railway (everything, recommended):** `railway.json` builds the `Dockerfile` (Node 22: the client, then the server), which
   serves the client on the same address. One URL, solo and online both work, over https (so links copy and the app
   installs on a phone). Add a **volume** to the service, mounted at `/data`, and set `DATA_DIR=/data`: rooms and games
   are saved there as they change, so a redeploy or restart puts everyone straight back in their game. `/health`

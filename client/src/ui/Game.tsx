@@ -603,6 +603,7 @@ export function Game({ view }: { view: View }) {
           level={view.x.levels[me][trackZoom]}
           onClose={() => setTrackZoom(null)}
           onImprove={canImprove[trackZoom] ? () => (act({ type: 'improve', track: trackZoom }), setTrackZoom(null)) : null}
+          why={canImprove[trackZoom] ? null : improveWhy(view, me, trackZoom)}
         />
       )}
       {robbing !== null && ph.kind === 'steal' && (
@@ -1227,7 +1228,27 @@ function DiscardFan({ hand, drop, owe, setDrop, onDone, title, word = 'Discard' 
 
 // ---------------------------------------------------------------- a city track up close
 
-function TrackZoom({ track, level, onClose, onImprove }: { track: Track; level: number; onClose: () => void; onImprove: (() => void) | null }) {
+/** why the next step of a track can't be taken now (shown where the Improve button would be) */
+function improveWhy(view: View, me: number, t: Track): React.ReactNode {
+  const x = view.x
+  if (!x || me < 0) return null
+  if (x.levels[me][t] >= 5) return 'Complete'
+  if (!Object.values(view.buildings).some((b) => b.owner === me && b.kind === 'city')) return 'Needs a city'
+  if (view.current !== me) return 'On your turn'
+  if (view.phase.kind === 'roll') return 'Roll first'
+  if (view.phase.kind !== 'main') return 'Not now'
+  const cost = improveCost(view, me, t)
+  const hand = view.players[me].hand
+  if (cost && hand && !hasAll(hand, cost))
+    return (
+      <>
+        Needs <Bundle of={cost} />
+      </>
+    )
+  return null
+}
+
+function TrackZoom({ track, level, onClose, onImprove, why }: { track: Track; level: number; onClose: () => void; onImprove: (() => void) | null; why?: React.ReactNode }) {
   const good = TRACK_GOOD[track]
   return (
     <div className="zoom-back" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -1254,6 +1275,7 @@ function TrackZoom({ track, level, onClose, onImprove }: { track: Track; level: 
         <div className="tz-note">
           <span className="tz-gate" /> on the event die + a red die shown: a card
         </div>
+        {!onImprove && why && <div className="zoom-why">{why}</div>}
         <div className="zoom-row">
           {onImprove && (
             <button className="zoom-btn go" onClick={onImprove}>

@@ -64,7 +64,7 @@ export function Home() {
               ))}
               <span className="after">{bots > 1 ? 'bots' : 'bot'}</span>
             </span>
-            <span className="choices">
+            <span className="choices wide">
               {LEVELS.map((l) => (
                 <button key={l} className={level === l ? 'on' : ''} onClick={() => (setLevel(l), localStorage.setItem('tp.level', l))}>
                   {LEVEL_NAME[l]}

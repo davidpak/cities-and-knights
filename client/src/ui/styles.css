@@ -866,12 +866,23 @@ input {
   color: var(--cream);
   display: flex;
   align-items: center;
-  padding: 32px clamp(16px, 9vw, 140px);
+  justify-content: center;
+  padding: 32px 16px;
 }
+/* one centred column: the title, then each choice on its own line */
 .menu-col {
-  width: min(520px, 100%);
+  width: min(660px, 100%);
   display: grid;
-  gap: 30px;
+  gap: 34px;
+  justify-items: center;
+  text-align: center;
+}
+.menu-col > * {
+  width: 100%;
+}
+.menu-col .title {
+  width: auto;
+  justify-items: center;
 }
 .title {
   font-family: 'IM Fell English SC', 'Zilla Slab', Georgia, serif;
@@ -897,7 +908,12 @@ input {
 }
 .menu-name {
   display: grid;
-  gap: 6px;
+  gap: 8px;
+  justify-items: center;
+}
+.menu-name input {
+  width: min(420px, 100%);
+  text-align: center;
 }
 .menu-name span,
 .menu-row h2 {
@@ -926,8 +942,9 @@ input {
 .menu-acts {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 10px 14px;
   align-items: center;
+  justify-content: center;
 }
 .menu button:not(.link) {
   font-weight: 700;
@@ -962,7 +979,6 @@ input {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-right: 8px;
 }
 .menu .choices button {
   width: 42px;
@@ -972,6 +988,7 @@ input {
 }
 .menu .choices.wide button {
   width: auto;
+  min-width: 42px;
   padding: 10px 14px;
 }
 .menu .choices button.on {
@@ -993,6 +1010,7 @@ input {
 }
 .room-code {
   display: flex;
+  justify-content: center;
   gap: 12px;
   align-items: baseline;
   font-size: 15px;
@@ -1048,6 +1066,19 @@ input {
 }
 button.level {
   cursor: pointer;
+}
+/* the seats read as a list: names on the left */
+.menu .seats {
+  text-align: left;
+}
+.menu .seat button.level {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(241, 227, 198, 0.3);
+  background: transparent;
+  color: var(--cream);
 }
 .menu .toast {
   background: var(--cream);

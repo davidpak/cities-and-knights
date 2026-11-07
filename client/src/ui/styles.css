@@ -2417,8 +2417,23 @@ html:has(.lab), body:has(.lab) { overflow: auto; height: auto; }
 .lab-dot { fill: var(--wood-2); stroke: var(--gold); stroke-width: 2; }
 .lab-dot.kept { fill: var(--gold); }
 .lab-empty { position: relative; display: grid; }
+.lab-grid.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.lab-seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(0, 0, 0, 0.2); justify-self: start; }
+.lab-seg button { font: inherit; font-size: 14px; font-weight: 700; border: 0; border-radius: 9px; padding: 7px 14px; background: transparent; color: var(--cream); cursor: pointer; }
+.lab-seg button[aria-pressed='true'] { background: var(--cream); color: var(--ink); }
+.lab-seg button:disabled { opacity: 0.4; cursor: default; }
+.lab-slider { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; font-size: 14px; color: var(--cream-2); }
+.lab-slider input { accent-color: var(--gold); }
+.lab-chart-box { position: relative; }
+.lab-cursor { stroke: rgba(241, 227, 198, 0.5); stroke-width: 1; }
+.lab-tip { position: absolute; top: 0; transform: translateX(-50%); background: #1d140d; border: 1px solid rgba(241, 227, 198, 0.2); border-radius: 8px; padding: 6px 10px; font-size: 13px; line-height: 1.4; pointer-events: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lab-table-wrap { overflow-x: auto; }
+.lab-table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+.lab-table th, .lab-table td { padding: 6px 10px; text-align: right; border-bottom: 1px solid rgba(241, 227, 198, 0.08); white-space: nowrap; }
+.lab-table th:first-child, .lab-table td:first-child { text-align: left; color: var(--cream-2); }
+.lab-table th { color: var(--cream-2); font-weight: 700; }
 .lab-empty p { position: absolute; inset: 0; margin: auto; height: fit-content; max-width: 38ch; text-align: center; color: var(--cream); background: rgba(42, 29, 19, 0.82); padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
 @media (max-width: 900px) {
   .lab-phases { grid-template-columns: minmax(0, 1fr); }
-  .lab-grid { grid-template-columns: minmax(0, 1fr); }
+  .lab-grid, .lab-grid.two { grid-template-columns: minmax(0, 1fr); }
 }

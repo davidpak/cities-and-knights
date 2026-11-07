@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-07T20:40:00Z",
+  "updated": "2026-11-07T22:30:00Z",
   "phases": [
     {
       "key": "simulator",
@@ -7,16 +7,65 @@
       "status": "done",
       "summary": "The base game's rules in Rust, playing exactly the same game as the real engine.",
       "facts": [
-        { "label": "Moves checked against the real engine", "value": "2,476,066" },
-        { "label": "Differences found", "value": "0" },
-        { "label": "Games a second, one CPU thread", "value": "3,400" },
-        { "label": "Faster than the game's engine, per move", "value": "about 500×" }
+        {
+          "label": "Moves checked against the real engine",
+          "value": "2,476,066"
+        },
+        {
+          "label": "Differences found",
+          "value": "0"
+        },
+        {
+          "label": "Games a second, one CPU thread",
+          "value": "3,400"
+        },
+        {
+          "label": "Faster than the game's engine, per move",
+          "value": "about 500\u00d7"
+        }
       ]
     },
-    { "key": "brain", "name": "Network and search", "status": "now", "summary": "What the bot sees, the network that judges a position, and the look-ahead that uses it.", "facts": [] },
-    { "key": "training", "name": "Self-play training", "status": "next", "summary": "Generation after generation on your PC, each kept only if it beats the last.", "facts": [] },
-    { "key": "expert", "name": "The new Expert", "status": "next", "summary": "The best network plays as Expert in the game.", "facts": [] },
-    { "key": "review", "name": "Game Review", "status": "next", "summary": "Every move graded, Best to Blunder, with a luck rating apart.", "facts": [] }
+    {
+      "key": "brain",
+      "name": "Network and trainer",
+      "status": "done",
+      "summary": "What the bot sees, the network that judges a position, choosing moves with it, and the training loop, tested at small scale.",
+      "facts": [
+        {
+          "label": "Numbers the network reads in a position",
+          "value": "1,374"
+        },
+        {
+          "label": "Self-play games a second, 4 cores",
+          "value": "21"
+        },
+        {
+          "label": "Against random play after 2 short generations",
+          "value": "47%"
+        }
+      ]
+    },
+    {
+      "key": "training",
+      "name": "Self-play training",
+      "status": "now",
+      "summary": "Generation after generation on your PC, each kept only if it beats the last. Ready to start.",
+      "facts": []
+    },
+    {
+      "key": "expert",
+      "name": "The new Expert",
+      "status": "next",
+      "summary": "The best network plays as Expert in the game.",
+      "facts": []
+    },
+    {
+      "key": "review",
+      "name": "Game Review",
+      "status": "next",
+      "summary": "Every move graded, Best to Blunder, with a luck rating apart.",
+      "facts": []
+    }
   ],
   "training": null
 }

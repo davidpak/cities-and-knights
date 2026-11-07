@@ -10,6 +10,10 @@
 use serde::Deserialize;
 use std::sync::OnceLock;
 
+pub mod agent;
+pub mod encode;
+pub mod nn;
+
 // ---------------------------------------------------------------- the board
 
 #[derive(Deserialize)]

@@ -106,6 +106,8 @@ if (existsSync(dist)) {
   // hashed files never change (cache them for good); the page itself is always checked, so a new deploy shows at once
   app.use(
     express.static(dist, {
+      // (a page's address that matches a folder, like /lab, is the page: not a redirect to the folder)
+      redirect: false,
       setHeaders: (res, path) => res.setHeader('Cache-Control', /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache'),
     }),
   )

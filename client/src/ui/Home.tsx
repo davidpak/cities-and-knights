@@ -29,50 +29,59 @@ export function Home() {
   }, [connected])
 
   return (
-    <div className="menu">
-      <div className="menu-col">
-        <Title />
+    <div className="menu home">
+      <div className="home-grid">
+        <div className="home-side">
+          <Title />
 
-        <label className="menu-name">
-          <span>Your name</span>
-          <input ref={nameBox} value={name} maxLength={16} placeholder="Name" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && named && code.length === 5 && void join()} />
-        </label>
+          <label className="field">
+            <span className="label">Your name</span>
+            <input ref={nameBox} value={name} maxLength={16} placeholder="Name" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && named && code.length === 5 && void join()} />
+          </label>
 
-        <section className="menu-row">
-          <h2>Game</h2>
-          <div className="menu-acts">
-            <span className="choices wide">
-              <button className={knights ? 'on' : ''} onClick={() => (setKnights(true), localStorage.setItem('tp.knights', '1'))}>
-                Knights and barbarians
-              </button>
-              <button className={!knights ? 'on' : ''} onClick={() => (setKnights(false), localStorage.setItem('tp.knights', '0'))}>
-                Basic
-              </button>
-            </span>
+          <div className="field">
+            <span className="label">Game</span>
+            <div className="modes">
+              {(
+                [
+                  [true, 'Knights & barbarians', '13 points'],
+                  [false, 'Basic', '10 points'],
+                ] as const
+              ).map(([on, title, sub]) => (
+                <button key={title} className={`mode ${knights === on ? 'on' : ''}`} onClick={() => (setKnights(on), localStorage.setItem('tp.knights', on ? '1' : '0'))}>
+                  <b>{title}</b>
+                  <small>{sub}</small>
+                </button>
+              ))}
+            </div>
           </div>
-          <small>{knights ? 'Knights, barbarians, city upgrades · 13 points' : 'Classic · 10 points'}</small>
-        </section>
+        </div>
 
-        <section className="menu-row">
-          <h2>Solo</h2>
-          <div className="menu-acts">
-            <span className="choices">
-              {[1, 2, 3].map((n) => (
-                <button key={n} className={bots === n ? 'on' : ''} onClick={() => setBots(n)}>
-                  {n}
-                </button>
-              ))}
-              <span className="after">{bots > 1 ? 'bots' : 'bot'}</span>
-            </span>
-            <span className="choices wide">
-              {LEVELS.map((l) => (
-                <button key={l} className={level === l ? 'on' : ''} onClick={() => (setLevel(l), localStorage.setItem('tp.level', l))}>
-                  {LEVEL_NAME[l]}
-                </button>
-              ))}
-            </span>
+        <div className="home-panels">
+          <section className="home-panel">
+            <h2>Solo</h2>
+            <div className="field">
+              <span className="label">Bots</span>
+              <div className="seg">
+                {[1, 2, 3].map((n) => (
+                  <button key={n} className={bots === n ? 'on' : ''} onClick={() => setBots(n)}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <span className="label">Level</span>
+              <div className="seg">
+                {LEVELS.map((l) => (
+                  <button key={l} className={level === l ? 'on' : ''} onClick={() => (setLevel(l), localStorage.setItem('tp.level', l))}>
+                    {LEVEL_NAME[l]}
+                  </button>
+                ))}
+              </div>
+            </div>
             <button
-              className="go"
+              className="go wide"
               onClick={() => {
                 keep()
                 startSolo(named, bots, knights, level)
@@ -80,13 +89,12 @@ export function Home() {
             >
               Start
             </button>
-          </div>
-        </section>
+          </section>
 
-        <section className="menu-row">
-          <h2>With friends</h2>
-          <div className="menu-acts">
+          <section className="home-panel">
+            <h2>With friends</h2>
             <button
+              className="wide"
               disabled={!connected || !named}
               onClick={async () => {
                 keep()
@@ -97,19 +105,18 @@ export function Home() {
             >
               Create a room
             </button>
-            <span className="or">or</span>
-            <input value={code} maxLength={5} placeholder="CODE" className="code" onChange={(e) => setCode(e.target.value.toUpperCase())} />
-            <button
-              disabled={!connected || !named || code.length < 5}
-              className={code.length === 5 ? 'go' : ''}
-              onClick={join}
-            >
-              Join
-            </button>
-          </div>
-          {!connected && !serverDown && <small>Connecting…</small>}
-          {!connected && serverDown && <small>Server offline · solo only</small>}
-        </section>
+            <div className="or-line">
+              <span>or</span>
+            </div>
+            <div className="join-row">
+              <input value={code} maxLength={5} placeholder="CODE" className="code" onChange={(e) => setCode(e.target.value.toUpperCase())} />
+              <button disabled={!connected || !named || code.length < 5} className={code.length === 5 ? 'go' : ''} onClick={join}>
+                Join
+              </button>
+            </div>
+            {!connected && <small className="note">{serverDown ? 'Offline · solo only' : 'Connecting…'}</small>}
+          </section>
+        </div>
       </div>
       {msg && <div className="toast">{msg}</div>}
     </div>

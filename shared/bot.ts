@@ -929,6 +929,8 @@ function ownOffer(c: Ctx): Action | null | undefined {
   const { s, p } = c
   const o = s.offers.find((x) => x.from === p)
   if (!o) return undefined
+  // (cards gone since we offered, to a thief or a 7: take it back)
+  if (!hasAll(c.hand, o.give)) return { type: 'cancelOffer', id: o.id }
   if (o.accepted.length) return { type: 'confirmTrade', id: o.id, with: best(o.accepted, (i) => -threat(c, i)) }
   const asked = s.players.map((_, i) => i).filter((i) => i !== p && (o.to === undefined || i === o.to))
   if (asked.every((i) => o.declined.includes(i))) return { type: 'cancelOffer', id: o.id }

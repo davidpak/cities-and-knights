@@ -1025,6 +1025,15 @@ export function apply(state: GameState, p: number, a: Action): Result {
   const r = step(s, p, a)
   if (r) return fail(r)
   enforceProgressLimit(s)
+  // an offer stands only while its maker can still pay (a card stolen, sneaked or discarded since withdraws it)
+  s.offers = s.offers.filter((o) => hasAll(s.players[o.from].hand, o.give))
+  // (and a yes stands only while the one who said it can still pay what was asked, and their wildcard picks)
+  for (const o of s.offers)
+    o.accepted = o.accepted.filter((i) => {
+      const owe = { ...o.get }
+      for (const [g, n] of Object.entries(o.picks?.[i] ?? {})) owe[g as Good] = (owe[g as Good] ?? 0) + (n ?? 0)
+      return hasAll(s.players[i].hand, owe)
+    })
   checkWin(s)
   return { ok: true, state: s }
 }

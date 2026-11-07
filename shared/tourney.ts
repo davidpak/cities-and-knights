@@ -30,6 +30,8 @@ export function play(who: { level: Level; persona: Persona }[], seed: number, kn
       const a = botAction(viewFor(s, p), p, rnd, brains[p])
       if (!a) continue
       const r = apply(s, p, a)
+      // (a sneak can't start while another, hidden from us, is under way: that's a pass)
+      if (!r.ok && a.type === 'snatch') continue
       if (!r.ok) throw new Error(`${who[order[p]].level}/${who[order[p]].persona}: ${JSON.stringify(a)} in ${s.phase.kind}: ${r.error}`)
       s = r.state
       moved = true

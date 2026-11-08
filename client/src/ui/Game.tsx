@@ -1052,8 +1052,11 @@ function Offers({ view, layout, target, pickFor, onPick, lift, counterFor, onCou
   // (a tray near the screen's right edge: the rows line up with its right side and grow leftward, staying on screen)
   const [right] = project(layout.tray[0] + TRAY.w / 2, 0, layout.tray[1] - TRAY.d / 2)
   const nearRight = x > window.innerWidth * 0.62
+  // (and near the left edge: they line up with its left side and grow rightward)
+  const [left] = project(layout.tray[0] - TRAY.w / 2, 0, layout.tray[1] - TRAY.d / 2)
+  const nearLeft = x < window.innerWidth * 0.38
   return (
-    <div className={`offers ${nearRight ? 'to-left' : ''}`} style={nearRight ? { right: Math.max(8, window.innerWidth - right), top } : { left: x, top }}>
+    <div className={`offers ${nearRight ? 'to-left' : nearLeft ? 'to-right' : ''}`} style={nearRight ? { right: Math.max(8, window.innerWidth - right), top } : nearLeft ? { left: Math.max(8, left), top } : { left: x, top }}>
       {rows}
     </div>
   )
